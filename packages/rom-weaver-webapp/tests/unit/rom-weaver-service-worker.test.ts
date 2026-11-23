@@ -994,10 +994,9 @@ describe("navigation requests", () => {
     "assets/app.js",
     { install: false, url: "assets/deferred.js" },
   ];
-  // A worker whose core precache and deferred entries are all stored: the only state that serves cache-first.
+  // A worker whose core precache and deferred entries are all stored.
   const loadCompleteWorker = (options: {
     hasActiveWorker?: boolean;
-    missingCore?: boolean;
     missingDeferred?: boolean;
     omitRedirectList?: boolean;
     redirectSourcePaths?: string[];
@@ -1015,7 +1014,7 @@ describe("navigation requests", () => {
         const base = options.scope ?? APP_SCOPE;
         const core = await cacheStorage.open(PRECACHE_NAME);
         await core.put(`${base}index.html?__WB_REVISION__=r1`, new Response("x"));
-        if (!options.missingCore) await core.put(`${base}assets/app.js`, new Response("x"));
+        await core.put(`${base}assets/app.js`, new Response("x"));
         if (!options.missingDeferred) {
           await (await cacheStorage.open(DEFERRED_CACHE_NAME)).put(`${base}assets/deferred.js`, new Response("x"));
         }
@@ -1030,37 +1029,23 @@ describe("navigation requests", () => {
       "index.html": () => new Response("root", { status: 200 }),
     });
 
-  it("answers a precached navigation without touching the network and keeps isolation headers", async () => {
+  it("loads a page from the network while online, even with a complete offline copy", async () => {
     const harness = await loadCompleteWorker({ redirectSourcePaths: [] });
     precachedDocs();
+    harness.fetchStub.handlers.set(`${APP_ORIGIN}/docs/guide`, () => new Response("deployed guide", { status: 200 }));
+    harness.fetchStub.handlers.set(`${APP_ORIGIN}/`, () => new Response("deployed root", { status: 200 }));
 
     const response = await routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/docs/guide`));
+    const root = await routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/`));
 
-    await expect(response.text()).resolves.toBe("guide");
+    await expect(response.text()).resolves.toBe("deployed guide");
     expect(response.headers.get("Cross-Origin-Opener-Policy")).toBe("same-origin");
     expect(response.headers.get("Cross-Origin-Embedder-Policy")).toBe("credentialless");
-    expect(harness.fetchStub.calls).toHaveLength(0);
-    const root = await routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/`));
-    await expect(root.text()).resolves.toBe("root");
-    expect(harness.fetchStub.calls).toHaveLength(0);
+    await expect(root.text()).resolves.toBe("deployed root");
   });
 
-  it("goes to the network while the core precache is incomplete", async () => {
-    const harness = await loadCompleteWorker({ missingCore: true, redirectSourcePaths: [] });
-    precachedDocs();
-    harness.fetchStub.handlers.set(`${APP_ORIGIN}/docs/guide`, () => new Response("fresh", { status: 200 }));
-
-    const response = await routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/docs/guide`));
-
-    await expect(response.text()).resolves.toBe("fresh");
-    expect(harness.fetchStub.calls).toHaveLength(1);
-  });
-
-  it.each([
-    ["the network", { missingCore: true }, "deployed"],
-    ["the precache", {}, "precached"],
-  ])("serves build-info.js from %s when the page came from there", async (_source, state, expected) => {
-    const harness = await loadCompleteWorker({ ...state, redirectSourcePaths: [] });
+  it("serves the deployed build-info.js to a page that came from the network", async () => {
+    const harness = await loadCompleteWorker({ redirectSourcePaths: [] });
     setPrecache({
       "build-info.js": () => new Response("precached", { status: 200 }),
       "docs/guide/index.html": () => new Response("guide", { status: 200 }),
@@ -1077,7 +1062,7 @@ describe("navigation requests", () => {
       type: "fetch",
     });
 
-    await expect(buildInfo.text()).resolves.toBe(expected);
+    await expect(buildInfo.text()).resolves.toBe("deployed");
   });
 
   it("serves the precached build-info.js after a network redirect lands on a precached page", async () => {
@@ -1130,62 +1115,6 @@ describe("navigation requests", () => {
     await expect((await buildInfo).text()).resolves.toBe("precached");
   });
 
-  it("serves cache-first once a pump stores the last missing deferred entry", async () => {
-    const harness = await loadCompleteWorker({ missingDeferred: true, redirectSourcePaths: [] });
-    precachedDocs();
-    harness.fetchStub.handlers.set(`${APP_ORIGIN}/docs/guide`, () => new Response("fresh", { status: 200 }));
-    await routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/docs/guide`));
-    harness.fetchStub.handlers.set(DEFERRED_URL, () => new Response("js", { status: 200 }));
-
-    await dispatch(harness.scope, "message", {
-      data: { action: "offline-warmup-pump" },
-      ports: [{ postMessage: () => undefined }],
-    });
-    expect(await harness.cacheStorage.caches.get(DEFERRED_CACHE_NAME)?.match(DEFERRED_URL)).toBeDefined();
-    const callsBefore = harness.fetchStub.calls.length;
-    const response = await routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/docs/guide`));
-
-    await expect(response.text()).resolves.toBe("guide");
-    expect(harness.fetchStub.calls).toHaveLength(callsBefore);
-  });
-
-  it("keeps the completeness answer across a deferred cache hit", async () => {
-    const harness = await loadCompleteWorker({ redirectSourcePaths: [] });
-    precachedDocs();
-    const navigate = () => routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/docs/guide`));
-    await navigate();
-    const open = vi.spyOn(harness.cacheStorage, "open");
-
-    await routed(harness, requireRoute(2), new Request(DEFERRED_URL));
-    await navigate();
-
-    expect(open.mock.calls.filter(([name]) => name === PRECACHE_NAME)).toHaveLength(0);
-  });
-
-  it("goes to the network when a deferred entry is not cached yet, even for a precached document", async () => {
-    const harness = await loadCompleteWorker({ missingDeferred: true, redirectSourcePaths: [] });
-    precachedDocs();
-    harness.fetchStub.handlers.set(`${APP_ORIGIN}/docs/guide`, () => new Response("fresh", { status: 200 }));
-
-    const response = await routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/docs/guide`));
-
-    await expect(response.text()).resolves.toBe("fresh");
-    expect(harness.fetchStub.calls).toHaveLength(1);
-  });
-
-  it("serves cache-first once the missing deferred entry is stored by a download", async () => {
-    const harness = await loadCompleteWorker({ missingDeferred: true, redirectSourcePaths: [] });
-    precachedDocs();
-    harness.fetchStub.handlers.set(`${APP_ORIGIN}/docs/guide`, () => new Response("fresh", { status: 200 }));
-    await routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/docs/guide`));
-    harness.fetchStub.handlers.set(DEFERRED_URL, () => new Response("js", { status: 200 }));
-
-    await routed(harness, requireRoute(2), new Request(DEFERRED_URL));
-    const response = await routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/docs/guide`));
-
-    await expect(response.text()).resolves.toBe("guide");
-  });
-
   it("does not answer from the runtime cache, which may hold a newer deploy", async () => {
     const harness = await loadCompleteWorker({
       redirectSourcePaths: [],
@@ -1198,8 +1127,9 @@ describe("navigation requests", () => {
     await expect(response.text()).resolves.toBe("newer-network");
   });
 
-  it("serves a route cache-first under a sub-path scope with its base re-rooted on the scope", async () => {
+  it("serves a route offline under a sub-path scope with its base re-rooted on the scope", async () => {
     const harness = await loadCompleteWorker({ redirectSourcePaths: [], scope: `${APP_ORIGIN}/rom-weaver/` });
+    harness.fetchStub.stub.mockImplementation(() => Promise.reject(new TypeError("offline")));
     setPrecache({
       "docs/guide/index.html": () =>
         new Response('<base href="../../" /><a href="/docs">Docs</a><script src="./assets/app.js"></script>', {
@@ -1219,17 +1149,16 @@ describe("navigation requests", () => {
     await expect(response.text()).resolves.toBe(
       '<base href="/rom-weaver/" /><a href="/rom-weaver/docs">Docs</a><script src="./assets/app.js"></script>',
     );
-    expect(harness.fetchStub.calls).toHaveLength(0);
   });
 
-  it("serves the scope root from index.html cache-first under a sub-path scope", async () => {
+  it("serves the scope root from index.html offline under a sub-path scope", async () => {
     const harness = await loadCompleteWorker({ redirectSourcePaths: [], scope: `${APP_ORIGIN}/rom-weaver/` });
+    harness.fetchStub.stub.mockImplementation(() => Promise.reject(new TypeError("offline")));
     precachedDocs();
 
     const response = await routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/rom-weaver/`));
 
     await expect(response.text()).resolves.toBe("root");
-    expect(harness.fetchStub.calls).toHaveLength(0);
   });
 
   it("leaves a redirect alias under a sub-path scope to the server", async () => {
@@ -1333,32 +1262,6 @@ describe("navigation requests", () => {
     const response = await routed(harness, harness.networkFirstRoute, asDocumentRequest(`${APP_ORIGIN}/docs/guide`));
 
     await expect(response.text()).resolves.toBe("fresh");
-  });
-
-  it("checks for a new worker in the background, at most once a minute", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
-    const harness = await loadCompleteWorker({ redirectSourcePaths: ["/apply", "/apply/"] });
-    precachedDocs();
-    const update = harness.scope.registration.update;
-    const pending: Array<Promise<unknown>> = [];
-    const event = { type: "fetch", waitUntil: (promise: Promise<unknown>) => void pending.push(promise) };
-    const navigate = () =>
-      harness.networkFirstRoute.handler({
-        event,
-        request: asNavigationRequest(`${APP_ORIGIN}/docs/guide`),
-        url: new URL(`${APP_ORIGIN}/docs/guide`),
-      });
-
-    await navigate();
-    await navigate();
-    expect(update).toHaveBeenCalledTimes(1);
-    // One update check, plus the outgoing-build cleanup each page load runs.
-    expect(pending).toHaveLength(3);
-
-    vi.setSystemTime(new Date("2026-01-01T00:01:01Z"));
-    await navigate();
-    expect(update).toHaveBeenCalledTimes(2);
   });
 
   it("serves the exact cached copy when the network stalls past the timeout", async () => {

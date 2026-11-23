@@ -598,14 +598,8 @@ const matchCachedResponse = async (request: Request, url: URL) => {
   return undefined;
 };
 
-// A navigation answered from this worker's own precache never waits for the network, so the
-// background update check is what lets a new deploy reach the update banner. The page's own
-// interval (see pwa-service-worker-client.ts) runs the same check; update() calls overlap safely,
-// this only keeps a burst of navigations from issuing one each.
-const NAVIGATION_UPDATE_THROTTLE_MS = 60_000;
 // A network-first navigation that has an exact cached copy gives up on a stalled fetch after this.
 const NAVIGATION_NETWORK_TIMEOUT_MS = 3500;
-let lastNavigationUpdateCheckAt = Number.NEGATIVE_INFINITY;
 
 const requestPrefersMarkdown = (request: Request) => (request.headers.get("accept") || "").includes("text/markdown");
 
@@ -630,28 +624,6 @@ const matchPrecachedNavigation = async (url: URL) => {
 const waitUntilEvent = (event: unknown, promise: Promise<unknown>) => {
   const waitUntil = (event as { waitUntil?: (promise: Promise<unknown>) => void } | undefined)?.waitUntil;
   if (typeof waitUntil === "function") waitUntil.call(event, promise);
-};
-
-const scheduleNavigationUpdateCheck = (event: unknown) => {
-  const now = Date.now();
-  if (now - lastNavigationUpdateCheckAt < NAVIGATION_UPDATE_THROTTLE_MS) return;
-  lastNavigationUpdateCheckAt = now;
-  const check = self.registration.update().catch((err: unknown) => {
-    logServiceWorker("navigation update check failed", { error: formatError(err) });
-  });
-  waitUntilEvent(event, check);
-};
-
-const serveNavigationFromPrecache = async (request: Request, url: URL, event: unknown) => {
-  if (!isTopLevelNavigation(request, url) || requestPrefersMarkdown(request)) return undefined;
-  const document = await matchPrecachedNavigation(url);
-  if (!document) return undefined;
-  // A document is only safe to serve without the network when the chunks, CSS and WASM it names are
-  // cached too: deferred files download after the documents, and not at all on data saver.
-  if (!(await isOfflineCopyComplete())) return undefined;
-  scheduleNavigationUpdateCheck(event);
-  const credentialless = await ensureCoepModeHydrated();
-  return withCrossOriginIsolationHeaders(document, credentialless) || document;
 };
 
 // This worker's precached document first: a runtime-cached one can come from a newer deploy, whose
@@ -722,11 +694,6 @@ registerRoute(
   ({ request, url }) => shouldUseNetworkFirst(request, url),
   async ({ event, request, url }) => {
     if (isTopLevelNavigation(request, url)) waitUntilEvent(event, removeOutgoingBuildFilesWithoutTabs());
-    const precached = await serveNavigationFromPrecache(request, url, event);
-    if (precached) {
-      recordDocumentSource(event, { network: false });
-      return precached;
-    }
     try {
       return await fetchWithNavigationTimeout(request, url, event);
     } catch (err) {
@@ -825,44 +792,11 @@ const corePrecache = createDeferredPrecache({
   log: logServiceWorker,
 });
 
-// Whether this worker's whole offline copy (core precache plus every deferred entry) is cached.
-// Memoized so a navigation does not list the caches; cleared whenever the answer can change: after
-// each offline download batch or on-demand deferred fetch that may have added a file, on activation,
-// and when the copy is removed.
-let offlineCopyCompleteness: Promise<boolean> | undefined;
-// Set only by a probe that resolved true and is still the current memo, so a probe that was in
-// flight across an invalidation cannot revive a stale answer.
-let offlineCopyKnownComplete = false;
-const invalidateOfflineCopyCompleteness = () => {
-  offlineCopyCompleteness = undefined;
-  offlineCopyKnownComplete = false;
-};
-const isOfflineCopyComplete = () => {
-  if (!offlineCopyRequestedEnabled) return Promise.resolve(false);
-  if (offlineCopyCompleteness) return offlineCopyCompleteness;
-  const probe: Promise<boolean> = Promise.all([corePrecache.isComplete(), deferredPrecache.isComplete()]).then(
-    ([core, deferred]) => {
-      const complete = core && deferred;
-      if (complete && offlineCopyCompleteness === probe) offlineCopyKnownComplete = true;
-      return complete;
-    },
-    (err: unknown) => {
-      logServiceWorker("offline copy completeness check failed", { error: formatError(err) });
-      return false;
-    },
-  );
-  offlineCopyCompleteness = probe;
-  return probe;
-};
-
 registerRoute(
   ({ request, url }) => request.method === "GET" && deferredPrecache.has(url.href),
   async ({ url }) => {
     const credentialless = await ensureCoepModeHydrated();
-    // A serve only ever adds files, so once the copy is known complete a cache hit cannot change the answer.
-    const response = await deferredPrecache.serve(url.href).finally(() => {
-      if (!offlineCopyKnownComplete) invalidateOfflineCopyCompleteness();
-    });
+    const response = await deferredPrecache.serve(url.href);
     return withCrossOriginIsolationHeaders(response, credentialless) || response;
   },
 );
@@ -1036,9 +970,7 @@ const pumpOfflineFiles = (onInterim: (progress: unknown) => void, identifyGroupI
     const progress = await process();
     return self.registration.waiting ? UPDATE_WAITING_REPLY : progress;
   };
-  const pump = appPumpChain
-    .then(processUnlessUpdateWaiting, processUnlessUpdateWaiting)
-    .finally(invalidateOfflineCopyCompleteness);
+  const pump = appPumpChain.then(processUnlessUpdateWaiting, processUnlessUpdateWaiting);
   appPumpChain = pump.catch(() => undefined);
   return pump;
 };
@@ -1062,7 +994,6 @@ const removeOfflineCopyFiles = async () => {
       await caches.delete(name);
     }
   }
-  invalidateOfflineCopyCompleteness();
   deferredPrecache.reset();
   corePrecache.reset();
   coreRefillNeeded = true;
@@ -1075,16 +1006,12 @@ let offlineCopyTransition: Promise<unknown> = Promise.resolve();
 const setOfflineCopyEnabled = (enabled: boolean, docImageFormat?: "avif" | "webp") => {
   if (!enabled) appPumpGeneration += 1;
   offlineCopyRequestedEnabled = enabled;
-  invalidateOfflineCopyCompleteness();
   const transition = offlineCopyTransition.then(async () => {
     if (enabled && docImageFormat && (await docsImagePolicy.setFormat(docImageFormat))) {
       logServiceWorker("offline documentation image format selected", { format: docImageFormat });
       appPumpGeneration += 1;
-      // Entries change with the format, so drop the memo now and again after the cleanup.
-      invalidateOfflineCopyCompleteness();
       await appPumpChain;
       await deferredPrecache.cleanup();
-      invalidateOfflineCopyCompleteness();
     }
     const wasEnabled = await offlineCopyPolicy.isEnabled();
     await offlineCopyPolicy.setEnabled(enabled);
@@ -1209,7 +1136,6 @@ self.addEventListener("activate", (event) => {
         Promise.all(cachesToDelete.map((cacheName) => caches.delete(cacheName))),
       );
       offlineCopyRequestedEnabled = await offlineCopyPolicy.isEnabled();
-      invalidateOfflineCopyCompleteness();
       if (offlineCopyRequestedEnabled) {
         await runServiceWorkerPhase("clean deferred cache", () => deferredPrecache.cleanup());
       } else {
