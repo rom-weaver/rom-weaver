@@ -3,8 +3,10 @@
 import { createElement, useLayoutEffect } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, hydrateRoot, type Root } from "react-dom/client";
+import { getWorkbenchActivity } from "../lib/activity-store.ts";
 import { collectBrowserInfo } from "../lib/browser-info.ts";
 import { configureLogger, createLogger } from "../lib/logging.ts";
+import { getEmulatorSessionState } from "../public/react/emulator-session-store.ts";
 import {
   GUIDED_SAMPLE_VIEWS,
   ONBOARDING_DISMISS_EVENT,
@@ -205,6 +207,7 @@ const serviceWorkerClient = createPwaServiceWorkerClient({
   cacheVersionTimeoutMs: SERVICE_WORKER_CACHE_VERSION_TIMEOUT_MS,
   document: typeof document === "undefined" ? undefined : document,
   enabled: SERVICE_WORKER_ENABLED,
+  isPageIdle: () => isPageIdle(),
   navigator: typeof navigator === "undefined" ? undefined : navigator,
   onStateChange: () => {
     if (applicationStatusReady) logApplicationStatus("Application status changed");
@@ -413,6 +416,20 @@ const getNavigationGuardState = () => {
     },
     webappState: state,
   };
+};
+
+// Modal dialogs: the settings and log console is a native <dialog>; the confirmation and agent approval
+// dialogs, and every other Modal, carry aria-modal.
+const OPEN_MODAL_SELECTOR = 'dialog[open], [role="dialog"][aria-modal="true"]';
+
+// Whether a reload would lose nothing. Beyond the unload guard it checks a loaded game and a running job,
+// which the guard does not track. They stay out of the guard so closing a tab does not start warning about them.
+const isPageIdle = () => {
+  if (shouldWarnBeforeUnload(getNavigationGuardState())) return false;
+  if (getEmulatorSessionState().entries.length > 0) return false;
+  const activity = getWorkbenchActivity().state;
+  if (activity === "running" || activity === "staging") return false;
+  return !document.querySelector(OPEN_MODAL_SELECTOR);
 };
 
 const isLikelyViteReloadTimer = (handler: TimerHandler, timeout?: number) => {

@@ -16,6 +16,7 @@ type ServiceWorkerRegistrationLike = Pick<
 type ServiceWorkerContainerLike = Pick<ServiceWorkerContainer, "controller" | "getRegistrations" | "ready"> &
   Pick<EventTarget, "addEventListener">;
 type NavigatorLike = {
+  onLine?: boolean;
   serviceWorker?: ServiceWorkerContainerLike;
 };
 type CacheStorageLike = Pick<CacheStorage, "keys" | "delete">;
@@ -31,6 +32,8 @@ type CreatePwaServiceWorkerClientOptions = {
   cacheVersionTimeoutMs: number;
   document: DocumentLike | undefined;
   enabled: boolean;
+  /** True when nothing on the page would be lost by reloading it. */
+  isPageIdle: () => boolean;
   navigator: NavigatorLike | undefined;
   onStateChange: (state: ServiceWorkerCacheState) => void;
   registerServiceWorker?: RegisterServiceWorker;
@@ -60,6 +63,11 @@ const COI_RELOAD_REASON_COEP_DEGRADE = "coepdegrade";
 const COI_RELOAD_REASON_NOT_CONTROLLING = "notcontrolling";
 const logger = createLogger("rom-weaver-sw-client");
 const SERVICE_WORKER_READY_TIMEOUT_MS = 8000;
+
+// Per-tab-session budget on silent reloads of a hidden tab after an update took over. sessionStorage
+// clears on tab close, so a deploy that keeps producing new workers cannot reload one tab in a loop.
+const HIDDEN_RELOAD_COUNT_KEY = "rom-weaver-sw-hidden-reloads";
+const HIDDEN_RELOAD_BUDGET = 3;
 
 const logServiceWorkerClient = (message: string, details?: Record<string, unknown>) => {
   logger.info(message, details);
@@ -96,6 +104,7 @@ const createPwaServiceWorkerClient = ({
   cacheVersionTimeoutMs,
   document,
   enabled,
+  isPageIdle,
   navigator,
   onStateChange,
   registerServiceWorker: registerServiceWorkerOverride,
@@ -159,6 +168,26 @@ const createPwaServiceWorkerClient = ({
     }
     setSessionStorageItem(COI_RELOADED_BY_SELF_KEY, reason);
     return reloadPage("reloading page for service worker isolation", reason);
+  };
+  const getHiddenReloadBlocker = (reloads: number) => {
+    if (document?.visibilityState !== "hidden") return "the tab is visible";
+    if (reloads >= HIDDEN_RELOAD_BUDGET) return "the reload budget is spent";
+    if (navigator?.onLine === false) return "the browser is offline";
+    if (!isPageIdle()) return "work is in progress";
+    return undefined;
+  };
+  // Takes a hidden, idle tab to the build that took over, so its next visit starts there. A reload
+  // needs the network for whatever the new build has not cached yet, hence the offline check.
+  const reloadHiddenIdleTab = (trigger: string) => {
+    if (!updateTookOver) return;
+    const reloads = Number.parseInt(getSessionStorageItem(HIDDEN_RELOAD_COUNT_KEY), 10) || 0;
+    const blocker = getHiddenReloadBlocker(reloads);
+    if (blocker) {
+      logServiceWorkerClient("hidden tab reload skipped", { blocker, reloads, trigger });
+      return;
+    }
+    setSessionStorageItem(HIDDEN_RELOAD_COUNT_KEY, String(reloads + 1));
+    reloadPage("reloading the hidden idle tab onto the build that took over", trigger);
   };
   const getRegistrationSnapshot = async () => {
     const serviceWorker = navigator?.serviceWorker;
@@ -503,19 +532,21 @@ const createPwaServiceWorkerClient = ({
 
     let controlled = Boolean(serviceWorker.controller);
     serviceWorker.addEventListener("controllerchange", () => {
-      // A takeover MUST NOT reload the page. The page keeps running its build.
+      // A takeover MUST NOT reload a page that is in use. The page keeps running its build.
       const tookOver = controlled;
       if (tookOver) updateTookOver = true;
       controlled = true;
       logServiceWorkerClient("controllerchange event received", { updateTookOver: tookOver });
       syncCrossOriginIsolationMode({ allowReload: !tookOver });
       refreshCacheVersion();
+      reloadHiddenIdleTab("takeover");
     });
     window?.addEventListener("beforeunload", stopServiceWorkerUpdateChecks);
     window?.addEventListener("focus", runServiceWorkerUpdateCheck);
     window?.addEventListener("online", runServiceWorkerUpdateCheck);
     document?.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") runServiceWorkerUpdateCheck();
+      else reloadHiddenIdleTab("hidden");
     });
 
     registerServiceWorker({
