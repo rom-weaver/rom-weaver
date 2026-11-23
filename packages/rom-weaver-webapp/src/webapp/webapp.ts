@@ -4,7 +4,6 @@ import { createElement, useLayoutEffect } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { getWorkbenchActivity } from "../lib/activity-store.ts";
-import { hasUnsavedWork } from "../lib/unsaved-work-store.ts";
 import { collectBrowserInfo } from "../lib/browser-info.ts";
 import { configureLogger, createLogger } from "../lib/logging.ts";
 import { getEmulatorSessionState } from "../public/react/emulator-session-store.ts";
@@ -430,7 +429,7 @@ const OPEN_MODAL_SELECTOR = 'dialog[open], [role="dialog"][aria-modal="true"]';
 const isPageIdle = () => {
   if (shouldWarnBeforeUnload(getNavigationGuardState())) return false;
   if (getEmulatorSessionState().entries.length > 0) return false;
-  if (getWorkbenchActivity().state !== "idle" || hasUnsavedWork()) return false;
+  if (getWorkbenchActivity().state !== "idle") return false;
   if (isFilePickerOpen()) return false;
   return !document.querySelector(OPEN_MODAL_SELECTOR);
 };

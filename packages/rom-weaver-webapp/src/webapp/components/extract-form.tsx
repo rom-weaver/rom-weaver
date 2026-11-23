@@ -11,14 +11,14 @@ import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-z
 import { EXTRACT_FORMAT_GUIDES, WORKFLOW_GUIDES } from "../../public/react/workflow-guides.ts";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
 import type { ProgressEvent, PublicOutput } from "../../types/workflow-runtime-types.ts";
+import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import { getEngineError } from "../../lib/errors.ts";
-import { setUnsavedWork } from "../../lib/unsaved-work-store.ts";
 import { describeAgentSource, useAgentWorkflow } from "../agent/workflow-registry.ts";
 
 type ExtractFormProps = { pageDrop?: PageFileDrop | null };
 type ProgressState = { label: string; percent: number | null };
 
-const EXTRACT_WORK_ID = "extract";
+const EXTRACT_ACTIVITY_KEY = "extract";
 
 // Extract opens one archive per run, so extra files are named instead of silently dropped.
 const skippedNotice = (used: File, skipped: string[]): string =>
@@ -120,7 +120,7 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
       abortRef.current = abort;
       clearOutputs();
       setSplitPrompt(null);
-      // Extract publishes no workbench activity, so it closes a paused disc-sized Test game itself.
+      // Extract publishes no running state, so it closes a paused disc-sized Test game itself.
       releaseLargeEntries({ announce: true });
       setBusy(true);
       setError("");
@@ -247,11 +247,11 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
     pageDrop.onConsumed?.();
   }, [pageDrop, stageFiles]);
 
-  // Extract publishes no workbench activity, so it records its own work for the hidden-tab reload check.
-  // Every run and its outputs follow a staged source, and the source stays until the form is removed.
+  // A staged source reports as ready, which keeps a hidden tab from reloading onto a new build. Every run and
+  // its outputs follow a staged source, and the source stays until the form is removed.
   useEffect(() => {
-    setUnsavedWork(EXTRACT_WORK_ID, source !== null);
-    return () => setUnsavedWork(EXTRACT_WORK_ID, false);
+    setWorkbenchActivity(EXTRACT_ACTIVITY_KEY, { state: source ? "ready" : "idle" });
+    return () => setWorkbenchActivity(EXTRACT_ACTIVITY_KEY, { state: "idle" });
   }, [source]);
 
   useEffect(
