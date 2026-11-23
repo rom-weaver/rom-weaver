@@ -169,8 +169,12 @@ const createPwaServiceWorkerClient = ({
     setSessionStorageItem(COI_RELOADED_BY_SELF_KEY, reason);
     return reloadPage("reloading page for service worker isolation", reason);
   };
+  // Leaving a page also turns it hidden, after its pagehide event. A reload cannot start there and would
+  // only spend the budget.
+  let isLeavingPage = false;
   const getHiddenReloadBlocker = (reloads: number) => {
     if (document?.visibilityState !== "hidden") return "the tab is visible";
+    if (isLeavingPage) return "the page is being left";
     if (reloads >= HIDDEN_RELOAD_BUDGET) return "the reload budget is spent";
     if (navigator?.onLine === false) return "the browser is offline";
     if (!isPageIdle()) return "work is in progress";
@@ -544,6 +548,13 @@ const createPwaServiceWorkerClient = ({
     window?.addEventListener("beforeunload", stopServiceWorkerUpdateChecks);
     window?.addEventListener("focus", runServiceWorkerUpdateCheck);
     window?.addEventListener("online", runServiceWorkerUpdateCheck);
+    window?.addEventListener("pagehide", () => {
+      isLeavingPage = true;
+    });
+    // A page restored from the back-forward cache is in use again.
+    window?.addEventListener("pageshow", () => {
+      isLeavingPage = false;
+    });
     document?.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") runServiceWorkerUpdateCheck();
       else reloadHiddenIdleTab("hidden");

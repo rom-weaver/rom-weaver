@@ -564,6 +564,28 @@ describe("hidden tab reload after a takeover", () => {
     expect(harness.reload).not.toHaveBeenCalled();
   });
 
+  it("does not count a reload when the page turns hidden because the visitor leaves it", async () => {
+    const harness = await startControlled();
+    harness.fireDocument("controllerchange");
+
+    harness.fireWindow("pagehide");
+    hide(harness);
+
+    expect(harness.reload).not.toHaveBeenCalled();
+    expect(harness.sessionStorage.state.has(RELOAD_COUNT_KEY)).toBe(false);
+  });
+
+  it("reloads a hidden tab that was left and then restored from the back-forward cache", async () => {
+    const harness = await startControlled();
+    harness.fireDocument("controllerchange");
+    harness.fireWindow("pagehide");
+    harness.fireWindow("pageshow");
+
+    hide(harness);
+
+    expect(harness.reload).toHaveBeenCalledTimes(1);
+  });
+
   it("stops after three reloads in a tab session", async () => {
     const harness = await startControlled({ sessionStorageSeed: { [RELOAD_COUNT_KEY]: "2" } });
     harness.fireDocument("controllerchange");
