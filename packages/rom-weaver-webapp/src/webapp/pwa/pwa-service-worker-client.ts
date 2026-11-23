@@ -28,6 +28,8 @@ type DocumentLike = Pick<Document, "addEventListener" | "visibilityState">;
 type RegisterServiceWorker = typeof registerSW;
 
 type CreatePwaServiceWorkerClientOptions = {
+  /** This page's build, compared with the build its controlling worker reports. */
+  buildVersion: string;
   cachePrefix: string;
   cacheVersionTimeoutMs: number;
   document: DocumentLike | undefined;
@@ -100,6 +102,7 @@ const describeRegistration = (registration: ServiceWorkerRegistrationLike | null
     : null;
 
 const createPwaServiceWorkerClient = ({
+  buildVersion,
   cachePrefix,
   cacheVersionTimeoutMs,
   document,
@@ -123,6 +126,9 @@ const createPwaServiceWorkerClient = ({
   let updateIntervalId: number | null = null;
   let reloadForControlPending = false;
   let updateTookOver = false;
+  let controllerBuildVersion = "";
+  // True once an update check found no worker newer than the controlling one.
+  let isControllerNewest = false;
 
   const setSessionStorageItem = (key: string, value: string) => {
     try {
@@ -192,6 +198,18 @@ const createPwaServiceWorkerClient = ({
     }
     setSessionStorageItem(HIDDEN_RELOAD_COUNT_KEY, String(reloads + 1));
     reloadPage("reloading the hidden idle tab onto the build that took over", trigger);
+  };
+  // A takeover that lands while the page boots fires no controllerchange here. The newest worker
+  // running another build than the page shows the same takeover.
+  const catchUpOnMissedTakeover = () => {
+    if (updateTookOver || !isControllerNewest) return;
+    if (!(buildVersion && controllerBuildVersion) || buildVersion === controllerBuildVersion) return;
+    updateTookOver = true;
+    logServiceWorkerClient("page build differs from the newest worker's; an update took over unseen", {
+      buildVersion,
+      controllerBuildVersion,
+    });
+    reloadHiddenIdleTab("missed takeover");
   };
   const getRegistrationSnapshot = async () => {
     const serviceWorker = navigator?.serviceWorker;
@@ -398,10 +416,12 @@ const createPwaServiceWorkerClient = ({
         precacheName: typeof data.precacheName === "string" ? data.precacheName : undefined,
         precacheVersion: typeof data.precacheVersion === "string" ? data.precacheVersion : undefined,
       });
+      controllerBuildVersion = typeof data.buildVersion === "string" ? data.buildVersion : "";
       finish(
         typeof data.precacheVersion === "string" ? data.precacheVersion : undefined,
         `Loaded service worker cache: ${data.precacheName || data.precacheVersion || "unknown"}`,
       );
+      catchUpOnMissedTakeover();
     };
 
     try {
@@ -413,13 +433,16 @@ const createPwaServiceWorkerClient = ({
       finish("unknown", "Could not query the loaded service worker cache version");
     }
   };
-  const runServiceWorkerUpdateCheck = () => {
-    void serviceWorkerRegistration?.update?.().catch((err) => {
-      logServiceWorkerClient("service worker update check failed", {
-        error: formatError(err),
-      });
+  const onUpdateCheckDone = () => {
+    isControllerNewest = !(serviceWorkerRegistration?.installing || serviceWorkerRegistration?.waiting);
+    catchUpOnMissedTakeover();
+  };
+  const checkForUpdate = (failureMessage: string) => {
+    void serviceWorkerRegistration?.update?.().then(onUpdateCheckDone, (err) => {
+      logServiceWorkerClient(failureMessage, { error: formatError(err) });
     });
   };
+  const runServiceWorkerUpdateCheck = () => checkForUpdate("service worker update check failed");
   const startServiceWorkerUpdateChecks = () => {
     if (!window || updateIntervalId !== null) return;
     updateIntervalId = window.setInterval(runServiceWorkerUpdateCheck, updateIntervalMs);
@@ -600,11 +623,7 @@ const createPwaServiceWorkerClient = ({
           return;
         }
         setVersion(controllerVersion || "unknown", "Service worker is registered and ready to take control", "ready");
-        void registration.update?.().catch((err) => {
-          logServiceWorkerClient("initial service worker update check failed", {
-            error: formatError(err),
-          });
-        });
+        checkForUpdate("initial service worker update check failed");
         if (!serviceWorker.controller) {
           if (pendingReloadReason === COI_RELOAD_REASON_NOT_CONTROLLING) {
             logServiceWorkerClient("uncontrolled reload skipped; page already reloaded for control");

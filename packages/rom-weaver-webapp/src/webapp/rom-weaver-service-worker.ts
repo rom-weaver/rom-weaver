@@ -1475,6 +1475,7 @@ self.addEventListener("message", (event) => {
 
   const response = {
     action: "service-worker-cache-version",
+    buildVersion: APP_BUILD_VERSION,
     precacheId: PRECACHE_ID,
     precacheName: PRECACHE_NAME,
     precacheVersion: PRECACHE_VERSION,

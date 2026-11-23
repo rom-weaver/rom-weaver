@@ -204,6 +204,7 @@ function logApplicationStatus(message: string, force = false) {
   logger.info(message, status);
 }
 const serviceWorkerClient = createPwaServiceWorkerClient({
+  buildVersion: APP_BUILD_VERSION,
   cachePrefix: SERVICE_WORKER_CACHE_PREFIX,
   cacheVersionTimeoutMs: SERVICE_WORKER_CACHE_VERSION_TIMEOUT_MS,
   document: typeof document === "undefined" ? undefined : document,

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { APP_BUILD_VERSION } from "../../src/webapp/build-version.ts";
 
 type PrecacheManifestEntry = string | { revision?: string | null; url: string; install?: boolean; sizeBytes?: number };
 
@@ -746,6 +747,7 @@ describe("service worker bootstrap", () => {
     expect(replies).toEqual([
       {
         action: "service-worker-cache-version",
+        buildVersion: APP_BUILD_VERSION,
         precacheId: "rom-weaver",
         precacheName: PRECACHE_NAME,
         precacheVersion: BUILD_TOKEN,

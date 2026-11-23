@@ -75,6 +75,7 @@ const createController = ({
 });
 
 type HarnessOptions = {
+  buildVersion?: string;
   controller?: ReturnType<typeof createController> | null;
   crossOriginIsolated?: boolean;
   enabled?: boolean;
@@ -94,6 +95,7 @@ type HarnessOptions = {
 };
 
 const createHarness = ({
+  buildVersion = "",
   controller = null,
   crossOriginIsolated = true,
   enabled = true,
@@ -148,6 +150,7 @@ const createHarness = ({
   let registerCount = 0;
   const browserDocument = { addEventListener: addTo(documentListeners), visibilityState };
   const options = {
+    buildVersion,
     cachePrefix: CACHE_PREFIX,
     cacheVersionTimeoutMs: CACHE_VERSION_TIMEOUT_MS,
     document: hasDocument ? browserDocument : undefined,
@@ -595,6 +598,84 @@ describe("hidden tab reload after a takeover", () => {
 
     expect(harness.reload).toHaveBeenCalledTimes(1);
     expect(harness.sessionStorage.state.get(RELOAD_COUNT_KEY)).toBe("3");
+  });
+
+  // A page on build 1.0.0 whose worker took over during boot, so no controllerchange reached it.
+  const WORKER = { scriptURL: "https://example.com/rom-weaver-service-worker.js", state: "installed" };
+  const createBehindWorker = ({
+    reply = { buildVersion: "2.0.0" },
+    ...options
+  }: HarnessOptions & { reply?: Record<string, unknown> } = {}) =>
+    createHarness({
+      buildVersion: "1.0.0",
+      controller: createController({ reply: { ...DEFAULT_CACHE_VERSION_REPLY, ...reply } }),
+      ...options,
+    });
+
+  it("reloads a hidden idle tab that booted on an older build once its update check ends", async () => {
+    let endUpdateCheck: () => void = () => undefined;
+    const update = () =>
+      new Promise<void>((resolve) => {
+        endUpdateCheck = resolve;
+      });
+    const harness = createBehindWorker({ visibilityState: "hidden" });
+    harness.client.initialize();
+    registered(harness, createRegistration({ update }));
+    await flush();
+    expect(harness.reload).not.toHaveBeenCalled();
+
+    endUpdateCheck();
+    await flush();
+
+    expect(harness.reload).toHaveBeenCalledTimes(1);
+    expect(harness.client.hasUpdateTakenOver()).toBe(true);
+  });
+
+  it("reloads a hidden idle tab that booted on an older build once its worker reports its build", async () => {
+    const harness = createBehindWorker({ visibilityState: "hidden" });
+    harness.client.initialize();
+
+    registered(harness);
+    await flush();
+
+    expect(harness.reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits until a visible tab on an older build is hidden", async () => {
+    const harness = createBehindWorker();
+    harness.client.initialize();
+    registered(harness);
+    await flush();
+    expect(harness.reload).not.toHaveBeenCalled();
+
+    hide(harness);
+
+    expect(harness.reload).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { label: "runs the same build as its worker", options: { reply: { buildVersion: "1.0.0" } } },
+    { label: "has a worker that reports no build", options: { reply: {} } },
+    { label: "carries no build of its own", options: { buildVersion: "" } },
+    { label: "has a newer worker installing", registration: { installing: WORKER } },
+    { label: "has a newer worker waiting", registration: { waiting: WORKER } },
+    {
+      label: "could not finish its update check",
+      registration: {
+        update: async () => {
+          throw new Error("the network is down");
+        },
+      },
+    },
+  ])("does not reload a hidden tab that $label", async ({ options, registration }) => {
+    const harness = createBehindWorker({ visibilityState: "hidden", ...options });
+    harness.client.initialize();
+
+    registered(harness, createRegistration(registration));
+    await flush();
+
+    expect(harness.reload).not.toHaveBeenCalled();
+    expect(harness.client.hasUpdateTakenOver()).toBe(false);
   });
 });
 
