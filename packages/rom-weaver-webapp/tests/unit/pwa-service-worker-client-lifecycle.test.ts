@@ -600,7 +600,7 @@ describe("hidden tab reload after a takeover", () => {
     expect(harness.sessionStorage.state.get(RELOAD_COUNT_KEY)).toBe("3");
   });
 
-  // A page on build 1.0.0 whose worker took over during boot, so no controllerchange reached it.
+  // A page on build 1.0.0 whose worker took over during boot got no controllerchange.
   const WORKER = { scriptURL: "https://example.com/rom-weaver-service-worker.js", state: "installed" };
   const createBehindWorker = ({
     reply = { buildVersion: "2.0.0" },

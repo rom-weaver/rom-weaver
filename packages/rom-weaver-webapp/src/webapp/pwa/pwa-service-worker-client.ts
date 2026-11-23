@@ -127,7 +127,7 @@ const createPwaServiceWorkerClient = ({
   let reloadForControlPending = false;
   let updateTookOver = false;
   let controllerBuildVersion = "";
-  // True once an update check found no worker newer than the controlling one.
+  // True when the latest update check found no worker newer than the controlling one.
   let isControllerNewest = false;
 
   const setSessionStorageItem = (key: string, value: string) => {
@@ -199,8 +199,8 @@ const createPwaServiceWorkerClient = ({
     setSessionStorageItem(HIDDEN_RELOAD_COUNT_KEY, String(reloads + 1));
     reloadPage("reloading the hidden idle tab onto the build that took over", trigger);
   };
-  // A takeover that lands while the page boots fires no controllerchange here. The newest worker
-  // running another build than the page shows the same takeover.
+  // A takeover that lands while the page boots fires no controllerchange here. If the newest
+  // worker's build differs from this page's, an update took over unseen.
   const catchUpOnMissedTakeover = () => {
     if (updateTookOver || !isControllerNewest) return;
     if (!(buildVersion && controllerBuildVersion) || buildVersion === controllerBuildVersion) return;
