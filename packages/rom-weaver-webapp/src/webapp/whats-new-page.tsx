@@ -11,9 +11,6 @@ type WhatsNewPageProps = {
   updateReady?: boolean;
 };
 
-/**
- * The update banner, the unread-news dot, the version chip, and the menu share this changelog route.
- */
 const WhatsNewPage = ({ active, onReload, since = null, updateReady = false }: WhatsNewPageProps) => {
   const localizer = useUiLocalizer();
   return (

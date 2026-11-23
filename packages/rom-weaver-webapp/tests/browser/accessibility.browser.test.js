@@ -874,7 +874,7 @@ const DIALOGS = {
 const ModalHost = (node) =>
   createElement(RomWeaverSettingsProvider, { settings: {} }, createElement("div", { className: "rw-app" }, node));
 
-// The dot on the version chip and the What's new entry decorates their names, which then carry the news.
+// The dotted version chip and What's new entry carry the news in their names.
 const unreadNewsMastheadPage = (mastheadProps) => () =>
   Shell(
     "patcher",

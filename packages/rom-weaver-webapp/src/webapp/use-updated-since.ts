@@ -3,9 +3,8 @@ import { resolveUpdatedSince, type UpdatedSince, writeLastSeenVersion } from "./
 import type { WebappView } from "./webapp-state-types.ts";
 
 /**
- * The update a returning visitor has not acknowledged yet; opening What's new acknowledges it, and `announce` drops
- * with it. `since` outlives that acknowledgement for the page's lifetime, so What's new keeps marking the releases
- * it covers.
+ * A returning visitor's unacknowledged update. Opening What's new drops `announce`, and `since` lasts
+ * for the page's lifetime.
  */
 const useUpdatedSince = (currentView: WebappView) => {
   const [since, setSince] = useState<UpdatedSince | null>(null);

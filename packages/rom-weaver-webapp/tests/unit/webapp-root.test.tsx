@@ -703,7 +703,7 @@ describe("the update banner", () => {
 
 describe("the news dot", () => {
   const LAST_SEEN_KEY = "rom-weaver-last-seen-version";
-  // The dot marks the version chip and the What's new entry, which the sidebar and the phone Menu each render.
+  // The sidebar and the phone Menu each render the dotted chip and What's new entry.
   const dotOwners = (container: HTMLElement) =>
     Array.from(container.querySelectorAll(".news-dot")).map((dot) => dot.parentElement as HTMLElement);
   const isChip = (element: HTMLElement) => element.matches(".build-tag button");

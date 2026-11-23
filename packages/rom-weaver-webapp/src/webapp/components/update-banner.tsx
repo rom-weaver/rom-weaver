@@ -7,7 +7,7 @@ import { fetchChangelog, HIGHLIGHTS_TITLE, type ReleaseChangelog } from "./chang
 import { BannerDismissButton, Reveal } from "./shell.tsx";
 
 /**
- * The last-resort prompt for a deploy waiting to load: it leads with one
+ * The last-resort prompt for a deploy waiting to load. It leads with one
  * highlight and leaves the rest to What's new.
  */
 
@@ -121,8 +121,8 @@ const UpdateBanner = ({
   const { release } = loaded;
   const incoming = release && isNewerVersion(release.version, APP_VERSION) ? release.version : undefined;
   const reload = () => {
-    // Someone up to date has just read what is coming, so the load it brings
-    // needs no second announcement. An unread update keeps its own.
+    // Someone up to date has just read this news, so the reload needs no
+    // announcement. An unread update keeps its own.
     if (incoming && !hasUnreadUpdate) recordReloadingInto(incoming);
     onReload();
   };

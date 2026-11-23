@@ -279,10 +279,9 @@
 }
 
 /* ── the news dot ──
-   Marks the controls that open What's new while there is unread news. It is
-   painted over a corner of the control and takes no space, so the version chip
-   and the nav row keep their size and position. It does not animate, so it needs
-   no reduced-motion rule. */
+   Marks the controls that open What's new while there is unread news. It overlays
+   a corner and takes no space, so the controls keep their size and position. It
+   does not animate, so it needs no reduced-motion rule. */
 .rw-app .news-dot {
   position: absolute;
   inset-block-start: 4px;

@@ -698,8 +698,8 @@ const startNavigationFetch = (request: Request, event: unknown): NavigationFetch
     bodyStarted = resolve;
   });
   const fetching = fetchAndUpdateCache(request, {
-    // The raw response: re-wrapping it with isolation headers loses `redirected`, and reading the body
-    // here keeps the race from waiting on the runtime cache write.
+    // The raw response keeps `redirected`, which re-wrapping with isolation headers loses. Reading the
+    // body here means the race does not wait for the cache write.
     onHeaders: (response) => {
       bodyStarted(response.ok && !response.redirected ? response.clone().arrayBuffer() : undefined);
       headersArrived();
@@ -716,8 +716,8 @@ const startNavigationFetch = (request: Request, event: unknown): NavigationFetch
   return { body: body.catch(() => undefined), fetching, finished, headers };
 };
 
-// The timeout covers the time to the response headers only. Once they arrive the network has
-// answered, so the body download and cache write are awaited however long they take.
+// The timeout covers the time to the response headers only. Once they arrive, the body download and
+// cache write are awaited without a limit.
 const fetchWithNavigationTimeout = async (network: NavigationFetch, request: Request, url: URL, event: unknown) => {
   const { fetching, headers } = network;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -744,10 +744,8 @@ const fetchWithNavigationTimeout = async (network: NavigationFetch, request: Req
   }
 };
 
-// A precached page is only safe without the network when every file it names is cached: the host drops
-// old hashed files after a deploy, and deferred files download after the documents (not automatically on data saver).
-// `built` is the page as the host sends it. `served` is this worker's answer, made from a clone so the
-// built body stays readable.
+// A precached page needs every file it names cached, because the host drops old files.
+// `built` is the page as the host sends it, and `served` is this worker's answer.
 const matchCompleteOfflineNavigation = async (url: URL) => {
   const built = await matchBuiltNavigation(url);
   if (!built) return undefined;
@@ -758,10 +756,8 @@ const matchCompleteOfflineNavigation = async (url: URL) => {
   return { built, served: withCrossOriginIsolationHeaders(page, credentialless) || page };
 };
 
-// Races the network against a complete precached page without ever waiting on the network once the
-// cache is ready. Production documents have no ETag and an unstable Last-Modified, so bodies are compared:
-// an identical body is the same build, which the precached page and its build-info.js serve, and a
-// different one is a newer deploy, which brings its own build-info.js.
+// Races the network against a complete precached page without waiting once the cache is ready.
+// Production documents have no ETag and an unstable Last-Modified, so bodies are compared.
 const respondToTopLevelNavigation = async (request: Request, url: URL, event: unknown) => {
   const network = startNavigationFetch(request, event);
   const race: { body?: ArrayBuffer; isNetworkSettled: boolean } = { isNetworkSettled: false };
@@ -890,13 +886,11 @@ const corePrecache = createDeferredPrecache({
   log: logServiceWorker,
 });
 
-// Whether this worker's whole offline copy (core precache plus every deferred entry) is cached.
-// Memoized so a navigation does not list the caches; cleared whenever the answer can change: after
-// each offline download batch or on-demand deferred fetch that may have added a file, on activation,
-// and when the copy is removed.
+// Whether this worker's whole offline copy is cached: the core precache and every deferred entry.
+// The memo spares a navigation the cache listing and clears whenever the answer can change.
 let offlineCopyCompleteness: Promise<boolean> | undefined;
-// Set only by a probe that resolved true and is still the current memo, so a probe that was in
-// flight across an invalidation cannot revive a stale answer.
+// Set only by a probe that resolved true and is still the current memo. A probe in flight across an
+// invalidation cannot revive a stale answer.
 let offlineCopyKnownComplete = false;
 const invalidateOfflineCopyCompleteness = () => {
   offlineCopyCompleteness = undefined;
@@ -924,7 +918,7 @@ registerRoute(
   ({ request, url }) => request.method === "GET" && deferredPrecache.has(url.href),
   async ({ url }) => {
     const credentialless = await ensureCoepModeHydrated();
-    // A serve only ever adds files, so once the copy is known complete a cache hit cannot change the answer.
+    // A serve only adds files, so a copy known complete stays complete.
     const response = await deferredPrecache.serve(url.href).finally(() => {
       if (!offlineCopyKnownComplete) invalidateOfflineCopyCompleteness();
     });
@@ -1289,8 +1283,8 @@ self.addEventListener("install", (event) => {
   void self.skipWaiting();
 });
 
-// Lets the browser start a navigation's request while this worker wakes up. It is an optimization:
-// a browser without it, or a refusal, leaves the worker fetching the page itself.
+// Lets the browser start a navigation's request while this worker wakes up. Without it, or after a
+// refusal, the worker fetches the page itself.
 const enableNavigationPreload = async () => {
   const preload = self.registration.navigationPreload;
   if (!preload) {

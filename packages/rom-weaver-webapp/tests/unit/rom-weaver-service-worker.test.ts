@@ -1051,7 +1051,7 @@ describe("navigation requests", () => {
     });
     return { promise, reject, resolve };
   };
-  // Makes the precached documents ready only on release, so a test decides whether the network or the offline copy finishes first.
+  // Holds the precached documents until release, so a test decides which side finishes first.
   const holdPrecacheUntilReleased = (entries: Record<string, () => Response>) => {
     let release: () => void = () => undefined;
     const gate = new Promise<void>((resolve) => {
@@ -1846,8 +1846,8 @@ describe("navigation requests", () => {
         },
       });
       setPrecache(guideEntries());
-      // Queue the format change behind a held transition, so the memo is set before the format is stored,
-      // then hold the cleanup that the new format triggers.
+      // Queue the format change behind a held transition, so the memo is set first. Then hold the
+      // cleanup that the new format triggers.
       const queued = await holdCacheCall(harness, POLICY_CACHE_NAME, "put");
       const cleanup = await holdCacheCall(harness, DEFERRED_CACHE_NAME, "delete");
       const first = send(harness, { action: "set-offline-copy-enabled", enabled: true });

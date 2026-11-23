@@ -64,8 +64,8 @@ const COI_RELOAD_REASON_NOT_CONTROLLING = "notcontrolling";
 const logger = createLogger("rom-weaver-sw-client");
 const SERVICE_WORKER_READY_TIMEOUT_MS = 8000;
 
-// Per-tab-session budget on silent reloads of a hidden tab after an update took over. sessionStorage
-// clears on tab close, so a deploy that keeps producing new workers cannot reload one tab in a loop.
+// Per-tab-session budget on silent reloads of a hidden tab after an update took over. It stops a
+// deploy that keeps producing workers from looping one tab's reloads.
 const HIDDEN_RELOAD_COUNT_KEY = "rom-weaver-sw-hidden-reloads";
 const HIDDEN_RELOAD_BUDGET = 3;
 
@@ -180,8 +180,8 @@ const createPwaServiceWorkerClient = ({
     if (!isPageIdle()) return "work is in progress";
     return undefined;
   };
-  // Takes a hidden, idle tab to the build that took over, so its next visit starts there. A reload
-  // needs the network for whatever the new build has not cached yet, hence the offline check.
+  // Reloads a hidden, idle tab onto the build that took over, before its next visit. The reload needs
+  // the network for files the new build has not cached yet.
   const reloadHiddenIdleTab = (trigger: string) => {
     if (!updateTookOver) return;
     const reloads = Number.parseInt(getSessionStorageItem(HIDDEN_RELOAD_COUNT_KEY), 10) || 0;

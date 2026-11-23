@@ -1,4 +1,4 @@
-// Android hides the page while a native file or folder picker is open, and the page gets no other sign of it.
+// Android hides the page while a native file or folder picker is open. The page gets no other sign of it.
 let isInputPickerOpen = false;
 let pendingPickerCalls = 0;
 
@@ -16,7 +16,7 @@ if (typeof window !== "undefined") {
 
 export const isFilePickerOpen = () => isInputPickerOpen || pendingPickerCalls > 0;
 
-/** Runs a picker call such as `showDirectoryPicker` and counts its picker as open until the call settles. */
+/** Runs a picker call such as `showDirectoryPicker`, counting its picker open until it settles. */
 export const trackFilePicker = async <T>(openPicker: () => Promise<T>): Promise<T> => {
   pendingPickerCalls += 1;
   try {

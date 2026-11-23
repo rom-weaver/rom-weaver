@@ -419,13 +419,12 @@ const getNavigationGuardState = () => {
   };
 };
 
-// Modal dialogs: the settings and log console is a native <dialog>; the confirmation and agent approval
-// dialogs, and every other Modal, carry aria-modal.
+// The settings and log console is a native <dialog>. The confirmation and agent approval dialogs and
+// every Modal carry aria-modal.
 const OPEN_MODAL_SELECTOR = 'dialog[open], [role="dialog"][aria-modal="true"]';
 
-// Whether a reload would lose nothing. Beyond the unload guard it checks a loaded game, any workflow that
-// is not idle (a staged file, a running job, or a result still on the page) and an open file picker, which
-// the guard does not track. They stay out of the guard so closing a tab does not start warning about them.
+// Checks more than the unload guard does. The extra checks stay out of the guard so closing a tab
+// does not warn.
 const isPageIdle = () => {
   if (shouldWarnBeforeUnload(getNavigationGuardState())) return false;
   if (getEmulatorSessionState().entries.length > 0) return false;

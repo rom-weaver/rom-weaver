@@ -247,8 +247,8 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
     pageDrop.onConsumed?.();
   }, [pageDrop, stageFiles]);
 
-  // A staged source reports as ready, which keeps a hidden tab from reloading onto a new build. Every run and
-  // its outputs follow a staged source, and the source stays until the form is removed.
+  // A staged source reports as ready, so a hidden tab does not reload over it. Runs and outputs follow
+  // the source, which stays until the form is removed.
   useEffect(() => {
     setWorkbenchActivity(EXTRACT_ACTIVITY_KEY, { state: source ? "ready" : "idle" });
     return () => setWorkbenchActivity(EXTRACT_ACTIVITY_KEY, { state: "idle" });
