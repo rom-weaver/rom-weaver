@@ -339,9 +339,9 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
       signal.addEventListener("abort", done, { once: true });
     });
 
-  // An installed update activates once the controlling worker stops, and any message restarts that
-  // worker for its full idle timeout. Pumps wait until the update takes control, which restarts the
-  // loop through controllerchange, or fails to install.
+  // An installed update activates once the controlling worker stops. Any message restarts that worker
+  // for its full idle timeout. Pumps wait until the update takes control or fails to install. A
+  // controllerchange or a failed install restarts the loop.
   const pauseForPendingUpdate = async () => {
     const registration = await serviceWorker.getRegistration?.();
     const update = registration?.installing ?? registration?.waiting;

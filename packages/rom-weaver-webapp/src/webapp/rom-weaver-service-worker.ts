@@ -801,7 +801,7 @@ registerRoute(
   },
 );
 
-// Activation deletes the outgoing build's files that this build lacks, but open tabs still load them.
+// Activation deletes the outgoing build's files this build lacks. Open tabs still load them.
 // Only hashed files are kept: a revisioned file's URL serves this build's copy.
 const keepOutgoingBuildFiles = async () => {
   const incoming = new Set(
@@ -879,7 +879,7 @@ let appPumpGeneration = 0;
 let offlineCopyRequestedEnabled = true;
 let coreRefillNeeded = true;
 // A waiting update activates once this worker stops, and each page request restarts it. This reply
-// ends the page's loop until the update takes control, without the ready state, which can download.
+// ends the page's loop until the update takes control. It omits the ready state, which can download.
 const UPDATE_WAITING_REPLY = { enabled: false, ready: false };
 const pumpOfflineFiles = (onInterim: (progress: unknown) => void, identifyGroupIds?: string[]) => {
   // A pause MUST stop refilling both active pumps and pumps waiting for cache reads.
@@ -1081,7 +1081,7 @@ registerRoute(
 const isHashedFileRequest = (url: URL) => isSameOriginRequest(url) && scopePath(url.pathname).startsWith("/assets/");
 const isListedByThisBuild = (url: URL) => getCacheKeyForURL(url.href) !== undefined || deferredPrecache.has(url.href);
 
-// Hashed files that this build does not list come from a tab still running an outgoing build.
+// Unlisted hashed files come from a tab still running an outgoing build.
 // Registered after the identify pack route, whose files sit in the same folder.
 registerRoute(
   ({ request, url }) => request.method === "GET" && isHashedFileRequest(url) && !isListedByThisBuild(url),
@@ -1105,7 +1105,7 @@ self.addEventListener("install", (event) => {
   // Existing complete entries MUST move before Workbox removes them on activation.
   event.waitUntil(runServiceWorkerPhase("migrate deferred cache", () => deferredPrecache.migrate(PRECACHE_NAME)));
   const isFirstInstall = !self.registration.active;
-  // Best effort: a tab that misses a kept file falls back to the network, then to the reload banner.
+  // Best effort. A tab that misses a kept file falls back to the network. Then it shows the reload banner.
   if (!isFirstInstall) {
     event.waitUntil(runServiceWorkerPhase("keep outgoing build files", keepOutgoingBuildFiles).catch(() => undefined));
   }

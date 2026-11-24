@@ -107,8 +107,8 @@ const createPwaServiceWorkerClient = ({
   const sessionStorage = sessionStorageOverride;
   let initialized = false;
   let state = createServiceWorkerCacheState();
-  // Raw version last reported by the controlling worker (or a sentinel like "network"/"unknown"), shown
-  // while a newer report is pending.
+  // Version last reported by the controlling worker, or a sentinel such as "network" or "unknown".
+  // Shown while a newer report is pending.
   let controllerVersion = "";
   let serviceWorkerRegistration: ServiceWorkerRegistrationLike | undefined;
   let updateIntervalId: number | null = null;
@@ -503,7 +503,7 @@ const createPwaServiceWorkerClient = ({
 
     let controlled = Boolean(serviceWorker.controller);
     serviceWorker.addEventListener("controllerchange", () => {
-      // An update taking over a controlled page MUST NOT reload it: the page keeps running its build.
+      // A takeover MUST NOT reload the page. The page keeps running its build.
       const tookOver = controlled;
       if (tookOver) updateTookOver = true;
       controlled = true;
@@ -526,7 +526,7 @@ const createPwaServiceWorkerClient = ({
       onNeedReload: () => {
         logServiceWorkerClient("service worker update took control; the page keeps its build");
       },
-      // The update activates by itself, so it waits only while the outgoing worker finishes its work.
+      // The update activates by itself. It waits only for the outgoing worker to finish.
       onNeedRefresh: () => {
         logServiceWorkerClient("service worker update waiting for the outgoing worker");
       },

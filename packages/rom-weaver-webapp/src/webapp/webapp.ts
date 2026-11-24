@@ -448,7 +448,7 @@ const reloadPendingUpdate = async (): Promise<boolean> => {
 
 if (typeof window !== "undefined") {
   // After an update takes over, this page keeps running its own build. A file that build loads later
-  // can be gone from the host and from every cache, so only a reload recovers.
+  // can be gone from the host and every cache. Only a reload recovers.
   window.addEventListener("vite:preloadError", (event) => {
     if (takeoverFileMissing || !serviceWorkerClient.hasUpdateTakenOver()) return;
     logger.warn("A file of this page's build failed to load after an update took over", {

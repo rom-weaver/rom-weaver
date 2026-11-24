@@ -208,11 +208,15 @@ If it is false, check the document's COOP/COEP response headers, HTTPS trust, an
 
 Production builds register `rom-weaver-service-worker.js` using the app's relative asset base. When the app is served at `/rom-weaver/`, the service worker's default scope is `/rom-weaver/`; it does not control the origin root or sibling applications. Redirect `/rom-weaver` to `/rom-weaver/` so relative assets, registration, and scope resolve to the same directory.
 
-The service worker precaches the build and checks for updates. Same-origin page loads and manifest requests go to the network first and fall back to its cache when the network fails. A page load with a cached copy also falls back after a 3.5 s stall. It can also add the cross-origin isolation headers to responses inside its scope when the host cannot configure them. It cannot alter the first document response before it controls the page, so server or proxy headers remain the preferred setup.
+The service worker precaches the build and checks for updates. It can also add the cross-origin isolation headers to responses inside its scope when the host cannot configure them. It cannot alter the first document response before it controls the page, so server or proxy headers remain the preferred setup.
+
+Same-origin page loads and manifest requests go to the network first. They fall back to the cache when the network fails. A page load with a cached copy also falls back after a 3.5 s stall.
 
 On first install, the worker claims the app and the client may reload once to gain control and establish isolation. The boot gate retries a stalled controlled-but-unisolated page only within a bounded budget, then releases the page instead of reloading forever. If `crossOriginIsolated` is still false, the threaded WASM runtime will not be available; fix the response headers, HTTPS trust, service-worker scope, or browser support rather than treating the fallback as equivalent to a correctly configured deployment.
 
-A new build's worker installs in the background and takes over at once. Open tabs keep running the build they loaded. A reload or a new tab gets the new build. The worker keeps the old build's changed files so those tabs still load them. It deletes them when the app loads with no tab open, so a single tab that only reloads keeps them. A tab that still fails to import one of its script chunks offers a reload.
+A new build's worker installs in the background and takes over at once. Open tabs keep running the build they loaded. A reload or a new tab gets the new build.
+
+The worker keeps the old build's changed files so those tabs still load them. It deletes them when the app loads with no tab open. A single tab that only reloads keeps them. After a takeover, a tab that fails to import a script chunk offers a reload.
 
 ## Host integration
 

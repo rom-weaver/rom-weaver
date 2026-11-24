@@ -74,7 +74,7 @@ const createServiceWorker = (controller: ServiceWorker | null) => {
   return { serviceWorker, notifyControllerChange };
 };
 
-/** A worker the registration reports as installing; `fail` makes it redundant the way a failed install does. */
+/** A worker the registration reports as installing. `fail` makes it redundant, as a failed install does. */
 const createUpdateWorker = () => {
   const worker = Object.assign(new EventTarget(), { state: "installing" as ServiceWorkerState });
   const fail = () => {
