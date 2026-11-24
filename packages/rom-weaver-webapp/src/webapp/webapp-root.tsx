@@ -1012,7 +1012,8 @@ function WebappRoot({
     state.settingsDialogOpen,
   ]);
 
-  // A chunk usually fails to load because a deploy replaced it, so apply the waiting update when there is one.
+  // A chunk usually fails to load because a deploy replaced it.
+  // After a takeover, the reload asks first only when the page has unsaved work.
   const reloadAfterLoadFailure = () => (pageUpdate.ready ? actions.onReloadUpdate() : window.location.reload());
   const workflowPanel = (view: WebappView, form: React.ReactNode) =>
     isViewMounted(view) ? (

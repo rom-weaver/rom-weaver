@@ -159,6 +159,7 @@ export default defineConfig(({ command, mode }) => {
           },
         },
         manifest: false,
+        // The worker skips waiting itself, so no update waits for a prompt.
         registerType: "prompt",
         srcDir: SERVICE_WORKER_SOURCE_DIR,
         strategies: "injectManifest",

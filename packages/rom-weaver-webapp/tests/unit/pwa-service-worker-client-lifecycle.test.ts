@@ -75,7 +75,6 @@ const createController = ({
 });
 
 type HarnessOptions = {
-  appVersion?: string;
   controller?: ReturnType<typeof createController> | null;
   crossOriginIsolated?: boolean;
   enabled?: boolean;
@@ -85,18 +84,14 @@ type HarnessOptions = {
   hasLocationReload?: boolean;
   hasServiceWorker?: boolean;
   hasWindow?: boolean;
-  onBeforeReload?: () => void;
-  onConfirmReload?: () => Promise<boolean>;
   ready?: Promise<FakeRegistration> | "missing" | "never";
   registrations?: FakeRegistration[];
   sessionStorageFailOn?: StorageFailure[];
   sessionStorageSeed?: Record<string, string>;
-  shouldAutoApplyUpdate?: () => boolean;
   visibilityState?: string;
 };
 
 const createHarness = ({
-  appVersion = "app-under-test",
   controller = null,
   crossOriginIsolated = true,
   enabled = true,
@@ -106,13 +101,10 @@ const createHarness = ({
   hasLocationReload = true,
   hasServiceWorker = true,
   hasWindow = true,
-  onBeforeReload,
-  onConfirmReload = async () => true,
   ready = "missing",
   registrations = [],
   sessionStorageFailOn = [],
   sessionStorageSeed = {},
-  shouldAutoApplyUpdate,
   visibilityState = "visible",
 }: HarnessOptions = {}) => {
   const sessionStorage = createSessionStorage(sessionStorageSeed, sessionStorageFailOn);
@@ -150,26 +142,21 @@ const createHarness = ({
   const states: Array<ReturnType<typeof createServiceWorkerCacheState>> = [];
   let registerOptions: RegisterOptions | undefined;
   let registerCount = 0;
-  const updateServiceWorker = vi.fn(async () => undefined);
   const options = {
-    appVersion,
     cachePrefix: CACHE_PREFIX,
     cacheVersionTimeoutMs: CACHE_VERSION_TIMEOUT_MS,
     document: hasDocument ? { addEventListener: addTo(documentListeners), visibilityState } : undefined,
     enabled,
     navigator: hasServiceWorker ? { serviceWorker } : {},
-    onBeforeReload,
-    onConfirmReload,
     onStateChange: (state: ReturnType<typeof createServiceWorkerCacheState>) => {
       states.push(state);
     },
     registerServiceWorker: (registerServiceWorkerOptions: RegisterOptions) => {
       registerOptions = registerServiceWorkerOptions;
       registerCount += 1;
-      return updateServiceWorker;
+      return async () => undefined;
     },
     sessionStorage,
-    shouldAutoApplyUpdate,
     updateIntervalMs: 5000,
     window: hasWindow ? browserWindow : undefined,
   };
@@ -196,7 +183,6 @@ const createHarness = ({
     serviceWorker,
     sessionStorage,
     states,
-    updateServiceWorker,
     window: browserWindow,
   };
 };
@@ -470,83 +456,33 @@ describe("cache version refresh", () => {
   });
 });
 
-describe("pending update reload", () => {
-  it("does nothing when no update is waiting", async () => {
-    const harness = createHarness({ controller: createController() });
+describe("update takeover", () => {
+  it.each([
+    { crossOriginIsolated: true, label: "an isolated page" },
+    { crossOriginIsolated: false, label: "a page without isolation" },
+  ])("keeps $label running its build when an update takes control", async ({ crossOriginIsolated }) => {
+    const harness = createHarness({ controller: createController(), crossOriginIsolated });
     harness.client.initialize();
+    await flush();
 
-    await expect(harness.client.reloadPendingUpdate()).resolves.toBe(false);
-    expect(harness.updateServiceWorker).not.toHaveBeenCalled();
-  });
-
-  it("stops when the user declines the reload", async () => {
-    const harness = createHarness({ controller: createController(), onConfirmReload: async () => false });
-    harness.client.initialize();
     harness.registerOptions().onNeedRefresh?.();
+    harness.fireDocument("controllerchange");
+    // virtual:pwa-register reloads the page itself unless the client supplies onNeedReload.
+    (harness.registerOptions().onNeedReload ?? harness.reload)();
 
-    await expect(harness.client.reloadPendingUpdate()).resolves.toBe(false);
-    expect(harness.client.getState().updateReady).toBe(true);
-    expect(harness.updateServiceWorker).not.toHaveBeenCalled();
-  });
-
-  it("reloads through the registrar callback once the incoming worker takes control", async () => {
-    const onBeforeReload = vi.fn();
-    const harness = createHarness({ controller: createController(), onBeforeReload });
-    harness.client.initialize();
-    harness.registerOptions().onNeedRefresh?.();
-
-    await expect(harness.client.reloadPendingUpdate()).resolves.toBe(true);
-    expect(onBeforeReload).toHaveBeenCalledTimes(1);
     expect(harness.reload).not.toHaveBeenCalled();
-
-    harness.registerOptions().onNeedReload?.();
-
-    expect(harness.reload).toHaveBeenCalledTimes(1);
+    expect(harness.client.hasUpdateTakenOver()).toBe(true);
   });
 
-  it("reloads on the controller change when the registrar never reports it", async () => {
-    // workbox-window reports no update to a page first loaded without a controller.
-    const harness = createHarness({ controller: createController() });
+  it("still reloads a page without isolation when the first worker takes control", () => {
+    const harness = createHarness({ crossOriginIsolated: false });
     harness.client.initialize();
-    harness.registerOptions().onNeedRefresh?.();
 
-    await expect(harness.client.reloadPendingUpdate()).resolves.toBe(true);
+    harness.serviceWorker.controller = createController();
     harness.fireDocument("controllerchange");
 
     expect(harness.reload).toHaveBeenCalledTimes(1);
-  });
-
-  it("reloads once when both the controller change and the registrar report it", async () => {
-    const harness = createHarness({ controller: createController() });
-    harness.client.initialize();
-    harness.registerOptions().onNeedRefresh?.();
-
-    await expect(harness.client.reloadPendingUpdate()).resolves.toBe(true);
-    harness.fireDocument("controllerchange");
-    harness.registerOptions().onNeedReload?.();
-
-    expect(harness.reload).toHaveBeenCalledTimes(1);
-  });
-
-  it("cannot reload a page whose location has no reload", async () => {
-    const harness = createHarness({ controller: createController(), hasLocationReload: false });
-    harness.client.initialize();
-    harness.registerOptions().onNeedRefresh?.();
-
-    await expect(harness.client.reloadPendingUpdate()).resolves.toBe(true);
-    harness.registerOptions().onNeedReload?.();
-
-    expect(harness.reload).not.toHaveBeenCalled();
-  });
-
-  it("does not reload when the incoming worker takes control on its own", () => {
-    const harness = createHarness({ controller: createController() });
-    harness.client.initialize();
-
-    harness.registerOptions().onNeedReload?.();
-    harness.fireDocument("controllerchange");
-
-    expect(harness.reload).not.toHaveBeenCalled();
+    expect(harness.client.hasUpdateTakenOver()).toBe(false);
   });
 });
 
@@ -786,85 +722,5 @@ describe("COEP mode sync", () => {
     harness.fireDocument("controllerchange");
 
     expect(controller.postMessage).toHaveBeenCalledWith({ action: "set-coep-credentialless", value: true });
-  });
-});
-
-describe("automatic update apply", () => {
-  it("activates silently when the page already runs the incoming version", async () => {
-    const harness = createHarness({ controller: createController(), shouldAutoApplyUpdate: () => true });
-    harness.client.initialize();
-    await flush();
-
-    harness.registerOptions().onNeedRefresh?.();
-
-    expect(harness.updateServiceWorker).toHaveBeenCalledTimes(1);
-    expect(harness.client.getState().updateReady).toBe(false);
-    expect(harness.sessionStorage.state.get("rom-weaver-sw-auto-apply-reloads")).toBe("1");
-
-    harness.registerOptions().onNeedReload?.();
-    expect(harness.reload).not.toHaveBeenCalled();
-  });
-
-  it("shows the update prompt instead of reloading when the page still runs the outgoing controller's code", async () => {
-    const onBeforeReload = vi.fn();
-    let idle = true;
-    const harness = createHarness({
-      appVersion: "test",
-      controller: createController(),
-      onBeforeReload,
-      shouldAutoApplyUpdate: () => idle,
-    });
-    harness.client.initialize();
-    await flush();
-
-    harness.registerOptions().onNeedRefresh?.();
-
-    expect(harness.client.getState().updateReady).toBe(true);
-    expect(harness.updateServiceWorker).not.toHaveBeenCalled();
-    expect(onBeforeReload).not.toHaveBeenCalled();
-    expect(harness.sessionStorage.state.get("rom-weaver-sw-auto-apply-reloads")).toBeUndefined();
-    // Work started in the meantime, so a worker activated elsewhere does not reload this tab.
-    idle = false;
-    harness.fireDocument("controllerchange");
-    expect(harness.reload).not.toHaveBeenCalled();
-    expect(onBeforeReload).not.toHaveBeenCalled();
-  });
-
-  it("reloads a waiting tab once when a sibling tab applies the update and this tab is idle", async () => {
-    const onBeforeReload = vi.fn();
-    const harness = createHarness({
-      appVersion: "test",
-      controller: createController(),
-      onBeforeReload,
-      shouldAutoApplyUpdate: () => true,
-    });
-    harness.client.initialize();
-    await flush();
-    harness.registerOptions().onNeedRefresh?.();
-
-    harness.fireDocument("controllerchange");
-
-    expect(onBeforeReload).toHaveBeenCalledTimes(1);
-    expect(harness.reload).toHaveBeenCalledTimes(1);
-    // A user's accept in another tab does not spend this tab's auto-apply budget.
-    expect(harness.sessionStorage.state.get("rom-weaver-sw-auto-apply-reloads")).toBeUndefined();
-
-    harness.registerOptions().onNeedReload?.();
-    expect(harness.reload).toHaveBeenCalledTimes(1);
-  });
-
-  it("falls back to the manual prompt once the per-session budget is spent", async () => {
-    const harness = createHarness({
-      controller: createController(),
-      sessionStorageSeed: { "rom-weaver-sw-auto-apply-reloads": "3" },
-      shouldAutoApplyUpdate: () => true,
-    });
-    harness.client.initialize();
-    await flush();
-
-    harness.registerOptions().onNeedRefresh?.();
-
-    expect(harness.updateServiceWorker).not.toHaveBeenCalled();
-    expect(harness.client.getState().updateReady).toBe(true);
   });
 });

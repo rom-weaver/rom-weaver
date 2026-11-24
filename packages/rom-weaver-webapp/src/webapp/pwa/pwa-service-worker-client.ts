@@ -7,8 +7,6 @@ import {
   type ServiceWorkerCacheState,
   type ServiceWorkerStatus,
   setServiceWorkerCacheVersion,
-  withDeferredServiceWorkerUpdate,
-  withoutDeferredServiceWorkerUpdate,
 } from "./service-worker-cache-state.ts";
 
 type ServiceWorkerRegistrationLike = Pick<
@@ -29,23 +27,14 @@ type DocumentLike = Pick<Document, "addEventListener" | "visibilityState">;
 type RegisterServiceWorker = typeof registerSW;
 
 type CreatePwaServiceWorkerClientOptions = {
-  appVersion: string;
   cachePrefix: string;
   cacheVersionTimeoutMs: number;
   document: DocumentLike | undefined;
   enabled: boolean;
   navigator: NavigatorLike | undefined;
-  onBeforeReload?: () => void;
-  onConfirmReload: () => Promise<boolean>;
   onStateChange: (state: ServiceWorkerCacheState) => void;
   registerServiceWorker?: RegisterServiceWorker;
   sessionStorage?: SessionStorageLike | undefined;
-  // Return true to apply an update as soon as it's detected instead of prompting. Called when an update
-  // is detected, while there's no in-progress work. Applied silently (skipWaiting, no reload) only when
-  // the page already runs the incoming version; when the running code is the outgoing controller's, the
-  // prompt shows instead (see the appVersion comparison in onNeedRefresh). Also checked before a
-  // sibling-triggered reload.
-  shouldAutoApplyUpdate?: () => boolean;
   updateIntervalMs: number;
   window: WindowLike | undefined;
 };
@@ -53,8 +42,9 @@ type CreatePwaServiceWorkerClientOptions = {
 type PwaServiceWorkerClient = {
   forceCacheAndReload: () => Promise<boolean>;
   getState: () => ServiceWorkerCacheState;
+  /** True once an update took control of this page, which keeps running its own build. */
+  hasUpdateTakenOver: () => boolean;
   initialize: () => void;
-  reloadPendingUpdate: () => Promise<boolean>;
   refreshCacheVersion: () => void;
 };
 
@@ -70,12 +60,6 @@ const COI_RELOAD_REASON_COEP_DEGRADE = "coepdegrade";
 const COI_RELOAD_REASON_NOT_CONTROLLING = "notcontrolling";
 const logger = createLogger("rom-weaver-sw-client");
 const SERVICE_WORKER_READY_TIMEOUT_MS = 8000;
-// Per-tab-session budget on unattended auto-applies. Prompt mode had the user as the circuit breaker;
-// auto-apply needs its own so a deploy that ever serves a byte-varying worker cannot churn skipWaiting
-// on an idle tab endlessly. Past the budget we fall back to the manual update prompt. sessionStorage
-// clears on tab close, so this resets naturally per browsing session.
-const AUTO_APPLY_RELOAD_COUNT_KEY = "rom-weaver-sw-auto-apply-reloads";
-const AUTO_APPLY_RELOAD_BUDGET = 3;
 
 const logServiceWorkerClient = (message: string, details?: Record<string, unknown>) => {
   logger.info(message, details);
@@ -108,18 +92,14 @@ const describeRegistration = (registration: ServiceWorkerRegistrationLike | null
     : null;
 
 const createPwaServiceWorkerClient = ({
-  appVersion,
   cachePrefix,
   cacheVersionTimeoutMs,
   document,
   enabled,
   navigator,
-  onBeforeReload,
-  onConfirmReload,
   onStateChange,
   registerServiceWorker: registerServiceWorkerOverride,
   sessionStorage: sessionStorageOverride,
-  shouldAutoApplyUpdate,
   updateIntervalMs,
   window,
 }: CreatePwaServiceWorkerClientOptions): PwaServiceWorkerClient => {
@@ -127,38 +107,13 @@ const createPwaServiceWorkerClient = ({
   const sessionStorage = sessionStorageOverride;
   let initialized = false;
   let state = createServiceWorkerCacheState();
-  // Raw version last reported by the controlling worker (or a sentinel like "network"/"unknown"). Used
-  // to decide whether an auto-applied update needs a reload; state itself only keeps a display label.
+  // Version last reported by the controlling worker, or a sentinel such as "network" or "unknown".
+  // Shown while a newer report is pending.
   let controllerVersion = "";
-  let updateServiceWorker: ReturnType<RegisterServiceWorker> | null = null;
   let serviceWorkerRegistration: ServiceWorkerRegistrationLike | undefined;
   let updateIntervalId: number | null = null;
   let reloadForControlPending = false;
-  // Whether the incoming worker taking control should reload the page. See the onNeedReload handler:
-  // the registrar reloads unconditionally unless we supply that callback, so this flag is the only
-  // thing standing between a silent activation and a surprise reload.
-  let reloadOnIncomingControl = false;
-  // Set when the update banner was shown for a page running the outgoing controller's code. If another
-  // tab applies the update (the user accepted there, or that tab already ran the new build and applied it
-  // silently) and the new worker takes control here, this tab is still on the old build
-  // (its lazy chunks can 404 after a deploy), so it reloads once, provided it has no in-progress work.
-  let waitingOnOutgoingBuild = false;
-  // Applies a reload the incoming worker's control was asked for, once. Both controllerchange and
-  // onNeedReload call it: the registrar's callback alone misses pages first loaded without a
-  // controller, because workbox-window decides whether a change is an update when it registers.
-  const reloadForIncomingControl = (source: string) => {
-    const reload = reloadOnIncomingControl;
-    reloadOnIncomingControl = false;
-    const siblingAccepted = waitingOnOutgoingBuild;
-    waitingOnOutgoingBuild = false;
-    logServiceWorkerClient("incoming service worker took control", { reload, siblingAccepted, source });
-    if (reload) return reloadPage("reloading page to apply service worker update", "swupdate");
-    // Another tab applied the update, and that tab's own budget bounds silent applies, so this reload
-    // does not count against this tab's auto-apply budget.
-    if (!(siblingAccepted && shouldAutoApplyUpdate?.())) return false;
-    onBeforeReload?.();
-    return reloadPage("reloading page; a sibling tab applied the service worker update", "swupdate-sibling");
-  };
+  let updateTookOver = false;
 
   const setSessionStorageItem = (key: string, value: string) => {
     try {
@@ -352,14 +307,6 @@ const createPwaServiceWorkerClient = ({
     state = setServiceWorkerCacheVersion(state, version, title, serviceWorkerStatus);
     emitState();
   };
-  const markUpdateReady = () => {
-    state = withDeferredServiceWorkerUpdate(state);
-    emitState();
-  };
-  const clearUpdateReady = () => {
-    state = withoutDeferredServiceWorkerUpdate(state);
-    emitState();
-  };
 
   const refreshCacheVersion = () => {
     if (!enabled) {
@@ -507,22 +454,6 @@ const createPwaServiceWorkerClient = ({
         setVersion("off", "Service worker cache is disabled", "off");
       });
   };
-  const reloadPendingUpdate = async (): Promise<boolean> => {
-    if (!(state.updateReady && updateServiceWorker)) {
-      logServiceWorkerClient("pending update reload skipped; no update is ready");
-      return false;
-    }
-    if (!(await onConfirmReload())) {
-      logServiceWorkerClient("pending update reload canceled by user");
-      return false;
-    }
-    logServiceWorkerClient("reloading with pending service worker update");
-    clearUpdateReady();
-    reloadOnIncomingControl = true;
-    onBeforeReload?.();
-    await updateServiceWorker();
-    return true;
-  };
   const forceCacheAndReload = async (): Promise<boolean> => {
     if (!enabled) {
       logServiceWorkerClient("force cache reload skipped; service worker cache is disabled");
@@ -570,11 +501,14 @@ const createPwaServiceWorkerClient = ({
       return;
     }
 
+    let controlled = Boolean(serviceWorker.controller);
     serviceWorker.addEventListener("controllerchange", () => {
-      logServiceWorkerClient("controllerchange event received");
-      clearUpdateReady();
-      if (reloadForIncomingControl("controllerchange")) return;
-      syncCrossOriginIsolationMode({ allowReload: true });
+      // A takeover MUST NOT reload the page. The page keeps running its build.
+      const tookOver = controlled;
+      if (tookOver) updateTookOver = true;
+      controlled = true;
+      logServiceWorkerClient("controllerchange event received", { updateTookOver: tookOver });
+      syncCrossOriginIsolationMode({ allowReload: !tookOver });
       refreshCacheVersion();
     });
     window?.addEventListener("beforeunload", stopServiceWorkerUpdateChecks);
@@ -584,56 +518,17 @@ const createPwaServiceWorkerClient = ({
       if (document.visibilityState === "visible") runServiceWorkerUpdateCheck();
     });
 
-    updateServiceWorker = registerServiceWorker({
+    registerServiceWorker({
       // An unisolated first visit needs the worker before the boot gate can release. Pages that
       // already have server or worker COOP/COEP headers can keep registration off the load path.
       immediate: !isCrossOriginIsolated(),
-      // Without this callback the registrar reloads the page itself the moment the incoming worker
-      // takes control, and the reloadPage argument to updateServiceWorker() is ignored outright -
-      // so a silent activation would still reload. Supplying it moves that decision here.
+      // Without this callback the registrar reloads the page when an update takes control.
       onNeedReload: () => {
-        reloadForIncomingControl("registrar");
+        logServiceWorkerClient("service worker update took control; the page keeps its build");
       },
+      // The update activates by itself. It waits only for the outgoing worker to finish.
       onNeedRefresh: () => {
-        logServiceWorkerClient("service worker update ready");
-        const autoApplyReloads = Number.parseInt(getSessionStorageItem(AUTO_APPLY_RELOAD_COUNT_KEY), 10) || 0;
-        // The page is still running the code the outgoing controller cached (it served its own shell),
-        // so applying the update means reloading it. That reload would land seconds after the visit,
-        // so leave the new worker waiting and show the update prompt: the user picks when to reload,
-        // and the worker otherwise activates on the next visit once no client uses the old one.
-        const reloadToApply = controllerVersion === appVersion;
-        if (
-          shouldAutoApplyUpdate?.() &&
-          updateServiceWorker &&
-          autoApplyReloads < AUTO_APPLY_RELOAD_BUDGET &&
-          !reloadToApply
-        ) {
-          // The running version is already ahead of the controller: the shell was served fresh from the
-          // network, so a reload would swap in nothing. Activate via skipWaiting silently and let the
-          // controllerchange handler re-sync COEP and the cache version.
-          logServiceWorkerClient("auto-applying service worker update; no in-progress work", {
-            autoApplyReloads,
-            controllerVersion,
-            runningVersion: appVersion,
-          });
-          setSessionStorageItem(AUTO_APPLY_RELOAD_COUNT_KEY, String(autoApplyReloads + 1));
-          clearUpdateReady();
-          reloadOnIncomingControl = false;
-          void updateServiceWorker();
-          return;
-        }
-        if (reloadToApply) waitingOnOutgoingBuild = true;
-        if (reloadToApply && shouldAutoApplyUpdate?.()) {
-          logServiceWorkerClient("service worker update waiting; page runs the controller's version", {
-            controllerVersion,
-          });
-        }
-        if (autoApplyReloads >= AUTO_APPLY_RELOAD_BUDGET) {
-          logServiceWorkerClient("auto-apply budget exhausted; deferring to manual update prompt", {
-            autoApplyReloads,
-          });
-        }
-        markUpdateReady();
+        logServiceWorkerClient("service worker update waiting for the outgoing worker");
       },
       onOfflineReady: () => {
         logServiceWorkerClient("service worker offline cache ready");
@@ -696,9 +591,9 @@ const createPwaServiceWorkerClient = ({
   return {
     forceCacheAndReload,
     getState: () => state,
+    hasUpdateTakenOver: () => updateTookOver,
     initialize,
     refreshCacheVersion,
-    reloadPendingUpdate,
   };
 };
 

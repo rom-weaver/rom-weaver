@@ -83,6 +83,7 @@ let resolvePendingAgentApproval: ((accepted: boolean) => void) | null = null;
 let renderWebappRootIfReady = () => undefined;
 let resolvePendingConfirmation: ((accepted: boolean) => void) | null = null;
 let vitePageUpdateState = createEmptyVitePageUpdateState();
+let takeoverFileMissing = false;
 let pageResetKey = 0;
 if (typeof window !== "undefined") {
   const keptRomReconciliation = listKeptRoms().catch((error: unknown) => {
@@ -200,19 +201,16 @@ function logApplicationStatus(message: string, force = false) {
   logger.info(message, status);
 }
 const serviceWorkerClient = createPwaServiceWorkerClient({
-  appVersion: APP_BUILD_VERSION,
   cachePrefix: SERVICE_WORKER_CACHE_PREFIX,
   cacheVersionTimeoutMs: SERVICE_WORKER_CACHE_VERSION_TIMEOUT_MS,
   document: typeof document === "undefined" ? undefined : document,
   enabled: SERVICE_WORKER_ENABLED,
   navigator: typeof navigator === "undefined" ? undefined : navigator,
-  onConfirmReload: confirmReloadUpdate,
   onStateChange: () => {
     if (applicationStatusReady) logApplicationStatus("Application status changed");
     renderWebappRootIfReady();
   },
   sessionStorage: typeof sessionStorage === "undefined" ? undefined : sessionStorage,
-  shouldAutoApplyUpdate: () => !shouldWarnBeforeUnload(getNavigationGuardState()),
   updateIntervalMs: SERVICE_WORKER_UPDATE_INTERVAL_MS,
   window: typeof window === "undefined" ? undefined : window,
 });
@@ -440,19 +438,40 @@ const installViteReloadGuard = () => {
   window.setTimeout = nextSetTimeout;
 };
 
+const isPageUpdateReady = () => vitePageUpdateState.ready || takeoverFileMissing;
+
 const reloadPendingUpdate = async (): Promise<boolean> => {
-  const pageUpdate = getPageUpdateState({
-    serviceWorkerCache: serviceWorkerClient.getState(),
-    vite: vitePageUpdateState,
-  });
-  if (pageUpdate.source === "service-worker") return serviceWorkerClient.reloadPendingUpdate();
-  if (pageUpdate.source === "vite") {
-    if (!(await confirmReloadUpdate())) return false;
-    window.location.reload();
-    return true;
-  }
-  return false;
+  if (!(isPageUpdateReady() && (await confirmReloadUpdate()))) return false;
+  window.location.reload();
+  return true;
 };
+
+// After an update takes over, this page keeps running its own build. A file that build loads later
+// can be gone from the host and every cache. Only a reload recovers.
+const markTakeoverFileMissing = (message: string, details: Record<string, unknown>) => {
+  if (takeoverFileMissing || !serviceWorkerClient.hasUpdateTakenOver()) return;
+  logger.warn(message, details);
+  takeoverFileMissing = true;
+  renderWebappRootIfReady();
+};
+
+if (typeof window !== "undefined") {
+  window.addEventListener("vite:preloadError", (event) => {
+    markTakeoverFileMissing("A file of this page's build failed to load after an update took over", {
+      error: String(event.payload),
+    });
+  });
+  // Worker scripts and WebAssembly files fail without a page event, so the worker reports them.
+  navigator.serviceWorker?.addEventListener("message", (event) => {
+    const data = (event.data ?? {}) as Record<string, unknown>;
+    if (data.action !== "build-file-missing") return;
+    markTakeoverFileMissing("A file of this page's build is missing after an update took over", { url: data.url });
+  });
+  // A page in the back/forward cache is no open tab to the worker, which may have deleted its build's files.
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted) markTakeoverFileMissing("Restored from the back/forward cache after an update took over", {});
+  });
+}
 
 import.meta.hot?.on("rom-weaver:reload-available", (payload) => {
   markRomWeaverRunnerStale();
@@ -654,15 +673,7 @@ const renderWebappRoot = (): undefined => {
     // The prerendered shell cannot know the query; the render after hydration applies it.
     creatorMode: shouldHydrate ? null : pendingCreatorMode,
     notFound: isNotFoundPage,
-    pageUpdate: shouldHydrate
-      ? getPageUpdateState({
-          serviceWorkerCache: { updateReady: false },
-          vite: createEmptyVitePageUpdateState(),
-        })
-      : getPageUpdateState({
-          serviceWorkerCache,
-          vite: vitePageUpdateState,
-        }),
+    pageUpdate: getPageUpdateState({ ready: !shouldHydrate && isPageUpdateReady() }),
     serviceWorkerCache,
     state: rootState,
     urlSession: shouldHydrate || pageResetKey > 0 ? null : urlSessionParse.request ? urlSessionParse : null,

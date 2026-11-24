@@ -8,7 +8,13 @@ const SOURCE_MODULE_EXTENSION_REGEX = /\.(?:[cm]?js|jsx|ts|tsx|css)$/i;
 
 import { cacheNames, setCacheNameDetails } from "workbox-core";
 import type { WorkboxPlugin } from "workbox-core/types.js";
-import { addPlugins, cleanupOutdatedCaches, matchPrecache, precacheAndRoute } from "workbox-precaching";
+import {
+  addPlugins,
+  cleanupOutdatedCaches,
+  getCacheKeyForURL,
+  matchPrecache,
+  precacheAndRoute,
+} from "workbox-precaching";
 import { registerRoute } from "workbox-routing";
 import { APP_BUILD_VERSION } from "./build-version.ts";
 import { createOfflineWarmup } from "./offline-warmup.ts";
@@ -77,11 +83,12 @@ const EMULATORJS_CACHE_PREFIX = `${MANAGED_CACHE_PREFIX}emulatorjs-`;
 const EMULATORJS_CACHE_NAME = `${EMULATORJS_CACHE_PREFIX}${__EMULATORJS_VERSION__}`;
 const IDENTIFY_OPTIONAL_CACHE_NAME = `${MANAGED_CACHE_PREFIX}identify-optional`;
 const DEFERRED_CACHE_NAME = `${MANAGED_CACHE_PREFIX}app-deferred`;
+const OUTGOING_BUILD_CACHE_NAME = `${MANAGED_CACHE_PREFIX}outgoing-build`;
 const OFFLINE_POLICY_CACHE_NAME = `${MANAGED_CACHE_PREFIX}offline-policy`;
 const offlineCopyPolicy = createOfflineCopyPolicy(OFFLINE_POLICY_CACHE_NAME, self.registration.scope);
 const docsImagePolicy = createDocsImagePolicy(OFFLINE_POLICY_CACHE_NAME, self.registration.scope);
 const CACHE_POLICY = createServiceWorkerCachePolicy({
-  additionalCacheNames: [DEFERRED_CACHE_NAME, OFFLINE_POLICY_CACHE_NAME],
+  additionalCacheNames: [DEFERRED_CACHE_NAME, OUTGOING_BUILD_CACHE_NAME, OFFLINE_POLICY_CACHE_NAME],
   emulatorJsCacheName: EMULATORJS_CACHE_NAME,
   emulatorJsCachePrefix: EMULATORJS_CACHE_PREFIX,
   identifyOptionalCacheName: IDENTIFY_OPTIONAL_CACHE_NAME,
@@ -406,6 +413,11 @@ let installStartedAt = 0;
 let precacheInstallFailed = false;
 const precacheIncomingBytes = new Map<string, number>();
 
+const postToWindowClients = async (message: Record<string, unknown>) => {
+  const clients = await self.clients.matchAll({ includeUncontrolled: true, type: "window" });
+  for (const client of clients) client.postMessage(message);
+};
+
 // The install-time readout runs the same combined totals the warm-up reports
 // later, so one percentage covers both stages instead of each filling its own.
 const precacheProgress = createOfflineProgressReporter(
@@ -417,11 +429,7 @@ const precacheProgress = createOfflineProgressReporter(
     );
     return state;
   },
-  async (state) => {
-    const message = { action: "offline-precache-progress", ...state, phase: "precache", ready: false };
-    const clients = await self.clients.matchAll({ includeUncontrolled: true, type: "window" });
-    for (const client of clients) client.postMessage(message);
-  },
+  (state) => postToWindowClients({ action: "offline-precache-progress", ...state, phase: "precache", ready: false }),
   (error) => logServiceWorker("precache progress failed", { error: formatError(error) }),
 );
 
@@ -591,14 +599,8 @@ const matchCachedResponse = async (request: Request, url: URL) => {
   return undefined;
 };
 
-// A navigation answered from this worker's own precache never waits for the network, so the
-// background update check is what lets a new deploy reach the update banner. The page's own
-// interval (see pwa-service-worker-client.ts) runs the same check; update() calls overlap safely,
-// this only keeps a burst of navigations from issuing one each.
-const NAVIGATION_UPDATE_THROTTLE_MS = 60_000;
 // A network-first navigation that has an exact cached copy gives up on a stalled fetch after this.
 const NAVIGATION_NETWORK_TIMEOUT_MS = 3500;
-let lastNavigationUpdateCheckAt = Number.NEGATIVE_INFINITY;
 
 const requestPrefersMarkdown = (request: Request) => (request.headers.get("accept") || "").includes("text/markdown");
 
@@ -625,28 +627,6 @@ const waitUntilEvent = (event: unknown, promise: Promise<unknown>) => {
   if (typeof waitUntil === "function") waitUntil.call(event, promise);
 };
 
-const scheduleNavigationUpdateCheck = (event: unknown) => {
-  const now = Date.now();
-  if (now - lastNavigationUpdateCheckAt < NAVIGATION_UPDATE_THROTTLE_MS) return;
-  lastNavigationUpdateCheckAt = now;
-  const check = self.registration.update().catch((err: unknown) => {
-    logServiceWorker("navigation update check failed", { error: formatError(err) });
-  });
-  waitUntilEvent(event, check);
-};
-
-const serveNavigationFromPrecache = async (request: Request, url: URL, event: unknown) => {
-  if (!isTopLevelNavigation(request, url) || requestPrefersMarkdown(request)) return undefined;
-  const document = await matchPrecachedNavigation(url);
-  if (!document) return undefined;
-  // A document is only safe to serve without the network when the chunks, CSS and WASM it names are
-  // cached too: deferred files download after the documents, and not at all on data saver.
-  if (!(await isOfflineCopyComplete())) return undefined;
-  scheduleNavigationUpdateCheck(event);
-  const credentialless = await ensureCoepModeHydrated();
-  return withCrossOriginIsolationHeaders(document, credentialless) || document;
-};
-
 // This worker's precached document first: a runtime-cached one can come from a newer deploy, whose
 // build-info.js and chunks this worker does not hold.
 const matchCachedDocument = async (request: Request, url: URL) =>
@@ -663,8 +643,11 @@ const matchExactCachedNavigation = async (request: Request, url: URL) => {
 // redirect hop shares one client, so each served document records its source again.
 const networkDocumentClients = new Set<string>();
 
+const getResultingClientId = (event: unknown) =>
+  (event as { resultingClientId?: string } | undefined)?.resultingClientId;
+
 const recordDocumentSource = (event: unknown, { network }: { network: boolean }) => {
-  const clientId = (event as { resultingClientId?: string } | undefined)?.resultingClientId;
+  const clientId = getResultingClientId(event);
   if (!clientId) return;
   if (network) networkDocumentClients.add(clientId);
   else networkDocumentClients.delete(clientId);
@@ -714,10 +697,8 @@ const fetchWithNavigationTimeout = async (request: Request, url: URL, event: unk
 registerRoute(
   ({ request, url }) => shouldUseNetworkFirst(request, url),
   async ({ event, request, url }) => {
-    const precached = await serveNavigationFromPrecache(request, url, event);
-    if (precached) {
-      recordDocumentSource(event, { network: false });
-      return precached;
+    if (isTopLevelNavigation(request, url)) {
+      waitUntilEvent(event, removeOutgoingBuildFilesWithoutTabs(getResultingClientId(event)));
     }
     try {
       return await fetchWithNavigationTimeout(request, url, event);
@@ -817,47 +798,60 @@ const corePrecache = createDeferredPrecache({
   log: logServiceWorker,
 });
 
-// Whether this worker's whole offline copy (core precache plus every deferred entry) is cached.
-// Memoized so a navigation does not list the caches; cleared whenever the answer can change: after
-// each offline download batch or on-demand deferred fetch that may have added a file, on activation,
-// and when the copy is removed.
-let offlineCopyCompleteness: Promise<boolean> | undefined;
-// Set only by a probe that resolved true and is still the current memo, so a probe that was in
-// flight across an invalidation cannot revive a stale answer.
-let offlineCopyKnownComplete = false;
-const invalidateOfflineCopyCompleteness = () => {
-  offlineCopyCompleteness = undefined;
-  offlineCopyKnownComplete = false;
-};
-const isOfflineCopyComplete = () => {
-  if (!offlineCopyRequestedEnabled) return Promise.resolve(false);
-  if (offlineCopyCompleteness) return offlineCopyCompleteness;
-  const probe: Promise<boolean> = Promise.all([corePrecache.isComplete(), deferredPrecache.isComplete()]).then(
-    ([core, deferred]) => {
-      const complete = core && deferred;
-      if (complete && offlineCopyCompleteness === probe) offlineCopyKnownComplete = true;
-      return complete;
-    },
-    (err: unknown) => {
-      logServiceWorker("offline copy completeness check failed", { error: formatError(err) });
-      return false;
-    },
-  );
-  offlineCopyCompleteness = probe;
-  return probe;
-};
-
 registerRoute(
   ({ request, url }) => request.method === "GET" && deferredPrecache.has(url.href),
   async ({ url }) => {
     const credentialless = await ensureCoepModeHydrated();
-    // A serve only ever adds files, so once the copy is known complete a cache hit cannot change the answer.
-    const response = await deferredPrecache.serve(url.href).finally(() => {
-      if (!offlineCopyKnownComplete) invalidateOfflineCopyCompleteness();
-    });
+    const response = await deferredPrecache.serve(url.href);
     return withCrossOriginIsolationHeaders(response, credentialless) || response;
   },
 );
+
+// Activation deletes the outgoing build's files this build lacks. Open tabs still load them.
+// Only hashed files are kept: a revisioned file's URL serves this build's copy.
+const keepOutgoingBuildFiles = async () => {
+  const incoming = new Set(
+    PRECACHE_MANIFEST.map(
+      (entry) => new URL(typeof entry === "string" ? entry : entry.url, self.registration.scope).href,
+    ),
+  );
+  const outgoing = await caches.open(OUTGOING_BUILD_CACHE_NAME);
+  let kept = 0;
+  for (const cacheName of [PRECACHE_NAME, DEFERRED_CACHE_NAME]) {
+    const cache = await caches.open(cacheName);
+    for (const request of await cache.keys()) {
+      const url = new URL(request.url);
+      if (url.searchParams.has("__WB_REVISION__") || incoming.has(url.href)) continue;
+      const response = await cache.match(request);
+      if (!response) continue;
+      await outgoing.put(request, response);
+      kept += 1;
+    }
+  }
+  logServiceWorker("kept the outgoing build's files for its open tabs", { files: kept });
+};
+
+const OUTGOING_BUILD_CLEANUP_WAIT_MS = 5000;
+const OUTGOING_BUILD_CLEANUP_POLL_MS = 250;
+
+const hasOtherWindowClient = async (newPageClientId: string | undefined) =>
+  (await self.clients.matchAll({ type: "window" })).some((client) => client.id !== newPageClientId);
+
+// A reloading tab stays a window client until its new page commits. Wait for the new page to be
+// the only window client. Give up when another tab stays open.
+const removeOutgoingBuildFilesWithoutTabs = async (newPageClientId: string | undefined) => {
+  if (!(await caches.has(OUTGOING_BUILD_CACHE_NAME))) return;
+  const giveUpAt = Date.now() + OUTGOING_BUILD_CLEANUP_WAIT_MS;
+  while (await hasOtherWindowClient(newPageClientId)) {
+    if (Date.now() >= giveUpAt) {
+      logServiceWorker("kept outgoing build files; another tab is still open");
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, OUTGOING_BUILD_CLEANUP_POLL_MS));
+  }
+  if (await caches.delete(OUTGOING_BUILD_CACHE_NAME))
+    logServiceWorker("removed outgoing build files; no other tab runs them");
+};
 
 // EmulatorJS sends HEAD for a BIOS before using its IndexedDB copy, and stalls
 // startup when that HEAD fails or returns an error status. Answer from the
@@ -905,6 +899,9 @@ let appPumpChain: Promise<unknown> = Promise.resolve();
 let appPumpGeneration = 0;
 let offlineCopyRequestedEnabled = true;
 let coreRefillNeeded = true;
+// A waiting update activates once this worker stops, and each page request restarts it. This reply
+// ends the page's loop until the update takes control. It omits the ready state, which can download.
+const UPDATE_WAITING_REPLY = { enabled: false, ready: false };
 const pumpOfflineFiles = (onInterim: (progress: unknown) => void, identifyGroupIds?: string[]) => {
   // A pause MUST stop refilling both active pumps and pumps waiting for cache reads.
   const generation = appPumpGeneration;
@@ -949,9 +946,10 @@ const pumpOfflineFiles = (onInterim: (progress: unknown) => void, identifyGroupI
         })
         .catch((error) => logServiceWorker("offline cache progress failed", { error: formatError(error) }));
     };
+    const shouldContinue = () =>
+      generation === appPumpGeneration && offlineCopyRequestedEnabled && !self.registration.waiting;
     let downloaded: boolean;
     try {
-      const shouldContinue = () => generation === appPumpGeneration && offlineCopyRequestedEnabled;
       downloaded = coreRefillNeeded
         ? await corePrecache.runNextBatch(
             (cachedBytes) => {
@@ -978,9 +976,7 @@ const pumpOfflineFiles = (onInterim: (progress: unknown) => void, identifyGroupI
       await cacheUpdates;
       await progress.flush();
     }
-    if (!downloaded && generation === appPumpGeneration && offlineCopyRequestedEnabled) {
-      return offlineWarmup.runNextUnit(onInterim);
-    }
+    if (!downloaded && shouldContinue()) return offlineWarmup.runNextUnit(onInterim);
     return {
       ...(await offlineWarmup.getReadyState()),
       detail: null,
@@ -990,7 +986,12 @@ const pumpOfflineFiles = (onInterim: (progress: unknown) => void, identifyGroupI
       phase: "precache",
     };
   };
-  const pump = appPumpChain.then(process, process).finally(invalidateOfflineCopyCompleteness);
+  const processUnlessUpdateWaiting = async () => {
+    if (self.registration.waiting) return UPDATE_WAITING_REPLY;
+    const progress = await process();
+    return self.registration.waiting ? UPDATE_WAITING_REPLY : progress;
+  };
+  const pump = appPumpChain.then(processUnlessUpdateWaiting, processUnlessUpdateWaiting);
   appPumpChain = pump.catch(() => undefined);
   return pump;
 };
@@ -1014,7 +1015,6 @@ const removeOfflineCopyFiles = async () => {
       await caches.delete(name);
     }
   }
-  invalidateOfflineCopyCompleteness();
   deferredPrecache.reset();
   corePrecache.reset();
   coreRefillNeeded = true;
@@ -1027,16 +1027,12 @@ let offlineCopyTransition: Promise<unknown> = Promise.resolve();
 const setOfflineCopyEnabled = (enabled: boolean, docImageFormat?: "avif" | "webp") => {
   if (!enabled) appPumpGeneration += 1;
   offlineCopyRequestedEnabled = enabled;
-  invalidateOfflineCopyCompleteness();
   const transition = offlineCopyTransition.then(async () => {
     if (enabled && docImageFormat && (await docsImagePolicy.setFormat(docImageFormat))) {
       logServiceWorker("offline documentation image format selected", { format: docImageFormat });
       appPumpGeneration += 1;
-      // Entries change with the format, so drop the memo now and again after the cleanup.
-      invalidateOfflineCopyCompleteness();
       await appPumpChain;
       await deferredPrecache.cleanup();
-      invalidateOfflineCopyCompleteness();
     }
     const wasEnabled = await offlineCopyPolicy.isEnabled();
     await offlineCopyPolicy.setEnabled(enabled);
@@ -1103,6 +1099,34 @@ registerRoute(
   serveBuildInfo,
 );
 
+const isHashedFileRequest = (url: URL) => isSameOriginRequest(url) && scopePath(url.pathname).startsWith("/assets/");
+const isListedByThisBuild = (url: URL) => getCacheKeyForURL(url.href) !== undefined || deferredPrecache.has(url.href);
+
+// Only the network can serve a file with no kept copy. The page never sees a worker script or
+// WebAssembly file fail to load, so it is told here.
+const fetchOutgoingBuildFile = async (request: Request) => {
+  const announceMissing = () => postToWindowClients({ action: "build-file-missing", url: request.url });
+  const response = await fetch(request).catch(async (error: unknown) => {
+    await announceMissing();
+    throw error;
+  });
+  if (!response.ok) await announceMissing();
+  return response;
+};
+
+// Unlisted hashed files come from a tab still running an outgoing build.
+// Registered after the identify pack route, whose files sit in the same folder.
+registerRoute(
+  ({ request, url }) => request.method === "GET" && isHashedFileRequest(url) && !isListedByThisBuild(url),
+  async ({ request }) => {
+    const credentialless = await ensureCoepModeHydrated();
+    const kept = await caches.match(request, { cacheName: OUTGOING_BUILD_CACHE_NAME });
+    logServiceWorker("outgoing build file requested", { kept: Boolean(kept), url: request.url });
+    const response = kept ?? (await fetchOutgoingBuildFile(request));
+    return withCrossOriginIsolationHeaders(response, credentialless) || response;
+  },
+);
+
 addPlugins([precachePlugin]);
 precacheAndRoute(INITIAL_MANIFEST, { ignoreURLParametersMatching: [/^sha256$/] });
 cleanupOutdatedCaches();
@@ -1113,12 +1137,11 @@ self.addEventListener("install", (event) => {
   precacheInstallFailed = false;
   // Existing complete entries MUST move before Workbox removes them on activation.
   event.waitUntil(runServiceWorkerPhase("migrate deferred cache", () => deferredPrecache.migrate(PRECACHE_NAME)));
-  // First install (no active worker yet): take control immediately so the page can gain
-  // cross-origin isolation on its follow-up reload. Updates to an already-controlled page
-  // must WAIT - registerType is "prompt", so activation happens only when the client sends
-  // SKIP_WAITING (see the message handler). Seizing control on every update re-inits the
-  // running app and reads as an involuntary reload.
   const isFirstInstall = !self.registration.active;
+  // Best effort. A tab that misses a kept file falls back to the network. Then it shows the reload banner.
+  if (!isFirstInstall) {
+    event.waitUntil(runServiceWorkerPhase("keep outgoing build files", keepOutgoingBuildFiles).catch(() => undefined));
+  }
   // Runs before workbox's async install handler touches any entry (listeners
   // fire in add order within the same task), so the plugin sees the flag.
   firstInstallInProgress = isFirstInstall;
@@ -1130,7 +1153,8 @@ self.addEventListener("install", (event) => {
     initialEntries: INITIAL_MANIFEST.length,
     deferredEntries: DEFERRED_MANIFEST.length,
   });
-  if (isFirstInstall) void self.skipWaiting();
+  // Open tabs keep running the build they loaded; the next page load gets this one.
+  void self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
@@ -1148,7 +1172,6 @@ self.addEventListener("activate", (event) => {
         Promise.all(cachesToDelete.map((cacheName) => caches.delete(cacheName))),
       );
       offlineCopyRequestedEnabled = await offlineCopyPolicy.isEnabled();
-      invalidateOfflineCopyCompleteness();
       if (offlineCopyRequestedEnabled) {
         await runServiceWorkerPhase("clean deferred cache", () => deferredPrecache.cleanup());
       } else {
@@ -1168,14 +1191,6 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("message", (event) => {
   if (!event.data) return;
-
-  // "SKIP_WAITING" (type) is what virtual:pwa-register posts on updateServiceWorker(true);
-  // "skip-waiting" (action) is the app's own convention. Accept both.
-  if (event.data.type === "SKIP_WAITING" || event.data.action === "skip-waiting") {
-    logServiceWorker("message received; calling skipWaiting");
-    void self.skipWaiting();
-    return;
-  }
 
   if (event.data.action === COI_COEP_CREDENTIALLESS_ACTION) {
     const credentialless = event.data.value !== false;

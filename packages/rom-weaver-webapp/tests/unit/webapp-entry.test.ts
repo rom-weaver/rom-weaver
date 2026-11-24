@@ -15,9 +15,7 @@ import {
 import type { WebappRootProps } from "../../src/webapp/webapp-root-types.ts";
 
 type ServiceWorkerClientOptions = {
-  onConfirmReload: () => Promise<boolean>;
   onStateChange: () => void;
-  shouldAutoApplyUpdate: () => boolean;
 };
 
 const mocks = vi.hoisted(() => ({
@@ -36,15 +34,13 @@ const mocks = vi.hoisted(() => ({
     label: "cache dev",
     serviceWorkerStatus: "off",
     title: "Loaded service worker cache version",
-    updateLabel: "Reload to update",
-    updateReady: false,
   } as ServiceWorkerCacheState,
   serviceWorkerClient: {
     forceCacheAndReload: vi.fn(() => Promise.resolve(true)),
     getState: vi.fn((): ServiceWorkerCacheState => mocks.serviceWorkerCache),
+    hasUpdateTakenOver: vi.fn(() => false),
     initialize: vi.fn(),
     refreshCacheVersion: vi.fn(),
-    reloadPendingUpdate: vi.fn(() => Promise.resolve(true)),
   },
   serviceWorkerOptions: null as ServiceWorkerClientOptions | null,
   startBrowserOpfsBootCleanup: vi.fn(() => Promise.resolve()),
@@ -109,6 +105,13 @@ const flush = async () => {
       setTimeout(resolve, 0);
     });
   }
+};
+
+/** Dispatches the event Vite's preload helper sends when a lazy chunk fails to load. */
+const failLazyFileLoad = async () => {
+  const failure = new Event("vite:preloadError", { cancelable: true });
+  window.dispatchEvent(Object.assign(failure, { payload: new Error("Failed to fetch dynamically imported module") }));
+  await flush();
 };
 
 const nextFrame = () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
@@ -218,8 +221,6 @@ beforeEach(() => {
     label: "cache dev",
     serviceWorkerStatus: "off",
     title: "Loaded service worker cache version",
-    updateLabel: "Reload to update",
-    updateReady: false,
   };
   consoleSpies = (["debug", "error", "info", "log", "warn"] as const).map((method) =>
     vi.spyOn(console, method).mockImplementation(() => undefined),
@@ -450,54 +451,98 @@ describe("service worker bridge", () => {
     expect(mocks.renders.length).toBeGreaterThan(rendersBefore);
   });
 
-  it("auto-applies an update only while nothing is staged", async () => {
-    await loadWebapp();
+  it.each([
+    { tookOver: false, reloads: 0 },
+    { tookOver: true, reloads: 1 },
+  ])(
+    "offers a reload for a lazy file that fails to load when an update took over: $tookOver",
+    async ({ tookOver, reloads }) => {
+      mocks.serviceWorkerClient.hasUpdateTakenOver.mockReturnValue(tookOver);
+      const reload = vi.spyOn(window.location, "reload").mockImplementation(() => undefined);
+      await loadWebapp();
 
-    expect(mocks.serviceWorkerOptions?.shouldAutoApplyUpdate()).toBe(true);
-    latest().actions.onPatcherInputsChange([{ name: "rom.sfc" }]);
-    await flush();
-    expect(mocks.serviceWorkerOptions?.shouldAutoApplyUpdate()).toBe(false);
+      await failLazyFileLoad();
+      latest().actions.onReloadUpdate();
+      await flush();
+
+      expect(latest().pageUpdate.ready).toBe(tookOver);
+      expect(reload).toHaveBeenCalledTimes(reloads);
+    },
+  );
+
+  describe("a missing file that raises no import error", () => {
+    let container: EventTarget;
+    const workerMessage = (data: unknown) => () => container.dispatchEvent(new MessageEvent("message", { data }));
+    const pageshow = (persisted: boolean) => () =>
+      window.dispatchEvent(Object.defineProperty(new Event("pageshow"), "persisted", { value: persisted }));
+
+    beforeEach(() => {
+      container = new EventTarget();
+      Object.defineProperty(navigator, "serviceWorker", { configurable: true, value: container });
+    });
+
+    afterEach(() => {
+      Reflect.deleteProperty(navigator, "serviceWorker");
+    });
+
+    it.each([
+      {
+        label: "the worker reports a missing file",
+        ready: true,
+        signal: workerMessage({ action: "build-file-missing", url: "/assets/runner.js" }),
+        tookOver: true,
+      },
+      {
+        label: "the worker reports a missing file before any takeover",
+        ready: false,
+        signal: workerMessage({ action: "build-file-missing", url: "/assets/runner.js" }),
+        tookOver: false,
+      },
+      {
+        label: "the worker sends another message",
+        ready: false,
+        signal: workerMessage({ action: "service-worker-log" }),
+        tookOver: true,
+      },
+      { label: "the page returns from the back/forward cache", ready: true, signal: pageshow(true), tookOver: true },
+      {
+        label: "the page returns from the back/forward cache before any takeover",
+        ready: false,
+        signal: pageshow(true),
+        tookOver: false,
+      },
+      { label: "the page loads normally", ready: false, signal: pageshow(false), tookOver: true },
+    ])("offers a reload when $label: $ready", async ({ ready, signal, tookOver }) => {
+      mocks.serviceWorkerClient.hasUpdateTakenOver.mockReturnValue(tookOver);
+      await loadWebapp();
+
+      signal();
+      await flush();
+
+      expect(latest().pageUpdate.ready).toBe(ready);
+    });
   });
 
-  it("reloads for an update without asking when nothing is staged", async () => {
-    await loadWebapp();
-
-    await expect(mocks.serviceWorkerOptions?.onConfirmReload()).resolves.toBe(true);
-    expect(latest().confirmationDialog.open).toBe(false);
-  });
-
-  it("asks before reloading over staged work", async () => {
+  it("asks before that reload discards staged work", async () => {
+    mocks.serviceWorkerClient.hasUpdateTakenOver.mockReturnValue(true);
+    const reload = vi.spyOn(window.location, "reload").mockImplementation(() => undefined);
     await loadWebapp();
     latest().actions.onPatcherInputsChange([{ name: "rom.sfc" }]);
-    await flush();
+    await failLazyFileLoad();
 
-    const confirmed = mocks.serviceWorkerOptions?.onConfirmReload();
+    latest().actions.onReloadUpdate();
     await flush();
     expect(latest().confirmationDialog).toMatchObject({
-      cancelLabel: "Stay here",
       confirmLabel: "Reload now",
-      level: "warning",
       message: "You have an in-progress patching session. Reload and lose those changes?",
       open: true,
       title: "Reload and lose changes?",
     });
+    expect(reload).not.toHaveBeenCalled();
 
     latest().actions.onConfirmConfirmation();
-    await expect(confirmed).resolves.toBe(true);
-    expect(latest().confirmationDialog.open).toBe(false);
-  });
-
-  it("routes a pending service worker update through the client", async () => {
-    await loadWebapp();
-
-    latest().actions.onReloadUpdate();
     await flush();
-    expect(mocks.serviceWorkerClient.reloadPendingUpdate).not.toHaveBeenCalled();
-
-    mocks.serviceWorkerCache = { ...mocks.serviceWorkerCache, updateReady: true };
-    latest().actions.onReloadUpdate();
-    await flush();
-    expect(mocks.serviceWorkerClient.reloadPendingUpdate).toHaveBeenCalledTimes(1);
+    expect(reload).toHaveBeenCalledTimes(1);
   });
 });
 

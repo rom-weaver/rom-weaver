@@ -74,6 +74,16 @@ const createServiceWorker = (controller: ServiceWorker | null) => {
   return { serviceWorker, notifyControllerChange };
 };
 
+/** A worker the registration reports as installing. `fail` makes it redundant, as a failed install does. */
+const createUpdateWorker = () => {
+  const worker = Object.assign(new EventTarget(), { state: "installing" as ServiceWorkerState });
+  const fail = () => {
+    worker.state = "redundant";
+    worker.dispatchEvent(new Event("statechange"));
+  };
+  return { fail, worker: worker as unknown as ServiceWorker };
+};
+
 const flush = async (rounds = 20) => {
   for (let i = 0; i < rounds; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
 };
@@ -450,6 +460,51 @@ describe("offline warm-up client", () => {
     expect(messages.map((message) => message.action)).toEqual(["offline-warmup-pump", "offline-warmup-pump"]);
     expect(onProgress).toHaveBeenCalledTimes(2);
     expect(onProgress.mock.calls[1]?.[0]).toMatchObject({ ready: true });
+  });
+
+  it.each(["installing", "waiting"] as const)(
+    "sends no pump while an update is %s and pumps the update once it takes control",
+    async (slot) => {
+      const outgoing = createFakeController([progressReply(), progressReply()]);
+      const update = createFakeController([progressReply({ ready: true })]);
+      const { serviceWorker, notifyControllerChange } = createServiceWorker(outgoing.controller);
+      const registration = { installing: null as ServiceWorker | null, waiting: null as ServiceWorker | null };
+      let registrationReads = 0;
+      const getRegistration = async () => {
+        registrationReads += 1;
+        // The update appears after the first pump went out.
+        if (registrationReads === 2) registration[slot] = createUpdateWorker().worker;
+        return registration;
+      };
+      cancel = scheduleOfflineWarmup({
+        navigator: { serviceWorker: Object.assign(serviceWorker, { getRegistration }) },
+      });
+      await flush();
+      expect(outgoing.messages).toEqual([{ action: "offline-warmup-pump" }]);
+
+      registration[slot] = null;
+      serviceWorker.controller = update.controller;
+      notifyControllerChange();
+      await flush();
+      expect(outgoing.messages).toEqual([{ action: "offline-warmup-pump" }]);
+      expect(update.messages).toEqual([{ action: "offline-warmup-pump" }]);
+    },
+  );
+
+  it("resumes pumping when an installing update fails", async () => {
+    const { controller, messages } = createFakeController([progressReply({ ready: true })]);
+    const { serviceWorker } = createServiceWorker(controller);
+    const update = createUpdateWorker();
+    const registration = { installing: update.worker as ServiceWorker | null, waiting: null };
+    const getRegistration = async () => registration;
+    cancel = scheduleOfflineWarmup({ navigator: { serviceWorker: Object.assign(serviceWorker, { getRegistration }) } });
+    await flush();
+    expect(messages).toEqual([]);
+
+    registration.installing = null;
+    update.fail();
+    await flush();
+    expect(messages).toEqual([{ action: "offline-warmup-pump" }]);
   });
 
   it("starts the first low-priority pump without a default delay", async () => {
