@@ -216,7 +216,7 @@ On first install, the worker claims the app and the client may reload once to ga
 
 A new build's worker installs in the background and takes over at once. Open tabs keep running the build they loaded. A reload or a new tab gets the new build.
 
-The worker keeps the old build's changed files so those tabs still load them. It deletes them once a page load leaves no other tab open. After a takeover, a tab that fails to import a script chunk offers a reload.
+The worker keeps the old build's changed files so those tabs still load them. It deletes them once a page load leaves no other tab open. After a takeover, a tab offers a reload when it cannot load a file of its build, such as a script chunk, a worker script, or a WebAssembly file. A tab the browser restores from its back/forward cache offers one too.
 
 ## Host integration
 

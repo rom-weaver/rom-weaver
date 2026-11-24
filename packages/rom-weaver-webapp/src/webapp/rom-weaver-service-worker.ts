@@ -413,6 +413,11 @@ let installStartedAt = 0;
 let precacheInstallFailed = false;
 const precacheIncomingBytes = new Map<string, number>();
 
+const postToWindowClients = async (message: Record<string, unknown>) => {
+  const clients = await self.clients.matchAll({ includeUncontrolled: true, type: "window" });
+  for (const client of clients) client.postMessage(message);
+};
+
 // The install-time readout runs the same combined totals the warm-up reports
 // later, so one percentage covers both stages instead of each filling its own.
 const precacheProgress = createOfflineProgressReporter(
@@ -424,11 +429,7 @@ const precacheProgress = createOfflineProgressReporter(
     );
     return state;
   },
-  async (state) => {
-    const message = { action: "offline-precache-progress", ...state, phase: "precache", ready: false };
-    const clients = await self.clients.matchAll({ includeUncontrolled: true, type: "window" });
-    for (const client of clients) client.postMessage(message);
-  },
+  (state) => postToWindowClients({ action: "offline-precache-progress", ...state, phase: "precache", ready: false }),
   (error) => logServiceWorker("precache progress failed", { error: formatError(error) }),
 );
 
@@ -1101,6 +1102,18 @@ registerRoute(
 const isHashedFileRequest = (url: URL) => isSameOriginRequest(url) && scopePath(url.pathname).startsWith("/assets/");
 const isListedByThisBuild = (url: URL) => getCacheKeyForURL(url.href) !== undefined || deferredPrecache.has(url.href);
 
+// Only the network can serve a file with no kept copy. The page never sees a worker script or
+// WebAssembly file fail to load, so it is told here.
+const fetchOutgoingBuildFile = async (request: Request) => {
+  const announceMissing = () => postToWindowClients({ action: "build-file-missing", url: request.url });
+  const response = await fetch(request).catch(async (error: unknown) => {
+    await announceMissing();
+    throw error;
+  });
+  if (!response.ok) await announceMissing();
+  return response;
+};
+
 // Unlisted hashed files come from a tab still running an outgoing build.
 // Registered after the identify pack route, whose files sit in the same folder.
 registerRoute(
@@ -1109,7 +1122,7 @@ registerRoute(
     const credentialless = await ensureCoepModeHydrated();
     const kept = await caches.match(request, { cacheName: OUTGOING_BUILD_CACHE_NAME });
     logServiceWorker("outgoing build file requested", { kept: Boolean(kept), url: request.url });
-    const response = kept ?? (await fetch(request));
+    const response = kept ?? (await fetchOutgoingBuildFile(request));
     return withCrossOriginIsolationHeaders(response, credentialless) || response;
   },
 );

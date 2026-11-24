@@ -446,16 +446,30 @@ const reloadPendingUpdate = async (): Promise<boolean> => {
   return true;
 };
 
+// After an update takes over, this page keeps running its own build. A file that build loads later
+// can be gone from the host and every cache. Only a reload recovers.
+const markTakeoverFileMissing = (message: string, details: Record<string, unknown>) => {
+  if (takeoverFileMissing || !serviceWorkerClient.hasUpdateTakenOver()) return;
+  logger.warn(message, details);
+  takeoverFileMissing = true;
+  renderWebappRootIfReady();
+};
+
 if (typeof window !== "undefined") {
-  // After an update takes over, this page keeps running its own build. A file that build loads later
-  // can be gone from the host and every cache. Only a reload recovers.
   window.addEventListener("vite:preloadError", (event) => {
-    if (takeoverFileMissing || !serviceWorkerClient.hasUpdateTakenOver()) return;
-    logger.warn("A file of this page's build failed to load after an update took over", {
+    markTakeoverFileMissing("A file of this page's build failed to load after an update took over", {
       error: String(event.payload),
     });
-    takeoverFileMissing = true;
-    renderWebappRootIfReady();
+  });
+  // Worker scripts and WebAssembly files fail without a page event, so the worker reports them.
+  navigator.serviceWorker?.addEventListener("message", (event) => {
+    const data = (event.data ?? {}) as Record<string, unknown>;
+    if (data.action !== "build-file-missing") return;
+    markTakeoverFileMissing("A file of this page's build is missing after an update took over", { url: data.url });
+  });
+  // A page in the back/forward cache is no open tab to the worker, which may have deleted its build's files.
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted) markTakeoverFileMissing("Restored from the back/forward cache after an update took over", {});
   });
 }
 

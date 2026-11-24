@@ -470,6 +470,59 @@ describe("service worker bridge", () => {
     },
   );
 
+  describe("a missing file that raises no import error", () => {
+    let container: EventTarget;
+    const workerMessage = (data: unknown) => () => container.dispatchEvent(new MessageEvent("message", { data }));
+    const pageshow = (persisted: boolean) => () =>
+      window.dispatchEvent(Object.defineProperty(new Event("pageshow"), "persisted", { value: persisted }));
+
+    beforeEach(() => {
+      container = new EventTarget();
+      Object.defineProperty(navigator, "serviceWorker", { configurable: true, value: container });
+    });
+
+    afterEach(() => {
+      Reflect.deleteProperty(navigator, "serviceWorker");
+    });
+
+    it.each([
+      {
+        label: "the worker reports a missing file",
+        ready: true,
+        signal: workerMessage({ action: "build-file-missing", url: "/assets/runner.js" }),
+        tookOver: true,
+      },
+      {
+        label: "the worker reports a missing file before any takeover",
+        ready: false,
+        signal: workerMessage({ action: "build-file-missing", url: "/assets/runner.js" }),
+        tookOver: false,
+      },
+      {
+        label: "the worker sends another message",
+        ready: false,
+        signal: workerMessage({ action: "service-worker-log" }),
+        tookOver: true,
+      },
+      { label: "the page returns from the back/forward cache", ready: true, signal: pageshow(true), tookOver: true },
+      {
+        label: "the page returns from the back/forward cache before any takeover",
+        ready: false,
+        signal: pageshow(true),
+        tookOver: false,
+      },
+      { label: "the page loads normally", ready: false, signal: pageshow(false), tookOver: true },
+    ])("offers a reload when $label: $ready", async ({ ready, signal, tookOver }) => {
+      mocks.serviceWorkerClient.hasUpdateTakenOver.mockReturnValue(tookOver);
+      await loadWebapp();
+
+      signal();
+      await flush();
+
+      expect(latest().pageUpdate.ready).toBe(ready);
+    });
+  });
+
   it("asks before that reload discards staged work", async () => {
     mocks.serviceWorkerClient.hasUpdateTakenOver.mockReturnValue(true);
     const reload = vi.spyOn(window.location, "reload").mockImplementation(() => undefined);

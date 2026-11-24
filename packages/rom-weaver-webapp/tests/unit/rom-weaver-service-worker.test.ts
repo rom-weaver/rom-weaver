@@ -1781,6 +1781,8 @@ describe("outgoing build files", () => {
   const keptUrls = (harness: Harness) => [
     ...(harness.cacheStorage.caches.get(OUTGOING_BUILD_CACHE_NAME)?.entries.keys() ?? []),
   ];
+  const missingFileMessages = (harness: Harness) =>
+    harness.scope.clientMessages.filter((message) => (message as { action?: string }).action === "build-file-missing");
   const keepOldChunk = async (cacheStorage: FakeCacheStorage) => {
     const outgoing = await cacheStorage.open(OUTGOING_BUILD_CACHE_NAME);
     await outgoing.put(new Request(OLD_CHUNK_URL), new Response("old chunk"));
@@ -1837,6 +1839,25 @@ describe("outgoing build files", () => {
     const response = await routed(harness, outgoingRoute(), new Request(OLD_CHUNK_URL));
 
     await expect(response.text()).resolves.toBe("network chunk");
+    expect(missingFileMessages(harness)).toEqual([]);
+  });
+
+  it("tells the open tabs when the host no longer has an outgoing build file", async () => {
+    const harness = await loadWorker();
+    harness.fetchStub.handlers.set(OLD_CHUNK_URL, () => new Response("gone", { status: 404 }));
+
+    const response = await routed(harness, outgoingRoute(), new Request(OLD_CHUNK_URL));
+
+    expect(response.status).toBe(404);
+    expect(missingFileMessages(harness)).toEqual([{ action: "build-file-missing", url: OLD_CHUNK_URL }]);
+  });
+
+  it("tells the open tabs when the network cannot fetch an outgoing build file", async () => {
+    const harness = await loadWorker();
+
+    await expect(routed(harness, outgoingRoute(), new Request(OLD_CHUNK_URL))).rejects.toThrow("Failed to fetch");
+
+    expect(missingFileMessages(harness)).toEqual([{ action: "build-file-missing", url: OLD_CHUNK_URL }]);
   });
 
   it.each([
