@@ -642,8 +642,11 @@ const matchExactCachedNavigation = async (request: Request, url: URL) => {
 // redirect hop shares one client, so each served document records its source again.
 const networkDocumentClients = new Set<string>();
 
+const getResultingClientId = (event: unknown) =>
+  (event as { resultingClientId?: string } | undefined)?.resultingClientId;
+
 const recordDocumentSource = (event: unknown, { network }: { network: boolean }) => {
-  const clientId = (event as { resultingClientId?: string } | undefined)?.resultingClientId;
+  const clientId = getResultingClientId(event);
   if (!clientId) return;
   if (network) networkDocumentClients.add(clientId);
   else networkDocumentClients.delete(clientId);
@@ -693,7 +696,9 @@ const fetchWithNavigationTimeout = async (request: Request, url: URL, event: unk
 registerRoute(
   ({ request, url }) => shouldUseNetworkFirst(request, url),
   async ({ event, request, url }) => {
-    if (isTopLevelNavigation(request, url)) waitUntilEvent(event, removeOutgoingBuildFilesWithoutTabs());
+    if (isTopLevelNavigation(request, url)) {
+      waitUntilEvent(event, removeOutgoingBuildFilesWithoutTabs(getResultingClientId(event)));
+    }
     try {
       return await fetchWithNavigationTimeout(request, url, event);
     } catch (err) {
@@ -825,11 +830,26 @@ const keepOutgoingBuildFiles = async () => {
   logServiceWorker("kept the outgoing build's files for its open tabs", { files: kept });
 };
 
-// A page load with no window client means no tab still runs an outgoing build. A tab that is reloading still counts.
-const removeOutgoingBuildFilesWithoutTabs = async () => {
-  if ((await self.clients.matchAll({ type: "window" })).length > 0) return;
+const OUTGOING_BUILD_CLEANUP_WAIT_MS = 5000;
+const OUTGOING_BUILD_CLEANUP_POLL_MS = 250;
+
+const hasOtherWindowClient = async (newPageClientId: string | undefined) =>
+  (await self.clients.matchAll({ type: "window" })).some((client) => client.id !== newPageClientId);
+
+// A reloading tab stays a window client until its new page commits. Wait for the new page to be
+// the only window client. Give up when another tab stays open.
+const removeOutgoingBuildFilesWithoutTabs = async (newPageClientId: string | undefined) => {
+  if (!(await caches.keys()).includes(OUTGOING_BUILD_CACHE_NAME)) return;
+  const giveUpAt = Date.now() + OUTGOING_BUILD_CLEANUP_WAIT_MS;
+  while (await hasOtherWindowClient(newPageClientId)) {
+    if (Date.now() >= giveUpAt) {
+      logServiceWorker("kept outgoing build files; another tab is still open");
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, OUTGOING_BUILD_CLEANUP_POLL_MS));
+  }
   if (await caches.delete(OUTGOING_BUILD_CACHE_NAME))
-    logServiceWorker("removed outgoing build files; no tab runs them");
+    logServiceWorker("removed outgoing build files; no other tab runs them");
 };
 
 // EmulatorJS sends HEAD for a BIOS before using its IndexedDB copy, and stalls

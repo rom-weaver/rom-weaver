@@ -1852,23 +1852,59 @@ describe("outgoing build files", () => {
     expect(outgoingRoute().match({ request: new Request(url), url: new URL(url) })).toBe(false);
   });
 
-  it.each([
-    { kept: false, openTabs: 0 },
-    { kept: true, openTabs: 1 },
-  ])("keeps the files after a page load with $openTabs other tabs open: $kept", async ({ kept, openTabs }) => {
-    const harness = await loadWorker({ seedCaches: keepOldChunk });
-    harness.scope.clientList.length = openTabs;
-    harness.fetchStub.handlers.set(`${APP_ORIGIN}/docs/guide`, () => new Response("page", { status: 200 }));
-    const pending: Array<Promise<unknown>> = [];
+  describe("after a page load", () => {
+    const tab = (id: string) => ({ id, postMessage: () => undefined }) as unknown as Scope["client"];
+    const loadPage = async (harness: Harness) => {
+      harness.fetchStub.handlers.set(`${APP_ORIGIN}/docs/guide`, () => new Response("page", { status: 200 }));
+      const pending: Array<Promise<unknown>> = [];
+      await harness.networkFirstRoute.handler({
+        event: {
+          resultingClientId: "new",
+          type: "fetch",
+          waitUntil: (promise: Promise<unknown>) => void pending.push(promise),
+        },
+        request: asNavigationRequest(`${APP_ORIGIN}/docs/guide`),
+        url: new URL(`${APP_ORIGIN}/docs/guide`),
+      });
+      return pending;
+    };
 
-    await harness.networkFirstRoute.handler({
-      event: { type: "fetch", waitUntil: (promise: Promise<unknown>) => void pending.push(promise) },
-      request: asNavigationRequest(`${APP_ORIGIN}/docs/guide`),
-      url: new URL(`${APP_ORIGIN}/docs/guide`),
+    it("removes the files once a reloading tab's new page is the only tab", async () => {
+      vi.useFakeTimers();
+      const harness = await loadWorker({ seedCaches: keepOldChunk });
+      harness.scope.clientList.splice(0, harness.scope.clientList.length, tab("old"));
+      const pending = await loadPage(harness);
+
+      await vi.advanceTimersByTimeAsync(500);
+      expect(keptUrls(harness)).toEqual([OLD_CHUNK_URL]);
+
+      harness.scope.clientList.splice(0, 1, tab("new"));
+      await vi.advanceTimersByTimeAsync(250);
+      await Promise.all(pending);
+
+      expect(keptUrls(harness)).toEqual([]);
     });
-    await Promise.all(pending);
 
-    expect(keptUrls(harness)).toEqual(kept ? [OLD_CHUNK_URL] : []);
+    it("removes the files at once when no tab is open", async () => {
+      const harness = await loadWorker({ seedCaches: keepOldChunk });
+      harness.scope.clientList.length = 0;
+
+      await Promise.all(await loadPage(harness));
+
+      expect(keptUrls(harness)).toEqual([]);
+    });
+
+    it("keeps the files while another tab stays open", async () => {
+      vi.useFakeTimers();
+      const harness = await loadWorker({ seedCaches: keepOldChunk });
+      harness.scope.clientList.splice(0, harness.scope.clientList.length, tab("other"), tab("new"));
+      const pending = await loadPage(harness);
+
+      await vi.advanceTimersByTimeAsync(6000);
+      await Promise.all(pending);
+
+      expect(keptUrls(harness)).toEqual([OLD_CHUNK_URL]);
+    });
   });
 });
 
