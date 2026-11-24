@@ -34,7 +34,7 @@ Choose ZIP for broad compatibility, or 7z. This selects the recipe archive forma
 2. Add the clean ROM and every patch. Add supported ROM cheats through **Add cheats to the patch order** when needed.
 3. Put the patches in execution order. Drag a numbered handle, click it to choose a position, or focus it and use the arrow keys.
 4. Open each patch's three-dot **Patch actions** menu → **Edit details**. Add a readable name and any description, version, and author users need.
-5. Open **Checks** → **Add check** for a known input or output CRC32, MD5, SHA-1, or byte count. Input checks describe the expected bytes. Embedded output checks verify the standalone result, not a combined stack whose earlier patches changed the source. Never guess values.
+5. Open **Checks** → **Add** for a known input or output CRC32, MD5, SHA-1, or byte count. Input checks describe the expected bytes. Embedded output checks verify the standalone result, not a combined stack whose earlier patches changed the source. Never guess values.
 
 Set each patch's input selector to the state its checks describe:
 

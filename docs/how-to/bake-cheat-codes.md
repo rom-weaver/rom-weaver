@@ -137,7 +137,7 @@ See what the database has for a ROM:
 rom-weaver cheat list --input game.nes
 ```
 
-Each row is an ID, a delivery, the raw code, and a description. A `rom` entry can be baked into the ROM; an `unsupported` entry cannot, and the row says why.
+Each row is an ID, a delivery, the raw code, and a description. A `rom` entry can be baked into the ROM; an `unsupported` entry cannot.
 
 Bake the entries you want:
 

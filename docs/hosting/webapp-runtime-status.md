@@ -1,6 +1,6 @@
 # Webapp masthead metadata
 
-The webapp masthead shows build identity, the configured thread count, and two independent runtime facts in one text row.
+The webapp masthead shows the build version tag and an offline-status icon button, alongside theme, accent, and settings controls. Workflow panel headers show the active worker thread count separately.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -13,32 +13,34 @@ The webapp masthead shows build identity, the configured thread count, and two i
 
 ## Build and thread values
 
-| Value | Meaning |
-| --- | --- |
-| `vX.Y.Z` | The application version. |
-| `vX.Y.Z+N` | A build made `N` commits after that version. The `+N` is omitted on the version commit. |
-| `abcdef0` (`sha`) | The seven-character commit identifier for a clean build. |
-| `abcdef0*` (`sha*`) | The source commit with `*` appended; `*` means uncommitted changes were present when the build was made. |
-| `10 threads` | The full thread-count label shown on desktop. |
-| `10T` | The compact mobile thread-count label; `T` means threads. |
+| Value | Where | Meaning |
+| --- | --- | --- |
+| `vX.Y.Z` | Masthead build tag | A clean build on the version commit. Selecting it opens **What's new**. |
+| `vX.Y.Zb`, `vX.Y.Zd`, `vX.Y.Zn` | Masthead build tag | A beta (`b`), dev (`d`), or nightly (`n`) channel build. |
+| `vX.Y.Z+N` | Masthead build tag | A build made `N` commits after that version. `+N` is omitted on the version commit. |
+| `vX.Y.Z*` (trailing `*`) | Masthead build tag | Uncommitted changes were present when the build was made. |
+| `PR-#N / vX.Y.Z…` | Masthead build tag | A pull-request preview build; selecting it opens the pull request on GitHub. |
+| `<N> thread` / `<N> threads` | Workflow panel header | The configured worker thread budget for the active workflow. Selecting it opens **Settings**. |
 
-The version text normally looks like `vX.Y.Z · abcdef0`. The full build identifier, including a branch or dirty-build suffix when applicable, is available from the version tooltip.
+On stable builds, the build tag's tooltip shows the full build identifier (`vX.Y.Z`, or `vX.Y.Z+[branch.]<sha|dirty.<hash>>` for non-tagged or dirty builds). The **About** panel inside the status dialog lists **Version**, **Commit** (eight-character SHA, with `*` when dirty), **Branch**, **Channel** or **Pull request**, and **Environment** (**Browser tab** or **Installed app (PWA)**).
 
 ## Runtime values
 
-| Value | Meaning |
-| --- | --- |
-| `web` | The page is running in a normal browser tab or window. |
-| `pwa` | The page was launched as an installed/standalone PWA. A PWA can also use a service worker. |
-| `sw` | A service worker controls the page or is installed and ready to take control. Its tooltip distinguishes those states. |
-| `sw off` | Service-worker offline support is disabled, unavailable, or registration failed. |
+The masthead shows an icon-only offline-status button (`StatusChip`) that opens the **Offline app** dialog. Its tooltip and accessible label reflect the current state:
 
-The first value describes how the page was launched; the second describes service-worker state. The combinations are therefore independent, such as `web · sw`, `pwa · sw`, or `pwa · sw off`. The prerendered shell resolves known runtime state before first paint, then React hydrates that shell in place instead of replacing the masthead nodes. While service-worker state is still unknown, the shell preserves the `sw` placeholder and adds a tooltip after the state resolves.
+| State (`data-sw`) | Dialog label | Navigation label | Meaning |
+| --- | --- | --- | --- |
+| `active` | **Offline active** | **Ready** | The service worker controls the page and the offline copy (app, emulator cores, and required or selected databases) is cached. |
+| `ready` | **Offline ready** | **Ready** | The offline copy is cached in this browser; the controlling worker state is not yet verified over `MessageChannel`. |
+| `update` | **Update available** | **Update** | A newer version finished downloading in the background. Reload to switch to it. |
+| `installing` | **Installing app** / **Installing offline copy** | **Downloading** | Caching the app precache or background offline assets. When totals are known, the icon shows a progress ring and percentage. |
+| `online` | **Offline copy disabled** | **Disabled** | **Keep an offline copy** is turned off, so automatic offline downloads are paused. |
+| `disabled` | **Offline support off** | **Unsupported** | Service-worker offline support is disabled, unavailable in this browser context, or registration failed. |
 
-The thread count is shown as `· 10 threads` on desktop and `· 10T` on mobile to preserve masthead space. The full wording remains available to assistive technology and in the tooltip.
+Before React hydrates, the inline shell resolver in `index.html` resolves the initial icon and state synchronously from `data-service-worker-enabled`, `navigator.serviceWorker.controller`, and cached offline-readiness state so the masthead does not flash on load.
 
 ## Theme
 
-The theme control offers light, dark, and system appearance. System appearance follows the device preference. Documentation screenshots use the active theme.
+The masthead includes separate **Theme** (light, dark, or system) and **Accent** (highlight color) controls. System appearance follows the device preference. Documentation screenshots follow the active theme.
 
 Procedure: [Change browser preferences](../how-to/browser-settings.md#change-preferences).

@@ -32,8 +32,8 @@ Some install methods deliver only the executable, so two extra steps finish them
 | --- | --- | --- |
 | Homebrew | included | included |
 | Scoop | included | included |
-| Install script (macOS, Linux) | included | included |
-| Install script (Windows) | included | included |
+| Install script (macOS, Linux) | included | included if `brotli` is on `PATH`, else `rom-weaver setup` |
+| Install script (Windows) | included | included if `brotli` is on `PATH`, else `rom-weaver setup` |
 | npm | included | included |
 | Docker | included | included |
 | cargo-binstall | `rom-weaver man --install` | `rom-weaver setup` |
@@ -59,7 +59,7 @@ Scoop stores the generated manpages under the app directory's `docs\man` folder.
 
 ## Install script (macOS, Linux)
 
-Downloads the latest release to `~/.local/bin` and checks its build provenance, refusing a definite verification failure. If the check cannot run, it warns and continues unless `ROM_WEAVER_REQUIRE_ATTESTATION=1` is set. Set `ROM_WEAVER_INSTALL_DIR` to choose another directory, or `ROM_WEAVER_VERSION` to install a specific release. See [Verify a download](verify-downloads.md) to run that check yourself or change how strict it is. The same provenance policy checks the documentation archive before extraction. It also installs manpages under `~/.local/share/man/man1` and completions under the standard per-user shell directories.
+Downloads the latest release to `~/.local/bin` and checks its build provenance, refusing a definite verification failure. If the check cannot run, it warns and continues unless `ROM_WEAVER_REQUIRE_ATTESTATION=1` is set. Set `ROM_WEAVER_INSTALL_DIR` to choose another directory, or `ROM_WEAVER_VERSION` to install a specific release. See [Verify a download](verify-downloads.md) to run that check yourself or change how strict it is. The same provenance policy checks the identify-data and documentation archives before extraction. It extracts the identify and cheat databases when `brotli` is on `PATH`; without `brotli`, it installs the binary only and tells you to run `rom-weaver setup`. It also installs manpages under `~/.local/share/man/man1` and completions under the standard per-user shell directories.
 
 ```bash
 sh -c 'curl -fsSL \
@@ -70,7 +70,7 @@ The outer `sh -c` runs the command with POSIX shell syntax.
 
 ## Install script (Windows)
 
-The PowerShell equivalent, installing to `%LOCALAPPDATA%\rom-weaver\bin`. It honors the same environment variables and runs the same checks. The generated manpages are stored under that directory's `docs\man` folder because Windows has no standard manpath. The PowerShell completion is installed under its `completions` folder.
+The PowerShell equivalent, installing to `%LOCALAPPDATA%\rom-weaver\bin`. It honors the same environment variables and runs the same checks, including extracting the identify and cheat databases when `brotli` is on `PATH` (otherwise run `rom-weaver setup`). The generated manpages are stored under that directory's `docs\man` folder because Windows has no standard manpath. The PowerShell completion is installed under its `completions` folder.
 
 ```powershell
 irm https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/install.ps1 | iex
@@ -110,7 +110,7 @@ rom-weaver setup
 
 `rom-weaver setup` downloads this version's identify packs and cheat shards into the per-user data directory. Running it again reports the installed copy; `--force` refreshes it.
 
-The Homebrew, scoop, npm, install-script, and Docker packages already carry that data and need no setup. Running `setup` with those packages installs a separate per-user copy.
+The Homebrew, Scoop, npm, and Docker packages always carry that data and need no setup; the install scripts extract it too when `brotli` is on `PATH`. Running `setup` with those packages installs a separate per-user copy.
 
 ## mise
 
@@ -176,7 +176,7 @@ docker run --rm \
 
 The image's working directory is `/work`; mount the directory holding your ROMs there and pass paths under `/work`. Arguments after the image name go straight to `rom-weaver`, so `--help` and every subcommand work unchanged. The generated manpages are present under `/usr/local/share/man/man1`; the image has no `man(1)` program, so use the [CLI reference](../reference/cli.md) or copy a page out with `docker cp`.
 
-`--user "$(id -u):$(id -g)"` is what makes the output usable. Bind-mounted files keep their host ownership. Without that flag, the container runs as the base image's `nonroot` user (uid 65532). The container may refuse permission to read your files, and anything it writes ends up owned by a uid that does not exist on the host. rom-weaver reads no home directory or user config, so an arbitrary uid needs no matching account inside the image.
+`--user "$(id -u):$(id -g)"` is what makes the output usable. Bind-mounted files keep their host ownership. Without that flag, the container runs as the base image's `nonroot` user (uid 65532). The container may refuse permission to read your files, and anything it writes ends up owned by a uid that does not exist on the host. rom-weaver reads no user config and the image already bundles its databases under `/usr/local/share`, so normal commands need no home directory or matching account inside the container.
 
 The image is distroless. It contains the CLI, runtime libraries, databases, and packaged documentation, but no shell. `--entrypoint sh` cannot start a shell in this image.
 
@@ -195,7 +195,7 @@ Tags follow the release: `latest`, the exact version (`X.Y.Z`), and the minor se
 
 ## Install shell completions
 
-The Homebrew and script installers already place completion files. npm packages ship them under `docs/completions`. For the other install methods, print the script and save it where your shell looks for one, then start a new shell:
+The Homebrew and script installers already place completion files. The `@rom-weaver/cli` npm package ships them under `docs/completions`. For the other install methods, print the script and save it where your shell looks for one, then start a new shell:
 
 ```bash
 rom-weaver completions bash > /etc/bash_completion.d/rom-weaver

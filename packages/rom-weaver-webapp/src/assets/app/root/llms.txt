@@ -14,6 +14,8 @@ The homepage and published tool pages have Markdown alternatives at `/index.md` 
 - [Apply cheat codes](https://rom-weaver.com/apply-cheats): Bake supported cheat codes into your ROM with the Apply workflow.
 - [Create a patch from cheat codes](https://rom-weaver.com/create-rom-cheat-patch): Create a patch from an original ROM and supported cheat codes.
 - [Create ROM patches](https://rom-weaver.com/create-rom-patch): Create patches with format-aware settings and distributable weaves.
+- [Weave ROM patches](https://rom-weaver.com/weave-rom-patches): Build and share multi-patch weave recipes with order, metadata, and expected ROM checksums.
+- [Undo PPF patches](https://rom-weaver.com/ppf-undo): Restore bytes recorded inside a PPF3 patch with undo data locally in your browser.
 - [Compress files](https://rom-weaver.com/compress-files): Compress ISO or BIN/CUE to CHD, GameCube and Wii ISO to RVZ, and Nintendo 3DS ROMs to Z3DS; create ZIP or 7z archives.
 - [Extract files](https://rom-weaver.com/extract-files): Decompress Z3DS, ZCCI, ZCXI, ZCIA, Z3DSX, CHD, RVZ, and supported archives locally in the browser.
 - [Checksum a file](https://rom-weaver.com/file-checksum): Calculate CRC32, MD5, SHA-1, SHA-256, and other checksums of any file, with optional archive extraction, and compare them with an expected value.
@@ -90,9 +92,14 @@ The homepage and published tool pages have Markdown alternatives at `/index.md` 
 - [Self-hosting](https://rom-weaver.com/docs/self-hosting): Deploy and configure the static webapp.
 - [Add an Apply button](https://rom-weaver.com/docs/webapp-integration#add-an-apply-button): Patch-only release links, expected source checks, ordered patches, optional add-ons, and CORS hosting checks.
 - [Environment variables](https://rom-weaver.com/docs/environment-variables): Runtime variables for the CLI and WASM engine, and browser diagnostic handles.
-- [Webapp status](https://rom-weaver.com/docs/webapp-status): What the masthead's version, commit, thread, PWA, and service-worker labels mean.
+- [Webapp status](https://rom-weaver.com/docs/webapp-status): What the masthead's build tag, offline status indicator, workflow thread count, and build details mean.
+- [About](https://rom-weaver.com/docs/about): Who makes rom-weaver, its license, and what it is built on.
+- [Notices](https://rom-weaver.com/docs/notices): Generated third-party licensing and component attribution for the current build.
 - [Privacy](https://rom-weaver.com/docs/privacy): Browser storage, logs, analytics, and every network request the site makes.
 - [Architecture](https://rom-weaver.com/docs/architecture): Understand the Rust command core, browser workers, and TypeScript boundary.
+- [Development](https://rom-weaver.com/docs/development): Prerequisites, native and WASM builds, dev server, tests, and linked worktrees.
+- [PBP emulator verification](https://rom-weaver.com/docs/emulator-pbp-verification): Legal homebrew fixtures and real-core browser boot evidence.
+- [Format specifications and references](https://rom-weaver.com/docs/references): Format specifications and upstream reference implementations.
 - [Edit a game save in the browser](https://rom-weaver.com/docs/edit-gen3-saves): Inspect a supported game save, preview changes, download a copy, and test it with a matching ROM.
 - [Create game saves in the browser](https://rom-weaver.com/docs/create-game-saves-browser): Generate fresh Super Mario World or Zelda saves and edit their properties before download.
 - [Create game saves with the CLI](https://rom-weaver.com/docs/create-game-saves-cli): Generate fresh saves or validated copies from existing save templates.

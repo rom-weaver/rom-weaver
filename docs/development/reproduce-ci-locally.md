@@ -116,7 +116,7 @@ Set `ROM_WEAVER_PRE_PUSH_E2E=1` to add `test:e2e:a11y` on the same bundle for UI
    npm --prefix packages/rom-weaver-webapp run check:worker-chunk
    ```
 
-3. If the guard fails, follow the error. A chunk error names the chunk and the `ARCHITECTURE.md` bullet that explains the invariant; a missing `.br` file points to `scripts/vite-config/brotli-sidecars.mjs`. Rerun it after the fix.
+3. If the guard fails, follow the error. A chunk error names the chunk and the `ARCHITECTURE.md` bullet that explains the invariant; a missing `.br` file points to `packages/rom-weaver-webapp/scripts/vite-config/brotli-sidecars.mjs`. Rerun it after the fix.
 4. For UI changes, also run the affected browser tests and `test:e2e:a11y`. Run `test:e2e:webapp:webkit` for Safari-sensitive behavior. Reproduce failures against the same production channel as CI. When changing tutorial steps, Settings controls, or navigation, check the browser assertions, E2E locators, and screenshot targets together. Prefer stable state attributes for readiness; keep assertions for intended step counts and content.
 
 Choose browser test files from the behavior you changed. These are starting points, not an exhaustive dependency map; include other affected tests and run the full browser suite when shared behavior makes the selection unclear. Paths below are relative to `packages/rom-weaver-webapp/tests/browser/`.
@@ -158,7 +158,7 @@ Retry browser crashes or connection failures only after checking the first error
 
 `docker` is conditional on image-plumbing changes and is most directly reproduced with the source-build commands in the [self-hosting guide](../hosting/self-hosting.md). The `docker` job passes `IDENTIFY_DATA=prebuilt` to every leg it builds. For the CLI image it stages `target/identify-release/share`; run `mise run identify-data` and `node scripts/build-identify-release-data.mjs --tree-only` before that variant. For the webapp image it stages the built packs under `target/identify-data/v1`; run `mise run identify-data` and `cp -a crates/rom-weaver-cli/data/identify/v1 target/identify-data/v1` before that variant.
 
-`docker-prebuilt` is `docker build --file packages/rom-weaver-webapp/Dockerfile --build-arg DIST=prebuilt .` with the bundle staged under `prebuilt/`. The CLI job uses `BINARY=prebuilt` when its packaging inputs change.
+`docker-prebuilt` is `docker build --file packages/rom-weaver-webapp/Dockerfile --build-arg DIST=prebuilt .` with the bundle staged under `prebuilt/`. Every selected CLI leg in `docker` also smoke-tests the `BINARY=prebuilt` (with `IDENTIFY_DATA=prebuilt` and `DOCS=prebuilt`) release path using stub files.
 
 Build the clean source-input check even when using prebuilt identify data:
 

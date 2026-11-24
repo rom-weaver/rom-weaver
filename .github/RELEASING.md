@@ -31,7 +31,7 @@ The npm packages include npm provenance, Cargo authenticates with crates.io's Gi
 
 1. In GitHub Actions settings, allow workflows to read and write the repository and to create pull requests.
 2. Add a fine-grained `RELEASE_PLEASE_TOKEN` Actions secret owned by the `rom-weaver` organization, limited to `rom-weaver/rom-weaver`, with Contents, Issues, and Pull requests read/write access. Release Please needs a non-`GITHUB_TOKEN` credential so its release pull requests trigger the required CI checks.
-3. Require the `PR Title Lint` and normal CI checks in the `main` branch protection rules. Use squash merges so the validated pull request title is the commit subject that lands on `main`.
+3. Require `CI gate`, `PR Title Lint`, and `CLA Signed` in the `main` branch protection rules. Use squash merges so the validated pull request title is the commit subject that lands on `main`.
 4. Enable **Immutable releases** in Settings → General. The fan-out is built for it: releases are created as drafts and published only after every asset is attached. Read the warning under [normal release flow](#normal-release-flow) before touching a draft by hand.
 5. Create a fine-grained token owned by the `rom-weaver` organization, limited to `rom-weaver/homebrew-tap` and `rom-weaver/scoop-bucket`, with Contents read/write access. Store it as the `PACKAGE_MANAGER_TOKEN` Actions secret. Stable releases update `Formula/rom-weaver.rb` and `bucket/rom-weaver.json`; prereleases leave both repositories unchanged.
 

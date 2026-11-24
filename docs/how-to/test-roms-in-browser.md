@@ -69,8 +69,8 @@ Saturn games start with the 4 MB RAM expansion cartridge inserted, because some 
 To test a patched ROM online, send the Apply result directly to the browser player:
 
 1. Load your ROM and patches on the [Apply Patches page](https://rom-weaver.com/apply-rom-patches).
-2. Set **Open Test after patching** under **Options**, then apply the patches. If the option warns that the platform cannot be tested, use another emulator or the target hardware.
-3. Select **Open in the Test tab** after Apply finishes.
+2. Under **Options**, keep **Open Test after patching** on **With a button** (or choose **Automatically**), then apply the patches.
+3. Select **Open in the Test tab** after Apply finishes. If the button is disabled because the platform cannot be tested, use another emulator or the target hardware.
 4. Play far enough to exercise the patched content.
 5. Return to Apply and download the result if you have not downloaded it.
 
@@ -94,7 +94,7 @@ Use the emulator menu to create a save state or save the game's SRAM. rom-weaver
 
 Each save uses the ROM's SHA-1 checksum as its identity. The record also stores the file name as a display name. Thus, the same ROM finds its save after you rename the file.
 
-The panel above EmulatorJS shows the current file name and complete SHA-1. Storage shows the same value as a ROM fingerprint. You only need these values when you troubleshoot a save mismatch.
+The panel above EmulatorJS shows the current file name and complete SHA-1. **Saves & storage** shows the same value as a ROM fingerprint. You only need these values when you troubleshoot a save mismatch.
 
 Use the fullscreen button above the player to enter or leave fullscreen. On iPhone and iPad, the button uses a full-viewport player because Safari does not offer fullscreen for this type of content.
 
@@ -112,10 +112,10 @@ Restore the save in a browser that has the same ROM:
 
 1. Open **Settings**, then select **Saves & storage**.
 2. Select **Import save**.
-3. Choose the exported rom-weaver ZIP file.
+3. Choose the exported rom-weaver ZIP file, then select **Import**.
 4. Confirm that the ROM name and SHA-1 appear under **Emulator saves**.
 5. Load the same ROM on the Test page.
-6. Select **Load State** from the emulator menu.
+6. In-game SRAM loads automatically; for a save state, select **Load State** from the emulator menu.
 
 **Saves & storage** also accepts the older uncompressed JSON export.
 
@@ -132,6 +132,7 @@ To import a raw SRAM or save-state file:
 3. Choose the file exported by the emulator settings.
 4. Select **SRAM** or **Save state**.
 5. Enter the ROM's 40-character SHA-1.
+6. Select **Import**.
 
 The import merges with any other save part for the same SHA-1. You can select **Delete** before the import if you want to test the complete restore process.
 
@@ -158,7 +159,7 @@ The setting starts off. It keeps original files, including compressed archives, 
 
 Select **Remove** on Test, or **Delete** beside the ROM's size in **Saves & storage**. These actions keep its save. Turning the setting off stops new copies and keeps existing ones.
 
-When storage fills, select **Open Saves & storage** in the job's error message. Delete unneeded kept ROMs, close Storage, then select **Try again**. The app never evicts kept ROMs automatically.
+When storage fills, select **Open Saves & storage** in the job's error message. Delete unneeded kept ROMs, close **Saves & storage**, then select **Try again**. The app never evicts kept ROMs automatically.
 
 Use **Protect saves and ROMs from automatic removal** in **Saves & storage** to request persistent storage separately. Browsers can decline. Back up saves before clearing site data; see [Privacy](../legal/privacy.md#what-your-browser-stores) for browser-removal limits.
 
@@ -178,7 +179,7 @@ Use the **Delete** action in **Saves & storage** to remove one game. Use your br
 - **WebGL 2 is required:** enable hardware acceleration or use a browser that supports WebGL 2.
 - **An archive does not load:** extract it yourself, then add the ROM file.
 - **A save does not appear:** load the same ROM bytes. rom-weaver uses the ROM's SHA-1 checksum to find its saves.
-- **An imported save does not load:** confirm that its SHA-1 matches the ROM shown in Storage.
+- **An imported save does not load:** confirm that its SHA-1 matches the ROM shown in **Saves & storage**.
 - **The player has no sound on iPhone or iPad:** start the game inside the player. Safari requires that direct tap before it enables audio.
 
 The emulator and its cores download from rom-weaver's own origin. With **Keep an offline copy** on, the offline download includes every core, so [offline use](browser-settings.md#prepare-for-offline-use) needs no per-system step.

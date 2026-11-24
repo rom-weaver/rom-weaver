@@ -121,7 +121,7 @@ Every command accepts these global flags, listed under `Global options` in its h
 - `-v`/`--verbose` writes concise command summaries to stderr. It is independent of `--progress`. A successful `trim` prints nothing on stdout; `-v` lists each file it wrote. `-vv` enables debug logging, and `-vvv` enables trace logging.
 - `--debug` logs developer diagnostics, including command configuration and internal trace events. It is equivalent to `--log-level trace`. It conflicts with `--verbose`, `--quiet`, and `--log-level`.
 - `-q`/`--quiet` hides optional diagnostics and progress, including forced `--progress`. It overrides `--verbose`. It retains requested results, format candidate plans, dry-run previews, warnings, and errors. In JSONL mode it suppresses running events and retains terminal events.
-- `--dep-trace` adds trace output from the bundled libraries, useful in a bug report. On its own it also raises rom-weaver's own logs to warning level.
+- `--dep-trace` adds trace output from the bundled libraries (`nod=trace`), useful in a bug report, while keeping rom-weaver's own logs at `warn` (or whichever log level is configured).
 - `--color` and `--no-color` override colored output, including help and argument errors. The flag wins over the `NO_COLOR` environment variable and the `TERM=dumb` setting. Otherwise, stdout and stderr each use their own terminal status to select colors. `--color` keeps color even when piped; live progress stays terminal-only.
 
 Native human stdout contains only requested results. An explicit file output is silent on stdout. On an interactive stderr, the command prints `wrote PATH (size[, codec])`. Piped stderr, JSON output, `-q`, and `TERM=dumb` omit that line.
@@ -136,7 +136,7 @@ Explicit logging flags override `ROM_WEAVER_LOG` and `RUST_LOG` without an extra
 
 Most commands also accept `-j`/`--threads auto|N`. `auto` uses the available core count as its ceiling; a number sets a lower ceiling, and format or memory limits may still use fewer.
 
-List-valued flags (`--algo`, `--checksum`, `--filter`, `--codec`, `--expect-in`, `--expect-out`, `--assume-in`, `--patch-input-check`, `--patch-output-check`, and the compression codec flags) can be repeated or comma-separated: `--algo crc32,sha1` and `--algo crc32 --algo sha1` do the same thing.
+List-valued flags (`--algo`, `--checksum`, `--checksum-rom`, `--filter`, `--codec`, `--expect-in`, `--expect-out`, `--assume-in`, `--patch-input-check`, `--patch-output-check`, and the compression codec flags) accept comma-separated values and, except as noted below, can be repeated: `--algo crc32,sha1` and `--algo crc32 --algo sha1` do the same thing. On `patch apply` and `patch validate`, `--patch-input-check` and `--patch-output-check` bind one value per `--patch`: repeating the flag for the same `--patch` replaces the earlier value, so separate multiple checks for one patch with commas (`weave create` accumulates repeated occurrences).
 
 `-n`/`--dry-run` is available on every command, before or after the command name. It reports planned changes without writing destination files, changing installed databases, or downloading inputs. Read-only commands report a read-only plan instead of running the operation, and a dry run rejects a missing, unreadable, or directory input as the real run does. Dry runs do not ask interactive questions.
 
@@ -183,7 +183,7 @@ Examples are in [Use an archive pipeline](../how-to/work-with-archives.md#use-an
 `probe`, `extract`, `identify`, `checksum`, `trim`, `weave parse`, and the patching commands open archives automatically. Five flags control archive selection:
 
 - `-s`/`--select` picks which file to use, by exact name, folder, or glob. On `patch apply` and `patch validate` it applies to the input and to every `--patch` archive alike.
-- `--patch-select` picks the file inside the `--patch` archive it follows, overriding `--select` for that patch. Repeat it once per `--patch`, in the same order. Only `patch apply` and `patch validate` take it, and it is the only way to select different files from an archive input and an archive patch in one command.
+- `--patch-select` picks the file inside the `--patch` archive it follows, overriding `--select` for that patch. `patch apply`, `patch validate`, and `tools ppf-undo` accept it (`patch apply` and `patch validate` repeat it once per `--patch`, in order), and it is the only way to select different files from an archive input and an archive patch in one command.
 - `--filter rom` selects ROM candidates; `--filter patch` selects patches. Known extensions determine candidates; stream wrappers use their inferred payload names. The flag accepts repeated or comma-separated values (`--filter rom,patch`).
 - `--no-ignore` also considers the files normally skipped: text documents with extensions such as `.txt`, `.nfo`, and `.markdown`, documentation files such as `README`, `LICENSE`, and `README.md`, images, checksum sidecars, and OS clutter such as `.DS_Store`.
 - `--no-extract` skips all of this and works on the file itself.
@@ -196,7 +196,7 @@ Interactive `ingest` prompts for the ROM before extracting any ROM it offers: it
 
 The ignore rules recognize these documentation file names, case-insensitively, in any folder, bare or with a `.md` extension (`README`, `LICENSE.md`): `README`, `LICENSE`, `LICENCE`, `COPYING`, `NOTICE`, `AUTHORS`, `CREDITS`, `CHANGELOG`, `CHANGES`, `TODO`, `INSTALL`, `HISTORY`, `CONTRIBUTORS`, and `CONTRIBUTING`. They are skipped like `.txt` files, so they neither make a patch-only archive a ROM source nor make ROM selection ambiguous, and `--no-ignore` stops skipping them (`--filter rom` and `--filter patch` still reject these names). `.md` is also the Mega Drive ROM extension, so it is ignored only behind these names; `sonic.md` stays a ROM. Other Markdown extensions (`.markdown`) are always ignored. Only the whole file name matches: `README.1ST` and `README Hack v1.1` are not recognized, and neither are unignored extension-less tools such as `xdelta3`. Those remain ROM candidates without a reliable patch signature, so they can cause ROM ambiguity or classify an otherwise patch-only archive as a ROM source.
 
-Not every command takes all five. `extract` has no `--no-extract`, since unpacking is the whole job. `trim` spells its filter `--no-filter`, because it filters to ROMs by default. `rom-weaver <command> --help` is authoritative.
+Not every command takes all five. `extract` has no `--no-extract`, since unpacking is the whole job. `trim` defaults to `--filter rom`, adds `--no-filter` to disable that default, and omits `--select` and `--no-ignore`. `rom-weaver <command> --help` is authoritative.
 
 `extract` also unpacks archives found inside the input, up to eight levels deep; `--no-nested-extract` stops after the first layer. If any output file already exists, extraction stops before writing anything, unless `--force` is given. While extracting it can hash what it writes (`--checksum ALGO`, or `--checksum-rom ALGO` for the ROMs only) and report each file's format and platform (`--probe`). Hashing covers the files extracted from the input, including the `.bin` tracks of a CHD or PBP. A `.cue` or `.gdi` sheet that extraction generates for a disc is text rom-weaver writes, not a file taken from the input, so it is never hashed.
 
@@ -348,7 +348,7 @@ Executable-relative lookup requires `bundled-identify-data`, enabled in publishe
 
 Delivery is `rom` or `unsupported`. Matches are `exact` (checksum), `title` (normalized file name), or `manual` (`--game`). Each run prints CC-BY-SA-4.0 attribution once.
 
-These flags also appear under `Cheats` in `patch apply` and `patch create` help.
+These flags also appear under `Cheats` in `patch apply`, `patch create`, and `weave create` help.
 
 | Flag | Meaning |
 | --- | --- |
@@ -384,7 +384,7 @@ Without an explicit compression flag, an output extension matching the selected 
 
 `--no-compress` and its compatibility alias `--raw` force raw output. `--compress-format`, `--compress-codec`, and `--compress-level` remain the canonical compression flags; `--format`, `--codec`, and `--level` are accepted aliases on `patch apply`. `--no-compress` cannot be combined with `--compress-format`, `--compress-codec`, or `--compress-level`.
 
-DCP patches need a Dreamcast `.cue` or `.gdi` input. They rebuild the GD-ROM data track and reassemble the whole disc, so they cannot be chained with another patch or combined with the header and checksum options. With `--no-compress`, a `.cue` or `.gdi` output receives the whole disc, with its tracks beside it; any other output path receives only the rebuilt data track. The JSON result names that track in `details.dcp_data_track`.
+DCP patches need a Dreamcast `.cue` or `.gdi` input. They rebuild the GD-ROM data track and reassemble the whole disc, so they cannot be chained with another patch or combined with cheats (`--code`, `--cheat`, or required weave cheats), header transforms, or checksum options. With `--no-compress`, a `.cue` or `.gdi` output receives the whole disc, with its tracks beside it; any other output path receives only the rebuilt data track. The JSON result names that track in `details.dcp_data_track`.
 
 <a id="bundle-detection"></a>
 

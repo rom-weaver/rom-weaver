@@ -20,7 +20,7 @@ Settings covers language, byte units, output defaults, compression, and the prac
 
 On phones, leave Settings with bottom-right **Close**, a right swipe from the left edge, or the browser's back gesture.
 
-Navigation’s separate **Theme** (light, dark, or system) and **Accent** (highlight color) controls apply immediately, as do the Theme and Accent choices inside the Settings dialog. **Optional ROM databases** download or delete immediately, and **Advanced** changes persist as you make them. Every other setting waits for **Save**.
+Navigation’s separate **Theme** (light, dark, or system) and **Accent** (highlight color) controls apply immediately, as do the Theme and Accent choices inside the Settings dialog. **Optional ROM databases** download or delete immediately, and toggling **Advanced** persists immediately (edits to the fields it reveals still wait for **Save**). Every other setting waits for **Save**.
 
 ## Enable beta tools
 
@@ -33,11 +33,11 @@ Only Save Editor and Make playlist require this setting; Trim, PPF Undo, and che
 
 ## Prepare for offline use
 
-1. While online, open **Settings**, select **Keep an offline copy**, then **Save**.
+1. While online, confirm **Keep an offline copy** is enabled in **Settings** (it starts on by default; if you turned it off, enable it and select **Save**). If your browser has data saver enabled, open **Offline app** and select **Download offline copy**.
 2. Wait for the app's offline download to finish.
 3. Reopen **Settings** and select the **Optional ROM databases** you need. These choices download immediately.
 
-**Offline active** confirms the app, every emulator core, and the **Optional ROM databases** you selected are cached. Keep ROMs and patches locally. Browser-menu installation does not verify these resources.
+**Offline active** in **Offline app** (shown as **Ready** in navigation) confirms the app, built-in identify and cheat databases, every emulator core, and the **Optional ROM databases** you selected are cached. Keep ROMs and patches locally. Browser-menu installation does not verify these resources.
 
 Before relying on offline use, disconnect, reopen rom-weaver, and run a small local job.
 

@@ -33,7 +33,7 @@ The checked bytes differ from the expected file. Compare the same algorithm in [
 A BPS or UPS patch records the CRC32 of the ROM it was made from. Look that value up to learn which release you need.
 
 1. Open [Apply](https://rom-weaver.com/apply-rom-patches) and add your ROM and the patch.
-2. Read the patch card's **Checks failed** message. It gives the CRC32 the patch expects and the CRC32 of your ROM.
+2. Open **Checks** on the ROM card (or **Input** under **Checks** on the patch card) to read the **Expected** CRC32 the patch wants and the **Computed** CRC32 of your ROM.
 3. Open a fresh [Identify page](https://rom-weaver.com/identify-rom).
 4. Paste the expected CRC32 into **Identify by checksum or game name**, then select the release.
 5. Return to [Apply](https://rom-weaver.com/apply-rom-patches) and drop your own copy of that release into **0x01 Inputs**. It replaces the wrong ROM.
@@ -63,7 +63,7 @@ Inspect the card's file list. Choose the expected ROM or track, not simply the l
 
 ## Cartridge header differences
 
-A copier header, often 512 bytes, changes offsets and checksums. Keep automatic handling unless instructed otherwise; inspect the patch's **Options**. rom-weaver checks headered/headerless forms when patch evidence permits. Input handling and the downloaded output's header are separate choices.
+A copier header, often 512 bytes, changes offsets and checksums. Keep automatic handling unless instructed otherwise; check the header control on the patch card (and **Output Header** under **Apply** → **Options** for the downloaded file). rom-weaver checks headered/headerless forms when patch evidence permits. Input handling and the downloaded output's header are separate choices.
 
 ## Nintendo 64 byte order
 

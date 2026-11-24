@@ -185,7 +185,7 @@ CHD reading and writing come from [SnowflakePowered/chd-rs](https://github.com/S
 - `std::sync::RwLock` instead of `parking_lot` for the shared hunk index. On stable Rust, parking_lot cannot park on wasm32, so a contended lock panicked on browser wasi-threads.
 - Sizing the hunk map and the index of stored hunks from the hunk count up front, so neither grows while other threads compress. On browser wasi-threads, heap growth during a threaded section can trap sibling threads.
 
-The integration patches after them inline the crate, resolve its feature gates to the pinned set (encode with the `zstd` C library, no zrip), take `zstd_safe` from the workspace `zstd` crate, and apply workspace formatting, lints, and test adjustments. A last project-specific patch, `liblzma-encoder`, compresses LZMA hunks with `liblzma-sys` (raw LZMA1 with chdman's `lc`/`lp`/`pb`, a hunk-bounded dictionary, and `LzmaEncProps_Normalize`'s encoder settings for each level), the same library libarchive links, so the WASM module carries one LZMA encoder; LZMA decoding stays on `lzma-rust2`. The workspace `flate2` keeps the C zlib backend, so Deflate hunks use the same zlib as chdman.
+The integration patches after them inline the crate, resolve its feature gates to the pinned set (encode with the `zstd` C library, no zrip), take `zstd_safe` from the workspace `zstd` crate, and apply workspace formatting, lints, and test adjustments. A project-specific patch, `liblzma-encoder`, compresses LZMA hunks with `liblzma-sys` (raw LZMA1 with chdman's `lc`/`lp`/`pb`, a hunk-bounded dictionary, and `LzmaEncProps_Normalize`'s encoder settings for each level), the same library libarchive links, so the WASM module carries one LZMA encoder; LZMA decoding stays on `lzma-rust2` (the manifest also carries smaller follow-up integration patches for ECC visibility, shared metadata, and storage-full errors). The workspace `flate2` keeps the C zlib backend, so Deflate hunks use the same zlib as chdman.
 
 Use `npm run vendor:check -- chd-rs` to reconstruct the module and compare every source byte.
 
@@ -203,7 +203,7 @@ The inlined copy is adapted from [encounter/nod](https://github.com/encounter/no
 
 `src/nod/NOD_VERSION` points to `vendor-patches/nod/manifest.json`. That manifest pins the upstream source and both license files. Its source patches capture the local behavior, including preloader read-ahead, Wii FST alignment, partition bounds, DOL/FST arithmetic, GCZ geometry (including sub-sector block sizes, which are read as whole sectors), and NFS sparse-sector handling.
 
-The last six integration patches adapt nod to this workspace, one concern each: Python binding removal, crate and doctest paths, rustfmt, lint allowances, dead-code cleanup, and test hooks. Generic changes are kept before them, so formatting and inlining do not obscure the fixes.
+The integration patches adapt nod to this workspace, one concern per patch (including workspace codec backends, WASI path resolution, Python binding removal, crate and doctest paths, rustfmt, lint allowances, dead-code cleanup, test hooks, and later bug fixes). Generic changes are kept before formatting and inlining so they stay easy to review.
 
 Use `npm run vendor:check -- nod` to reconstruct the module and compare every source byte. Use the [shared refresh workflow](#patch-queues-and-updates) to update it. A nod fork checkout and manual source synchronization are no longer required.
 

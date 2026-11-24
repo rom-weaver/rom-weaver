@@ -16,7 +16,7 @@ Your files stay on your device. rom-weaver does the work in your browser instead
 
 ## What happens to your files
 
-When you pick a file in Apply, Create, Trim, or Tools, it is read by code running inside your own browser. The patching engine runs there too, as WebAssembly in background workers. Nothing about that requires a server.
+When you pick a file in any workflow (such as Apply, Create, Weave, Identify, Trim, Compress, Extract, or Test), it is read by code running inside your own browser. The patching engine runs there too, as WebAssembly in background workers. Nothing about that requires a server.
 
 There is no account to make, and your ROMs, disc images, patches, archives, and results are not sent to a rom-weaver server. The command-line tool is the same story: it reads and writes the paths you give it on your own computer.
 
@@ -42,7 +42,7 @@ All of it belongs to the rom-weaver site in your browser and is under your brows
 
 ## What the app downloads
 
-Opening the site downloads what any site downloads: HTML, styles, scripts, the WebAssembly module, fonts, and these pages. Opening Test also downloads the selected, self-hosted EmulatorJS core; with **Keep an offline copy** on, every core downloads in the background. ROM identification downloads self-hosted database packs during background preparation or when a lookup needs an uncached pack. Pack requests identify the database asset; the ROM checksum and filename are not sent. As with any website, whoever hosts and routes that traffic can see ordinary request information: an IP address, a browser user agent, the path requested, and a timestamp.
+Opening the site downloads what any site downloads: HTML, styles, scripts, the WebAssembly module, fonts, and these pages. Opening Test also downloads the selected, self-hosted EmulatorJS core; with **Keep an offline copy** on, every core downloads in the background. ROM identification, title search, and cheat lookup download self-hosted database packs, lookup indexes, and cheat shards during background preparation or when a lookup needs an uncached asset. Those requests identify only the database asset; the ROM checksum and filename are not sent. As with any website, whoever hosts and routes that traffic can see ordinary request information: an IP address, a browser user agent, the path requested, and a timestamp.
 
 There are no analytics, advertising, or tracking scripts in the deployed app.
 
@@ -56,7 +56,7 @@ Links to GitHub, Ko-fi, package registries, and anywhere else are just links. No
 
 Use your browser's site-data controls to look at or delete rom-weaver's local storage, cache, service worker, and private file storage. Clearing site data is the thorough option and removes everything listed above.
 
-The app's own Reset button is not that. It reloads the workflow you are in and leaves stored data alone.
+The app's own Reset button is not that. It clears the current workflow and its temporary OPFS working files, while leaving saved preferences, emulator saves, kept ROMs, and offline caches alone.
 
 If you would rather not have a site origin or a service worker involved at all, use the command-line tool. Installing it and checking for updates still follows the normal behavior of whichever installer or registry you use.
 

@@ -146,7 +146,7 @@ Facts to look up. No advice, no steps.
 - [Man pages](reference/cli.md#man-pages): generate `rom-weaver(1)` and one page per visible command from Clap.
 - [`rom-weaver-weave.json` schema](rom-weaver-weave-v2.schema.json): the machine-readable weave format.
 - [Runtime configuration](hosting/env-vars.md): environment variables and browser diagnostic handles.
-- [Webapp masthead metadata](hosting/webapp-runtime-status.md): version, SHA, thread, PWA, and service-worker labels.
+- [Webapp masthead metadata](hosting/webapp-runtime-status.md): build version tag, offline status indicator, workflow thread count, and build details.
 
 ## Explanation
 

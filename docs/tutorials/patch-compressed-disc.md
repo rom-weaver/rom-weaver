@@ -58,7 +58,7 @@ Keep the default compression settings. The compressed file's checksum is not the
 2. If offered a track layout, choose **One BIN file**.
 3. In **Files**, choose **Clear all**, select only the `.bin` file, then choose **Download 1 file**.
 4. Open [Checksum file](https://rom-weaver.com/file-checksum) and add that BIN.
-5. Select SHA-1 and compare it with `ebce631d802abe7c450e3f6cb658f9679701fdd6`.
+5. Confirm **SHA-1** is checked (it is on by default) and compare its value with `ebce631d802abe7c450e3f6cb658f9679701fdd6`.
 
 The extracted BIN is 32,768 bytes. A matching SHA-1 confirms the supplied patches produced the expected disc data after decompression.
 
