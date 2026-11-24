@@ -1801,6 +1801,22 @@ describe("outgoing build files", () => {
     expect(keptUrls(harness).sort()).toEqual([OLD_CHUNK_URL, OLD_LAZY_URL]);
   });
 
+  it("still installs an update when the outgoing build's files cannot be kept", async () => {
+    const harness = await loadWorker({
+      hasActiveWorker: true,
+      seedCaches: async (cacheStorage) => {
+        const precache = await cacheStorage.open(PRECACHE_NAME);
+        await precache.put(new Request(OLD_CHUNK_URL), new Response("old chunk"));
+        const outgoing = (await cacheStorage.open(OUTGOING_BUILD_CACHE_NAME)) as unknown as FakeCache;
+        outgoing.put = async () => {
+          throw new DOMException("The quota has been exceeded.", "QuotaExceededError");
+        };
+      },
+    });
+
+    await expect(dispatch(harness.scope, "install")).resolves.toBeUndefined();
+  });
+
   it("serves a kept file to a tab still running the outgoing build", async () => {
     const harness = await loadWorker({ seedCaches: keepOldChunk });
 

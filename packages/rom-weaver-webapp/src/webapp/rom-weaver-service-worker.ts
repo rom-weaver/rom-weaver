@@ -1105,7 +1105,10 @@ self.addEventListener("install", (event) => {
   // Existing complete entries MUST move before Workbox removes them on activation.
   event.waitUntil(runServiceWorkerPhase("migrate deferred cache", () => deferredPrecache.migrate(PRECACHE_NAME)));
   const isFirstInstall = !self.registration.active;
-  if (!isFirstInstall) event.waitUntil(runServiceWorkerPhase("keep outgoing build files", keepOutgoingBuildFiles));
+  // Best effort: a tab that misses a kept file falls back to the network, then to the reload banner.
+  if (!isFirstInstall) {
+    event.waitUntil(runServiceWorkerPhase("keep outgoing build files", keepOutgoingBuildFiles).catch(() => undefined));
+  }
   // Runs before workbox's async install handler touches any entry (listeners
   // fire in add order within the same task), so the plugin sees the flag.
   firstInstallInProgress = isFirstInstall;
