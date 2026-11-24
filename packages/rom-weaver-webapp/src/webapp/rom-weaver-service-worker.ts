@@ -825,7 +825,7 @@ const keepOutgoingBuildFiles = async () => {
   logServiceWorker("kept the outgoing build's files for its open tabs", { files: kept });
 };
 
-// A page load with no other tab open means no tab still runs an outgoing build.
+// A page load with no window client means no tab still runs an outgoing build. A tab that is reloading still counts.
 const removeOutgoingBuildFilesWithoutTabs = async () => {
   if ((await self.clients.matchAll({ type: "window" })).length > 0) return;
   if (await caches.delete(OUTGOING_BUILD_CACHE_NAME))
