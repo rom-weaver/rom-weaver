@@ -342,7 +342,7 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
   // An installed update activates once the controlling worker stops, and any message restarts that
   // worker for its full idle timeout. Pumps wait until the update takes control, which restarts the
   // loop through controllerchange, or fails to install.
-  const isUpdateInstalling = async () => {
+  const pauseForPendingUpdate = async () => {
     const registration = await serviceWorker.getRegistration?.();
     const update = registration?.installing ?? registration?.waiting;
     if (!update) return false;
@@ -374,7 +374,7 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
           });
         }
         if (
-          (await isUpdateInstalling()) ||
+          (await pauseForPendingUpdate()) ||
           signal.aborted ||
           !offlineCopyState.enabled ||
           loopGeneration !== generation
