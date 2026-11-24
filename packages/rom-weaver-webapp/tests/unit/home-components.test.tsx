@@ -55,7 +55,11 @@ describe("HomePage", () => {
     expect(disc?.querySelector("a[href='/tools/extract-files']")?.textContent).toBe("Extract files");
     expect(disc?.textContent).toContain("ISO or BIN/CUE");
     expect(disc?.querySelector("a[href='/tools/docs/extract-chd']")?.textContent).toBe("CHD to ISO guide");
+    expect(disc?.querySelector("a[href='/tools/docs/convert-to-chd']")?.textContent).toBe("ISO to CHD guide");
     expect(disc?.querySelector("a[href='/tools/docs/convert-rvz-to-iso']")?.textContent).toBe("RVZ to ISO guide");
+    expect(disc?.querySelector("a[href='/tools/docs/convert-to-rvz']")?.textContent).toBe("ISO to RVZ guide");
+    expect(disc?.querySelector("a[href='/tools/docs/extract-z3ds']")?.textContent).toBe("Z3DS to 3DS guide");
+    expect(disc?.querySelector("a[href='/tools/docs/convert-to-z3ds']")?.textContent).toBe("3DS to Z3DS guide");
     const offline = container.querySelector("a[href='/tools/docs/browser-settings#prepare-for-offline-use']");
     expect(offline?.textContent).toBe("Prepare for offline use");
     expect(offline?.parentElement?.textContent).toContain("separate downloads");
@@ -74,11 +78,21 @@ describe("HomePage", () => {
       "/tools/extract-files",
       "/tools/identify-rom",
       "/tools/create-rom-patch",
-      "/tools/apply-rom-patches",
+      "/tools/apply-cheats",
       "/tools/play-rom",
       "/tools/file-checksum",
       "/tools/weave-rom-patches",
     ]);
+    expect(container.querySelector(".home-routes-more a[href='/tools/trim-rom']")?.textContent).toBe("Trim ROMs");
+    expect(container.querySelector(".home-routes-more a[href='/tools/ppf-undo']")?.textContent).toBe("PPF undo");
+    expect(container.querySelector("a[href='/tools/docs/apply-bps-patch']")?.textContent).toBe("BPS guide");
+    expect(container.querySelector("a[href='/tools/docs/fix-checksum-errors']")?.textContent).toBe(
+      "Fix checksum errors",
+    );
+    expect(container.querySelector("a[href='/tools/docs/search-rom-checksums']")?.textContent).toBe(
+      "Search by checksum",
+    );
+    expect(container.querySelector("a[href='/tools/docs/checksum-roms-browser']")?.textContent).toBe("Checksum guide");
     expect(container.querySelector("#home-title")?.textContent).toContain("Online ROM patcher.");
     expect(container.textContent).toContain("Keep your files on your device.");
     expect(container.querySelector(".home-main-actions .home-practice")?.textContent).toBe(

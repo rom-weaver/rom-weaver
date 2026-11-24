@@ -286,8 +286,8 @@ describe("Masthead", () => {
     expect(sheet.hidden).toBe(true);
   });
 
-  it("hides beta workflows from both layouts while the setting is off", () => {
-    const { container } = render(
+  it("omits beta workflows from both layouts while the setting is off unless currently active", () => {
+    const { container, unmount } = render(
       <RomWeaverSettingsProvider settings={{ betaToolsEnabled: false }}>
         <Masthead {...mastheadProps} />
       </RomWeaverSettingsProvider>,
@@ -299,13 +299,16 @@ describe("Masthead", () => {
       expect(labels).toContain("PPF undo");
       expect(labels).not.toContain("Save Editor");
       expect(labels).toContain("Apply");
-      for (const row of container.querySelectorAll(`${nav} .nav-row[hidden]`)) {
-        expect(row.parentElement?.hidden).toBe(true);
-      }
+      expect(container.querySelector(`${nav} .nav-row[href="trim"]`)).toBeNull();
+      expect(container.querySelector(`${nav} h1, ${nav} h2, ${nav} h3`)).toBeNull();
     }
-    // The rows are still in the markup: the setting is client-only, so the
-    // prerendered shell and the first hydration pass must agree on the DOM.
-    expect(container.querySelector('.side-nav .nav-row[href="trim"]')?.hasAttribute("hidden")).toBe(true);
+    unmount();
+    const { container: activeBeta } = render(
+      <RomWeaverSettingsProvider settings={{ betaToolsEnabled: false }}>
+        <Masthead {...mastheadProps} currentTab="trim" />
+      </RomWeaverSettingsProvider>,
+    );
+    expect(activeBeta.querySelector('.side-nav .nav-row[href="trim"]')).not.toBeNull();
   });
 
   it("wears a BETA chip beside the name it qualifies", () => {

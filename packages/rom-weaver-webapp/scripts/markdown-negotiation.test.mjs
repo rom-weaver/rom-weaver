@@ -7,6 +7,7 @@ async function negotiate(
   {
     method = "GET",
     path = "/",
+    headers = {},
     assetStatus = 200,
     assetType = "text/markdown; charset=utf-8",
     assetRobots = "noindex",
@@ -14,7 +15,10 @@ async function negotiate(
   } = {},
 ) {
   const calls = [];
-  const request = new Request(`https://rom-weaver.com${path}`, { method, headers: { Accept: accept } });
+  const request = new Request(`https://rom-weaver.com${path}`, {
+    method,
+    headers: { Accept: accept, ...headers },
+  });
   const response = await onRequest({
     request,
     env: {
@@ -135,4 +139,43 @@ test("Markdown negotiated at a page URL does not inherit the .md file's noindex"
   assert.equal(response.headers.get("X-Robots-Tag"), null);
   const { response: staging } = await negotiate("text/markdown", { assetRobots: "noindex, nofollow" });
   assert.equal(staging.headers.get("X-Robots-Tag"), "noindex, nofollow");
+});
+
+test("trailing-slash canonical routes redirect 301 to the extensionless URL and keep query strings", async () => {
+  for (const [path, location] of [
+    ["/docs/", "/docs"],
+    ["/docs/create-bundles/", "/docs/create-bundles"],
+    ["/apply-rom-patches/", "/apply-rom-patches"],
+    ["/apply-rom-patches/?guide=apply", "/apply-rom-patches?guide=apply"],
+  ]) {
+    const { response, calls } = await negotiate("text/html", { path });
+    assert.deepEqual(calls, [], path);
+    assert.equal(response.status, 301, path);
+    assert.equal(response.headers.get("Location"), location, path);
+    assert.equal(response.headers.get("Vary"), "X-Rom-Weaver-Precache", path);
+    assert.equal(response.headers.get("Cache-Control"), "public, max-age=0, must-revalidate", path);
+  }
+  const { response: head } = await negotiate("text/html", { method: "HEAD", path: "/file-checksum/" });
+  assert.equal(head.status, 301);
+  assert.equal(head.headers.get("Location"), "/file-checksum");
+  assert.equal(await head.text(), "");
+});
+
+test("offline precache directory fetches pass through without redirecting", async () => {
+  const { response, calls } = await negotiate("*/*", {
+    headers: { "X-Rom-Weaver-Precache": "1" },
+    path: "/docs/create-bundles/",
+  });
+  assert.deepEqual(calls, ["next"]);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
+  assert.equal(response.headers.get("Vary"), "Accept-Encoding, X-Rom-Weaver-Precache");
+});
+
+test("unknown or unsafe trailing-slash paths never redirect", async () => {
+  for (const path of ["/unknown/", "//evil.com/", "/docs/unknown/"]) {
+    const { response, calls } = await negotiate("text/html", { path });
+    assert.deepEqual(calls, ["next"], path);
+    assert.equal(response.status, 200, path);
+  }
 });

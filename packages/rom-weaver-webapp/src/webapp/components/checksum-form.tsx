@@ -21,6 +21,7 @@ import {
   stageStatusLabel,
 } from "../../public/react/components/ds/staging-meta.tsx";
 import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-zone.tsx";
+import { CHECKSUM_EXTRA_GUIDES, WORKFLOW_GUIDES } from "../../public/react/workflow-guides.ts";
 import { useInputSelectionHandler } from "../../public/react/input-selection-handler.ts";
 import type {
   CandidateSelectionChoice,
@@ -549,6 +550,8 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
           addLabel="Replace the file"
           big={sourceEmpty}
           disabled={calculating}
+          extraGuides={CHECKSUM_EXTRA_GUIDES}
+          guide={WORKFLOW_GUIDES.checksum}
           heroLabel="Drop a file to checksum it"
           heroLabelCoarse="Tap to add a file"
           info={<p>Checksums are calculated locally. Your files never leave this browser.</p>}

@@ -11,7 +11,7 @@ import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { Notice, RunButton } from "../../public/react/components/ds/feedback.tsx";
 import { GhostSteps } from "../../public/react/components/ds/ghost-steps.tsx";
 import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-zone.tsx";
-import { WORKFLOW_GUIDES } from "../../public/react/workflow-guides.ts";
+import { IDENTIFY_EXTRA_GUIDES, WORKFLOW_GUIDES } from "../../public/react/workflow-guides.ts";
 import { RomInputPanels } from "../../public/react/components/ds/rom-input-panels.tsx";
 import {
   compareRomExpectation,
@@ -454,6 +454,7 @@ const IdentifyForm = ({
         big={heroShown}
         disabled={busy}
         {...(!hasFiles && expectation ? { hint: "Optional - the match above stands on its own" } : {})}
+        extraGuides={IDENTIFY_EXTRA_GUIDES}
         guide={WORKFLOW_GUIDES.identify}
         heroLabel={localizer.message("ui.identify.drop")}
         heroLabelCoarse={localizer.message("ui.identify.tap")}

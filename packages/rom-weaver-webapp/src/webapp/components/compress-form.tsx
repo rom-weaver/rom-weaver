@@ -13,7 +13,7 @@ import { FileCard } from "../../public/react/components/ds/file-card.tsx";
 import { StageStatus, stageBarValue } from "../../public/react/components/ds/staging-meta.tsx";
 import { GhostSteps } from "../../public/react/components/ds/ghost-steps.tsx";
 import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-zone.tsx";
-import { WORKFLOW_GUIDES } from "../../public/react/workflow-guides.ts";
+import { COMPRESS_FORMAT_GUIDES, WORKFLOW_GUIDES } from "../../public/react/workflow-guides.ts";
 import { OutputRunAction, WorkflowOutputStep } from "../../public/react/components/ds/workflow-output-step.tsx";
 import { buildCompressPanel } from "../../public/react/compress-options.ts";
 import { createOutputOptions } from "../../public/react/output-view-model.ts";
@@ -350,6 +350,7 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
         }
         big={!(files.length || opening)}
         disabled={disabled}
+        extraGuides={COMPRESS_FORMAT_GUIDES}
         guide={WORKFLOW_GUIDES.compress}
         heroLabel={localizer.message("ui.compress.drop")}
         heroLabelCoarse={localizer.message("ui.compress.tap")}

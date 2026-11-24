@@ -22,6 +22,7 @@ import {
   createWorkflowMarkdown,
   injectLdJson,
   makeBetaRouteNoindex,
+  WORKFLOW_ROUTE_LASTMOD_SOURCES,
 } from "./vite-config/seo-html.mjs";
 
 const routeShell = `<!doctype html><html><head>
@@ -51,6 +52,30 @@ test("workflow descriptions propagate to metadata and structured data", () => {
     const application = JSON.parse(ldJson)["@graph"].find((entry) => entry["@type"] === "SoftwareApplication");
     assert.equal(application.description, route.description, `${key} JSON-LD description`);
     assert.equal(application.url, expectedCanonical, `${key} JSON-LD URL`);
+    assert.equal(
+      application.name,
+      route.slug ? route.title.replace(" | rom-weaver", "") : "rom-weaver",
+      `${key} JSON-LD name`,
+    );
+  }
+});
+
+test("every indexed workflow meta description fits within 155 characters", () => {
+  const tooLong = [...Object.values(WORKFLOW_SEO_ROUTES), ...Object.values(WORKFLOW_ENTRY_ROUTES)]
+    .filter((route) => route.description.length > 155)
+    .map((route) => `${route.slug || "home"} (${route.description.length})`);
+  assert.deepEqual(tooLong, []);
+});
+
+test("every workflow lastmod source path exists on disk and covers every indexed workflow route", () => {
+  const expectedSlugs = [...Object.values(WORKFLOW_SEO_ROUTES), ...Object.values(WORKFLOW_ENTRY_ROUTES)]
+    .map((route) => route.slug)
+    .sort();
+  assert.deepEqual(Object.keys(WORKFLOW_ROUTE_LASTMOD_SOURCES).sort(), expectedSlugs);
+  for (const files of Object.values(WORKFLOW_ROUTE_LASTMOD_SOURCES)) {
+    for (const file of files) {
+      assert.ok(fs.existsSync(path.join(rootDir, file)), `missing lastmod source: ${file}`);
+    }
   }
 });
 
@@ -71,7 +96,7 @@ test("sitemap lastmod values are ISO dates or absent, and never on a Markdown UR
   }
 });
 
-test("workflow pages take their lastmod from the newest commit of their text sources", (context) => {
+test("workflow pages take their lastmod from their own view sources without shared messages noise", (context) => {
   // A throwaway repository, so the assertion holds in the shallow clones CI uses.
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "seo-sitemap-"));
   context.after(() => fs.rmSync(directory, { recursive: true, force: true }));
@@ -84,10 +109,7 @@ test("workflow pages take their lastmod from the newest commit of their text sou
   const files = [
     "src/webapp/workflow-seo.mjs",
     "src/presentation/localization/messages.ts",
-    "src/webapp/components/home-page.tsx",
-    "src/webapp/components/home-sections.tsx",
-    "src/webapp/components/home-loom.tsx",
-    "src/wasm/generated/rom-weaver-format-metadata.ts",
+    ...new Set(Object.values(WORKFLOW_ROUTE_LASTMOD_SOURCES).flat()),
   ];
   for (const file of files) {
     fs.mkdirSync(path.dirname(path.join(directory, file)), { recursive: true });
@@ -103,14 +125,25 @@ test("workflow pages take their lastmod from the newest commit of their text sou
   fs.appendFileSync(path.join(directory, "src/webapp/components/home-loom.tsx"), "// changed\n");
   git("2026-02-01T00:00:00Z", "add", ".");
   git("2026-02-01T00:00:00Z", "commit", "-m", "fix: change landing");
+  fs.appendFileSync(path.join(directory, "src/webapp/components/compress-form.tsx"), "// changed\n");
+  git("2026-02-15T00:00:00Z", "add", ".");
+  git("2026-02-15T00:00:00Z", "commit", "-m", "fix: change compress");
+  fs.appendFileSync(path.join(directory, "src/presentation/localization/messages.ts"), "// unrelated UI string\n");
+  git("2026-03-01T00:00:00Z", "add", ".");
+  git("2026-03-01T00:00:00Z", "commit", "-m", "fix: change messages");
   const sitemap = createSitemapSource({ root: directory, repo: directory });
   const lastmodOf = (slug) =>
     sitemap.match(new RegExp(`<loc>https://rom-weaver.com/${slug}</loc><lastmod>([^<]+)</lastmod>`))?.[1];
   for (const route of [...Object.values(WORKFLOW_SEO_ROUTES), ...Object.values(WORKFLOW_ENTRY_ROUTES)]) {
     assert.match(lastmodOf(route.slug) ?? "", /^\d{4}-\d{2}-\d{2}T/, route.slug || "home");
   }
-  // The landing change is newer than the shared sources, so only the apex follows it.
-  assert.ok(lastmodOf("") > lastmodOf("compress-files"));
+  // Editing messages.ts must not bump any workflow's lastmod.
+  assert.ok(lastmodOf("file-checksum").startsWith("2026-01-01"), lastmodOf("file-checksum"));
+  // Editing one workflow's view bumps only that route, not unrelated tools or the landing page.
+  assert.ok(lastmodOf("").startsWith("2026-02-01"), lastmodOf(""));
+  assert.ok(lastmodOf("compress-files").startsWith("2026-02-15"), lastmodOf("compress-files"));
+  assert.ok(lastmodOf("compress-files") > lastmodOf("file-checksum"));
+  assert.ok(lastmodOf("") > lastmodOf("file-checksum"));
 });
 
 test("the Notices entry takes the injected generated-page date, and none when it is unknown", () => {

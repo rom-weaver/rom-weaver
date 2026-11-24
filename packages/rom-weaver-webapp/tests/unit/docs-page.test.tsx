@@ -533,11 +533,13 @@ Fixture description.
     expect(shelves.every((shelf) => !shelf.open)).toBe(true);
     for (const shelf of shelves) {
       const summary = shelf.querySelector("summary") as HTMLElement;
-      expect(summary.querySelector("h3")?.textContent).toBeTruthy();
+      expect(summary.querySelector(".guide-shelf-title")?.textContent).toBeTruthy();
+      expect(summary.querySelector("h1, h2, h3, h4, h5, h6")).toBeNull();
       const wasOpen = shelf.open;
       fireEvent.click(summary);
       expect(shelf.open).toBe(!wasOpen);
     }
+    expect(document.querySelector(".guide-nav h1, .guide-nav h2, .guide-nav h3")).toBeNull();
     expect(shelves.every((shelf) => shelf.open)).toBe(true);
   });
 
@@ -736,7 +738,8 @@ Fixture description.
     expect(open.textContent).toBe("Close");
     expect(drawer.querySelector(".docs-row.is-here")?.textContent).toContain("Reference");
     fireEvent.click(drawer.querySelector(".docs-row.is-here") as HTMLElement);
-    expect(drawer.querySelector(".docs-drawer-head h2")?.textContent).toBe("Reference");
+    expect(drawer.querySelector(".docs-drawer-title")?.textContent).toBe("Reference");
+    expect(drawer.querySelector("h1, h2, h3, h4, h5, h6")).toBeNull();
     expect(drawer.querySelector('a[aria-current="page"]')?.getAttribute("href")).toBe("/docs/cli");
     fireEvent.keyDown(document, { key: "Escape" });
     expect(drawer.querySelector(".docs-drawer-head")).toBeNull();

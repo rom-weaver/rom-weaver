@@ -43,6 +43,13 @@ const HOME_ROUTES: readonly HomeRoute[] = [
     body: "ui.home.routePatchBody",
     file: "translation.bps",
     go: "ui.home.goApply",
+    guides: [
+      { label: "ui.home.guideBps", slug: "docs/apply-bps-patch" },
+      { label: "ui.home.guideIps", slug: "docs/apply-ips-patch" },
+      { label: "ui.home.guideUps", slug: "docs/apply-ups-patch" },
+      { label: "ui.home.guideXdelta", slug: "docs/apply-xdelta-patch" },
+      { label: "ui.home.guideFixChecksum", slug: "docs/fix-checksum-errors" },
+    ],
     slug: "apply-rom-patches",
     swatch: "weft-1",
     title: "ui.home.routePatch",
@@ -55,7 +62,11 @@ const HOME_ROUTES: readonly HomeRoute[] = [
     secondary: { go: "ui.home.goExtract", slug: "extract-files" },
     guides: [
       { label: "ui.home.guideChd", slug: "docs/extract-chd" },
+      { label: "ui.home.guideToChd", slug: "docs/convert-to-chd" },
       { label: "ui.home.guideRvz", slug: "docs/convert-rvz-to-iso" },
+      { label: "ui.home.guideToRvz", slug: "docs/convert-to-rvz" },
+      { label: "ui.home.guideExtractZ3ds", slug: "docs/extract-z3ds" },
+      { label: "ui.home.guideToZ3ds", slug: "docs/convert-to-z3ds" },
     ],
     swatch: "source",
     title: "ui.home.routeDisc",
@@ -64,6 +75,7 @@ const HOME_ROUTES: readonly HomeRoute[] = [
     body: "ui.home.routeUnknownBody",
     file: "mystery.bin",
     go: "ui.home.goIdentify",
+    guides: [{ label: "ui.home.guideSearchChecksum", slug: "docs/search-rom-checksums" }],
     slug: "identify-rom",
     swatch: "muted",
     title: "ui.home.routeUnknown",
@@ -80,7 +92,7 @@ const HOME_ROUTES: readonly HomeRoute[] = [
     body: "ui.home.routeCheatsBody",
     file: "game.gba",
     go: "ui.home.goCheats",
-    slug: "apply-rom-patches",
+    slug: "apply-cheats",
     swatch: "weft-3",
     title: "ui.home.routeCheats",
   },
@@ -96,6 +108,7 @@ const HOME_ROUTES: readonly HomeRoute[] = [
     body: "ui.home.routeChecksumBody",
     file: "dump.sfc",
     go: "ui.home.goChecksum",
+    guides: [{ label: "ui.home.guideChecksum", slug: "docs/checksum-roms-browser" }],
     slug: "file-checksum",
     swatch: "seam",
     title: "ui.home.routeChecksum",
@@ -178,6 +191,12 @@ const HomeRoutes = ({ featuresHref, route }: HomeRoutesProps): React.ReactElemen
           </li>
         ))}
       </ul>
+      <p className="home-routes-more">
+        {localizer.message("ui.home.routesMoreBefore")}{" "}
+        <a href={route("trim-rom")}>{localizer.message("ui.home.goTrim")}</a>{" "}
+        {localizer.message("ui.home.routesMoreOr")}{" "}
+        <a href={route("ppf-undo")}>{localizer.message("ui.home.goPpfUndo")}</a>.
+      </p>
     </section>
   );
 };

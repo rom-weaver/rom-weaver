@@ -108,9 +108,13 @@ export const writeBrotliSidecars = () => {
       }
       const include = [
         ...sidecarUrls,
+        "/",
         "/docs",
         "/docs/*",
-        ...MARKDOWN_ROUTES.filter(({ path }) => !path.startsWith("/docs")).map(({ path }) => path),
+        ...MARKDOWN_ROUTES.filter(({ path }) => path !== "/" && !path.startsWith("/docs")).flatMap(({ path }) => [
+          path,
+          `${path}/`,
+        ]),
         "/mcp",
         "/mcp/*",
         "/.well-known/mcp/server-card.json",

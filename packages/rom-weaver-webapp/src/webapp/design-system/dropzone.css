@@ -407,6 +407,31 @@
   font-size: 0.85rem;
   color: var(--ink);
 }
+.rw-app .workflow-about-guides {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 0;
+  margin: var(--sp-s) 0 0;
+  list-style: none;
+}
+.rw-app .workflow-about-guides a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-decoration-color: var(--seam-strong);
+  text-underline-offset: 3px;
+}
+.rw-app .workflow-about-guides a:active {
+  color: var(--thread-text);
+}
+@media (hover: hover) {
+  .rw-app .workflow-about-guides a:hover {
+    color: var(--thread-text);
+  }
+}
 
 .rw-app .drop.staging {
   color: var(--ink-3);

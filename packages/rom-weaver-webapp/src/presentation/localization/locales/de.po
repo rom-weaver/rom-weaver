@@ -255,6 +255,16 @@ msgstr "{visible} von {count, plural, one {# Cheat} other {# Cheats}}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.guideToZ3ds"
+msgstr "Anleitung: 3DS zu Z3DS"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.compressZ3dsGuide"
+msgstr "Anleitung: 3DS zu Z3DS"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.notFound.heading"
 msgstr "404: Seite nicht gefunden"
 
@@ -290,6 +300,16 @@ msgstr "Ein Spiel, das Cheat-Codes braucht"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.about.testBody3"
+msgstr "Dass ein Spiel startet, beweist nicht, dass es genau die ROM ist, die ein Patch braucht; nutze dafür Prüfsumme oder Identifizieren. Spiele für GameCube, Wii, Nintendo 3DS, Dreamcast und PlayStation 2 brauchen einen Emulator für diese Plattform."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.identifyBody2"
+msgstr "Ein Treffer zeigt den erfassten Spielnamen, die Region und die Revision, sodass du erkennst, ob du die Version hast, die ein Patch oder eine Anleitung verlangt."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.updateDesc"
 msgstr "Eine neue Version wurde im Hintergrund geladen. Zum Wechseln neu laden."
 
@@ -310,8 +330,18 @@ msgstr "Ein Patch funktioniert nur mit genau dem ROM, für das er erstellt wurde
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.about.applyBody2"
+msgstr "Ein Patch funktioniert nur mit genau der ROM, die sein Autor verwendet hat. BPS-Patches speichern die Prüfsumme dieser ROM, daher zeigt Prüfungen vor dem Anwenden, ob sie übereinstimmt. Eine Abweichung bedeutet meist eine falsche Region oder Revision, einen Header oder eine bereits gepatchte Kopie."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.routePatch"
 msgstr "Ein Patch, den dir jemand geschickt hat"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.ppfUndoBody1"
+msgstr "Ein PPF3-Patch kann die Originalbytes speichern, die er ersetzt. Dieses Werkzeug liest diese Undo-Daten und stellt die ROM so wieder her, wie sie vor dem Patch war."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -370,6 +400,11 @@ msgstr "Ein Weave ist eine Anleitung und beginnt daher mit dem ROM, das die Patc
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.about.weaveBody1"
+msgstr "Ein Weave bündelt mehrere ROM-Patches in einer ZIP- oder 7z-Datei, zusammen mit ihrer Reihenfolge und den Prüfsummen der ROM, die sie erwarten. Nutze es für eine Veröffentlichung, die mehr als einen Patch braucht."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.weaveProofDescription"
 msgstr "Ein Weave speichert die Eingabe-Prüfsumme, jeden Patch in Reihenfolge und die erwartete Ausgabe. Monate später kannst du zeigen, woher eine Datei kam, oder das Weave weitergeben, damit jemand dieselben Bytes erhält."
 
@@ -390,8 +425,73 @@ msgstr "Info zu {label}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.about.applyCheatsTitle"
+msgstr "Über das Anwenden von Cheats"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.createCheatsTitle"
+msgstr "Über Cheat-Patches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.compressTitle"
+msgstr "Über das Komprimieren von ROMs und Disc-Images"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.createTitle"
+msgstr "Über das Erstellen von ROM-Patches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.extractTitle"
+msgstr "Über das Extrahieren von CHD, RVZ und Archiven"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.playlistTitle"
+msgstr "Über M3U-Playlists"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.weaveTitle"
+msgstr "Über Patch-Weaves"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.status.about"
 msgstr "Über rom-weaver, seine Lizenz und seinen Datenschutz"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.checksumTitle"
+msgstr "Über den Prüfsummenrechner"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.applyTitle"
+msgstr "Über den Online-ROM-Patcher"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.testTitle"
+msgstr "Über den Online-ROM-Tester"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.identifyTitle"
+msgstr "Über den ROM-Identifizierer"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.trimTitle"
+msgstr "Über das Kürzen von ROMs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.ppfUndoTitle"
+msgstr "Über das Rückgängigmachen von PPF-Patches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -495,6 +595,11 @@ msgstr "Füge eine Original-ROM hinzu, um einen kombinierten Patch zu erstellen.
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.about.applyBody3"
+msgstr "Füge mehrere Patches hinzu, um sie der Reihe nach anzuwenden, oder füge unterstützte Cheats hinzu. Wähle eine unkomprimierte Datei oder eine komprimierte Ausgabe. Deine Original-ROM bleibt unverändert."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.applyCheatsDescription"
 msgstr "Füge unterstützte Cheat-Codes zu deinem ROM hinzu und lade das modifizierte Spiel herunter. Die Dateien bleiben auf deinem Gerät."
 
@@ -502,6 +607,21 @@ msgstr "Füge unterstützte Cheat-Codes zu deinem ROM hinzu und lade das modifiz
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.modified.title"
 msgstr "Das geänderte ROM hinzufügen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.playlistBody2"
+msgstr "Füge die Discs eines Spiels hinzu. Sie werden nach der Nummer im Namen geordnet, etwa Disc 1 oder .disc02; Track-Dateien wie .bin werden weggelassen."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.createCheatsBody2"
+msgstr "Füge die Original-ROM hinzu, wähle Codes aus der integrierten Liste oder gib eigene ein, und wähle ein Patch-Format wie BPS oder IPS. Andere Patches können zusammen mit den Cheats in denselben Patch."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.ppfUndoBody2"
+msgstr "Füge die gepatchte ROM und genau den PPF3-Patch hinzu, der sie verändert hat. Der Patch muss Undo-Daten enthalten. Dieses Werkzeug kann keine anderen Patches rückgängig machen und keine Bytes wiederherstellen, die der Patch nicht gespeichert hat."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -547,6 +667,11 @@ msgstr "Erweitert"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.openSourceDescription"
 msgstr "Unter AGPL-3.0 lizenziert. Lies den Code, baue ihn selbst oder hoste die Webapp auf deiner eigenen Domain."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.playlistBody1"
+msgstr "Eine .m3u-Playlist listet die Discs eines Spiels mit mehreren Discs der Reihe nach auf. Emulatoren wie RetroArch lesen sie, damit du die Disc wechseln kannst."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -610,6 +735,31 @@ msgstr "Anwenden und herunterladen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.applyBpsGuide"
+msgstr "BPS-Patch anwenden"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.applyUpsGuide"
+msgstr "UPS-Patch anwenden"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.applyIpsGuide"
+msgstr "IPS-Patch anwenden"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.applyBody1"
+msgstr "Wende einen IPS-, BPS-, UPS-, xdelta- oder PPF-Patch auf die ROM an, für die er erstellt wurde, und lade das gepatchte Spiel herunter. Du kannst ein ZIP-, 7z- oder RAR-Archiv hinzufügen, ohne es vorher zu entpacken."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.applyXdeltaGuide"
+msgstr "xdelta-Patch anwenden"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.validation.overrideChecksum"
 msgstr "Trotz abweichender Patch- und ROM-Prüfung anwenden"
 
@@ -635,11 +785,6 @@ msgstr "Cheat-Codes auf ROMs anwenden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.output.applyBlockedDcpPatch"
-msgstr "Anwenden ist durch den Dreamcast-DCP-Patch blockiert. Folge dem Hinweis auf seiner Karte."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.output.applyBlockedDamagedPatch"
 msgstr "Anwenden ist blockiert, weil die Patch-Datei beschädigt ist. Ersetze den Patch oder aktiviere „Trotz beschädigter Prüfsumme der Patch-Datei anwenden“, um ihn unverändert zu verwenden."
 
@@ -647,6 +792,11 @@ msgstr "Anwenden ist blockiert, weil die Patch-Datei beschädigt ist. Ersetze de
 #: src/presentation/localization/messages.ts
 msgid "ui.output.applyBlocked"
 msgstr "Anwenden ist durch eine fehlgeschlagene Patch-Prüfung blockiert. Korrigiere Patch oder ROM oder aktiviere „Trotz abweichender Patch- und ROM-Prüfung anwenden“, wo angeboten."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.output.applyBlockedDcpPatch"
+msgstr "Anwenden ist durch den Dreamcast-DCP-Patch blockiert. Folge dem Hinweis auf seiner Karte."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -845,6 +995,11 @@ msgstr "Blockgröße"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.guideBps"
+msgstr "BPS-Anleitung"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.status.branch"
 msgstr "Branch"
 
@@ -947,6 +1102,11 @@ msgstr "Prüfsummen für jede Datei."
 #: src/presentation/localization/messages.ts
 msgid "ui.docs.toolChecksum"
 msgstr "ROM-Prüfsummen berechnen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.checksumBody1"
+msgstr "Berechne die CRC32-, MD5- und SHA-1-Prüfsummen einer ROM oder einer beliebigen anderen Datei, und füge unter Optionen SHA-256 oder einen anderen Algorithmus hinzu."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1095,6 +1255,11 @@ msgstr "Cheats als Patch"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.about.applyCheatsBody3"
+msgstr "Cheats teilen sich die Patch-Reihenfolge mit allen IPS-, BPS- oder anderen Patches, die du hinzufügst. Um eine Reihe von Cheats als Datei zu teilen, erstelle stattdessen einen Patch aus Cheats."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.cheats.checkCode"
 msgstr "Code prüfen"
 
@@ -1180,6 +1345,16 @@ msgstr "Prüfsumme {timing}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.about.checksumBody3"
+msgstr "Prüfsumme berechnet auch die Dateien in einem Archiv. Um herauszufinden, zu welchem Spiel eine Prüfsumme gehört, nutze Identifizieren."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.guideChecksum"
+msgstr "Prüfsummen-Anleitung"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.checksumming"
 msgstr "Prüfsummen werden berechnet"
 
@@ -1237,6 +1412,11 @@ msgstr "Wähle oben ein System."
 #: src/presentation/localization/messages.ts
 msgid "ui.test.tutorial.chooseRom"
 msgstr "Anderes ROM wählen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.createBody2"
+msgstr "Wähle BPS, IPS, IPS32, UPS, xdelta, VCDIFF, PPF oder ein anderes unterstütztes Format. BPS speichert die Prüfsummen der Original- und der gepatchten ROM, sodass man erkennt, ob man die richtige Datei hat."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1420,6 +1600,11 @@ msgstr "Vergleich {value} gefunden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.about.createBody1"
+msgstr "Vergleiche eine saubere ROM mit deiner bearbeiteten Kopie und lade den Unterschied als kleinen Patch herunter. Teile den Patch statt des Spiels; jede Person wendet ihn auf ihr eigenes Original an."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.routeEditedBody"
 msgstr "Vergleiche es mit dem Original, um einen Patch zum Teilen zu erstellen."
 
@@ -1462,6 +1647,11 @@ msgstr "Komprimieren"
 #: src/presentation/localization/messages.ts
 msgid "ui.docs.toolCompress"
 msgstr "ROMs komprimieren und konvertieren"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.compressBody1"
+msgstr "Komprimiere ISO-, BIN/CUE- oder GDI-Disc-Images zu CHD, einem Format, das viele Emulatoren direkt lesen. Eine CD oder GD-ROM mit vielen Spuren wird zu einer einzigen, kleineren Datei."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1535,6 +1725,11 @@ msgstr "Steuert, ob die gepatchte Ausgabe den Kopier-Header des ROMs enthält."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.about.compressBody2"
+msgstr "Wandle GameCube- und Wii-ISO-Images in RVZ um, das komprimierte Format von Dolphin, und verpacke Nintendo-3DS-ROMs als Z3DS. ZIP und 7z eignen sich für beliebige Dateien."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.common.copy"
 msgstr "Kopieren"
 
@@ -1595,18 +1790,13 @@ msgstr "Das Beispiel konnte nicht geladen werden. Versuche es erneut."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "error.STORAGE_FULL"
-msgstr "Das Ergebnis konnte nicht gespeichert werden. Gib Speicherplatz frei oder wähle einen Ordner, in den der Browser schreiben kann."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "error.OUT_OF_MEMORY"
-msgstr "Es war nicht genug Arbeitsspeicher vorhanden, um den Vorgang abzuschließen."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "error.OUTPUT_WRITE_FAILED"
 msgstr "Das Ergebnis konnte nicht gespeichert werden. Wähle einen Ordner, in den der Browser schreiben darf."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.STORAGE_FULL"
+msgstr "Das Ergebnis konnte nicht gespeichert werden. Gib Speicherplatz frei oder wähle einen Ordner, in den der Browser schreiben kann."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1647,6 +1837,11 @@ msgstr "Erstelle einen separaten Patch für Codes mit einem anderen Code-Typ."
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.output.title"
 msgstr "Patch erstellen und herunterladen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.createBody3"
+msgstr "Erstellen kann auch eine geordnete Reihe von Patches und Cheats zu einem Patch für die saubere ROM zusammenfassen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1737,6 +1932,11 @@ msgstr "Dezimal (KB, MB, GB)"
 #: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.decode"
 msgstr "DEKODIEREN"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.extractBody1"
+msgstr "Entpacke ein CHD zu ISO für DVD-Spiele, zu BIN/CUE für CDs oder zu GDI mit seinen Spuren für Dreamcast-GD-ROMs. Wandle GameCube- und Wii-RVZ-Dateien wieder in ISO um."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1987,6 +2187,11 @@ msgstr "Gepatchte ROM herunterladen"
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.downloadRequested"
 msgstr "Download angefordert"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.playlistBody3"
+msgstr "Lade die Playlist herunter. In Chrome oder Edge auf einem Computer kannst du sie auch im Ordner des Spiels speichern und die Discs passend umbenennen. Es wird nichts hochgeladen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2280,6 +2485,11 @@ msgstr "Exportiert diese Sitzung als portables rom-weaver-Weave, das durch rom-w
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.about.extractBody2"
+msgstr "Dateien extrahieren öffnet auch ZIP, 7z und andere Archive sowie Nintendo-3DS-Dateien im Format Z3DS, ZCCI, ZCXI, ZCIA und Z3DSX. Lade eine Datei herunter oder mehrere als ein ZIP."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.docs.toolExtract"
 msgstr "ROMs extrahieren und konvertieren"
 
@@ -2395,6 +2605,16 @@ msgstr "Spiele (nach Name/Prüfsumme), Werkzeuge, Anleitungen oder Einstellungen
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.guideFixChecksum"
+msgstr "Prüfsummenfehler beheben"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.fixChecksumGuide"
+msgstr "Prüfsummenfehler beheben"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.fixOrder"
 msgstr "Reihenfolge korrigieren"
 
@@ -2457,6 +2677,11 @@ msgstr "Erste Schritte mit der CLI (öffnet in einem neuen Tab)"
 #: src/presentation/localization/messages.ts
 msgid "ui.tools.githubShort"
 msgstr "GitHub"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.weaveBody3"
+msgstr "Gib jedem Patch einen Namen, eine Beschreibung, eine Version und einen Autor, und füge Eingabe- oder Ausgabeprüfungen mit bekannten CRC32-, MD5-, SHA-1- oder Größenwerten hinzu."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2540,6 +2765,11 @@ msgstr "Eingabeverarbeitung"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.howItWorks"
+msgstr "So funktioniert's"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.drop.identified"
 msgstr "Identifiziert"
 
@@ -2565,8 +2795,18 @@ msgstr "Identifizieren"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.about.identifyBody1"
+msgstr "Identifiziere eine ROM anhand ihrer Prüfsumme. Füge eine Datei hinzu oder füge einen CRC32-, MD5- oder SHA-1-Wert ein, und rom-weaver sucht ihn in seiner lokalen ROM-Datenbank."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.identifyDescription"
 msgstr "Gleiche die Prüfsumme deiner ROM mit der lokalen Datenbank ab, um den genauen Dump-Namen zu finden."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.identifyBody3"
+msgstr "Identifizieren listet außerdem bekannte Cheats für ein gefundenes Spiel auf und kann die ROM direkt an Anwenden übergeben."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2700,6 +2940,11 @@ msgstr "Inventar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.guideIps"
+msgstr "IPS-Anleitung"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.faqFormatsAnswer"
 msgstr "IPS, BPS, UPS, xdelta, PPF und viele weitere, auch Patches in ZIP-, 7z- oder RAR-Archiven. Die Liste der unterstützten Formate oben zeigt alle."
 
@@ -2712,6 +2957,26 @@ msgstr "IPS, IPS32, SOLID, BPS, UPS, VCDIFF/xdelta, GDIFF, HDiffPatch, APS, APSG
 #: src/presentation/localization/messages.ts
 msgid "ui.home.faqFreeQuestion"
 msgstr "Ist rom-weaver kostenlos?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.guideToChd"
+msgstr "Anleitung: ISO zu CHD"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.compressChdGuide"
+msgstr "Anleitung: ISO zu CHD"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.guideToRvz"
+msgstr "Anleitung: ISO zu RVZ"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.compressRvzGuide"
+msgstr "Anleitung: ISO zu RVZ"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2770,6 +3035,11 @@ msgstr "Getestete ROMs auf diesem Gerät behalten"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.about.trimBody2"
+msgstr "Behalte das Original für künftige Patches. Kürzen kann eine gekürzte ROM auch wieder auf die volle Größe auffüllen."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.drop.noteStayRomOnly"
 msgstr "Die ROMs hier behalten. Die Patches werden ignoriert."
 
@@ -2825,6 +3095,11 @@ msgstr "Anleitung verlassen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.about.weaveBody2"
+msgstr "Lass die ROM bei einer reinen Patch-Veröffentlichung weg, damit jede Person ihre eigene Kopie verwendet. Füge die ROM nur hinzu, wenn du sie weitergeben darfst, etwa dein eigenes Homebrew."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.bulkSelectionUnchanged"
 msgstr "Unverändert lassen"
 
@@ -2852,6 +3127,11 @@ msgstr "Lizenzen"
 #: src/presentation/localization/messages.ts
 msgid "ui.theme.light"
 msgstr "Hell"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.playlistDescription"
+msgstr "Liste alle Discs eines Spiels mit mehreren Discs in einer .m3u-Playlist auf, damit ein Emulator die Disc wechseln kann."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2925,6 +3205,11 @@ msgstr "{label} um {step} verringern"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.playlistThesis"
+msgstr "Erstelle eine Disc-Playlist."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tutorial.tryCreate"
 msgstr "Patch bauen"
 
@@ -2937,6 +3222,11 @@ msgstr "Aus diesen ROMs einen Patch erstellen?"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.bulkSelectionOptional"
 msgstr "Alle optional machen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.docs.toolPlaylist"
+msgstr "Disc-Playlists erstellen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3135,6 +3425,11 @@ msgstr "Namen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.routesMoreBefore"
+msgstr "Ungenutztes Padding entfernen oder einen PPF3-Patch rückgängig machen? Öffne"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.drop.info.nested"
 msgstr "Verschachtelte Archive werden dekomprimiert; ROMs und Patches werden automatisch gefunden."
 
@@ -3167,6 +3462,11 @@ msgstr "Nightly-Build"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.ninjaUnsupported"
 msgstr "NINJA1-Header werden erkannt, aber NINJA1-Patches können nicht angewendet werden."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.trimBody1"
+msgstr "Dumps von Nintendo DS, Game Boy Advance und Nintendo 3DS sowie Xbox-XISO-Images enthalten oft ungenutzte Fülldaten. Kürzen entfernt sie und lädt eine kleinere Kopie herunter."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3460,246 +3760,6 @@ msgstr "Patche ROMs in deinem Browser."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.about.testBody3"
-msgstr "Dass ein Spiel startet, beweist nicht, dass es genau die ROM ist, die ein Patch braucht; nutze dafür Prüfsumme oder Identifizieren. Spiele für GameCube, Wii, Nintendo 3DS, Dreamcast und PlayStation 2 brauchen einen Emulator für diese Plattform."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.identifyBody2"
-msgstr "Ein Treffer zeigt den erfassten Spielnamen, die Region und die Revision, sodass du erkennst, ob du die Version hast, die ein Patch oder eine Anleitung verlangt."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.applyBody2"
-msgstr "Ein Patch funktioniert nur mit genau der ROM, die sein Autor verwendet hat. BPS-Patches speichern die Prüfsumme dieser ROM, daher zeigt Prüfungen vor dem Anwenden, ob sie übereinstimmt. Eine Abweichung bedeutet meist eine falsche Region oder Revision, einen Header oder eine bereits gepatchte Kopie."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.ppfUndoBody1"
-msgstr "Ein PPF3-Patch kann die Originalbytes speichern, die er ersetzt. Dieses Werkzeug liest diese Undo-Daten und stellt die ROM so wieder her, wie sie vor dem Patch war."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.weaveBody1"
-msgstr "Ein Weave bündelt mehrere ROM-Patches in einer ZIP- oder 7z-Datei, zusammen mit ihrer Reihenfolge und den Prüfsummen der ROM, die sie erwarten. Nutze es für eine Veröffentlichung, die mehr als einen Patch braucht."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.applyCheatsTitle"
-msgstr "Über das Anwenden von Cheats"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.createCheatsTitle"
-msgstr "Über Cheat-Patches"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.compressTitle"
-msgstr "Über das Komprimieren von ROMs und Disc-Images"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.createTitle"
-msgstr "Über das Erstellen von ROM-Patches"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.extractTitle"
-msgstr "Über das Extrahieren von CHD, RVZ und Archiven"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.weaveTitle"
-msgstr "Über Patch-Weaves"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.checksumTitle"
-msgstr "Über den Prüfsummenrechner"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.applyTitle"
-msgstr "Über den Online-ROM-Patcher"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.testTitle"
-msgstr "Über den Online-ROM-Tester"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.identifyTitle"
-msgstr "Über den ROM-Identifizierer"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.trimTitle"
-msgstr "Über das Kürzen von ROMs"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.ppfUndoTitle"
-msgstr "Über das Rückgängigmachen von PPF-Patches"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.applyBody3"
-msgstr "Füge mehrere Patches hinzu, um sie der Reihe nach anzuwenden, oder füge unterstützte Cheats hinzu. Wähle eine unkomprimierte Datei oder eine komprimierte Ausgabe. Deine Original-ROM bleibt unverändert."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.createCheatsBody2"
-msgstr "Füge die Original-ROM hinzu, wähle Codes aus der integrierten Liste oder gib eigene ein, und wähle ein Patch-Format wie BPS oder IPS. Andere Patches können zusammen mit den Cheats in denselben Patch."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.ppfUndoBody2"
-msgstr "Füge die gepatchte ROM und genau den PPF3-Patch hinzu, der sie verändert hat. Der Patch muss Undo-Daten enthalten. Dieses Werkzeug kann keine anderen Patches rückgängig machen und keine Bytes wiederherstellen, die der Patch nicht gespeichert hat."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.applyBody1"
-msgstr "Wende einen IPS-, BPS-, UPS-, xdelta- oder PPF-Patch auf die ROM an, für die er erstellt wurde, und lade das gepatchte Spiel herunter. Du kannst ein ZIP-, 7z- oder RAR-Archiv hinzufügen, ohne es vorher zu entpacken."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.checksumBody1"
-msgstr "Berechne die CRC32-, MD5- und SHA-1-Prüfsummen einer ROM oder einer beliebigen anderen Datei, und füge unter Optionen SHA-256 oder einen anderen Algorithmus hinzu."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.applyCheatsBody3"
-msgstr "Cheats teilen sich die Patch-Reihenfolge mit allen IPS-, BPS- oder anderen Patches, die du hinzufügst. Um eine Reihe von Cheats als Datei zu teilen, erstelle stattdessen einen Patch aus Cheats."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.checksumBody3"
-msgstr "Prüfsumme berechnet auch die Dateien in einem Archiv. Um herauszufinden, zu welchem Spiel eine Prüfsumme gehört, nutze Identifizieren."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.createBody2"
-msgstr "Wähle BPS, IPS, IPS32, UPS, xdelta, VCDIFF, PPF oder ein anderes unterstütztes Format. BPS speichert die Prüfsummen der Original- und der gepatchten ROM, sodass man erkennt, ob man die richtige Datei hat."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.createBody1"
-msgstr "Vergleiche eine saubere ROM mit deiner bearbeiteten Kopie und lade den Unterschied als kleinen Patch herunter. Teile den Patch statt des Spiels; jede Person wendet ihn auf ihr eigenes Original an."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.compressBody1"
-msgstr "Komprimiere ISO-, BIN/CUE- oder GDI-Disc-Images zu CHD, einem Format, das viele Emulatoren direkt lesen. Eine CD oder GD-ROM mit vielen Spuren wird zu einer einzigen, kleineren Datei."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.compressBody2"
-msgstr "Wandle GameCube- und Wii-ISO-Images in RVZ um, das komprimierte Format von Dolphin, und verpacke Nintendo-3DS-ROMs als Z3DS. ZIP und 7z eignen sich für beliebige Dateien."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.createBody3"
-msgstr "Erstellen kann auch eine geordnete Reihe von Patches und Cheats zu einem Patch für die saubere ROM zusammenfassen."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.extractBody1"
-msgstr "Entpacke ein CHD zu ISO für DVD-Spiele, zu BIN/CUE für CDs oder zu GDI mit seinen Spuren für Dreamcast-GD-ROMs. Wandle GameCube- und Wii-RVZ-Dateien wieder in ISO um."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.extractBody2"
-msgstr "Dateien extrahieren öffnet auch ZIP, 7z und andere Archive sowie Nintendo-3DS-Dateien im Format Z3DS, ZCCI, ZCXI, ZCIA und Z3DSX. Lade eine Datei herunter oder mehrere als ein ZIP."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.weaveBody3"
-msgstr "Gib jedem Patch einen Namen, eine Beschreibung, eine Version und einen Autor, und füge Eingabe- oder Ausgabeprüfungen mit bekannten CRC32-, MD5-, SHA-1- oder Größenwerten hinzu."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.identifyBody1"
-msgstr "Identifiziere eine ROM anhand ihrer Prüfsumme. Füge eine Datei hinzu oder füge einen CRC32-, MD5- oder SHA-1-Wert ein, und rom-weaver sucht ihn in seiner lokalen ROM-Datenbank."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.identifyBody3"
-msgstr "Identifizieren listet außerdem bekannte Cheats für ein gefundenes Spiel auf und kann die ROM direkt an Anwenden übergeben."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.trimBody2"
-msgstr "Behalte das Original für künftige Patches. Kürzen kann eine gekürzte ROM auch wieder auf die volle Größe auffüllen."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.weaveBody2"
-msgstr "Lass die ROM bei einer reinen Patch-Veröffentlichung weg, damit jede Person ihre eigene Kopie verwendet. Füge die ROM nur hinzu, wenn du sie weitergeben darfst, etwa dein eigenes Homebrew."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.trimBody1"
-msgstr "Dumps von Nintendo DS, Game Boy Advance und Nintendo 3DS sowie Xbox-XISO-Images enthalten oft ungenutzte Fülldaten. Kürzen entfernt sie und lädt eine kleinere Kopie herunter."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.testBody2"
-msgstr "Öffne eine ROM-, ZIP- oder 7z-Datei oder schicke ein gepatchtes Ergebnis direkt aus Anwenden. Spielstände bleiben in deinem Browser, und du kannst sie exportieren und wiederherstellen."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.compressBody3"
-msgstr "Öffne Optionen, um den Codec oder die Komprimierungsstufe zu ändern. Um CHD oder RVZ wieder in ISO umzuwandeln, nutze Dateien extrahieren."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.checksumBody2"
-msgstr "Füge einen erwarteten Wert ein, um ihn mit dem Ergebnis zu vergleichen. Patch-Autoren und ROM-Datenbanken veröffentlichen Prüfsummen, daher bestätigt eine Übereinstimmung, dass du genau die beschriebene Datei hast."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.applyCheatsBody2"
-msgstr "Wähle Codes aus der integrierten Liste oder gib eigene ein. rom-weaver erkennt System und Codetyp, und du kannst beides überschreiben, zum Beispiel um die genaue GameShark- oder Action-Replay-Version eines Game-Boy-Advance-Codes zu wählen."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.testBody1"
-msgstr "Spiele eine ROM mit EmulatorJS im Browser, um zu prüfen, ob ein Spiel oder ein neuer Patch funktioniert. Testen unterstützt Spiele für NES, SNES, Game Boy, Game Boy Advance, Nintendo 64, Nintendo DS, PlayStation und weitere Systeme."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.ppfUndoBody3"
-msgstr "PPF-Patches sind bei PlayStation-Spielen verbreitet. Prüfe die wiederhergestellte Kopie mit einer bekannten Prüfsumme, bevor du sie erneut patchst."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.createCheatsBody3"
-msgstr "Teile den kleinen Patch statt der ROM. Um deine eigene Kopie sofort zu ändern, wende die Cheats stattdessen direkt an."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.trimBody3"
-msgstr "Der Download ist standardmäßig ZIP für DS- und GBA-ROMs und Z3DS für 3DS-ROMs. GameCube- und Wii-Discs lassen sich nicht kürzen; wandle sie stattdessen mit Komprimieren in RVZ um."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.createCheatsBody1"
-msgstr "Mach aus unterstützten Cheats eine Patch-Datei. Beim Anwenden schreibt der Patch die Codes in die ROM, daher braucht das Spiel keine Cheat-Engine."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.extractBody3"
-msgstr "Nutze es, wenn ein Emulator, ein Disc-Werkzeug oder ein Patch das unkomprimierte Image braucht. Zum Komprimieren nutze Komprimieren."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.applyCheatsBody1"
-msgstr "Schreibe unterstützte Cheats in eine Kopie deiner ROM und lade sie herunter. Die Änderungen sind Teil der Spieldatei, daher braucht das Spiel keine Cheat-Engine."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.weaveExport.romDistributionWarning"
 msgstr "Schließe eine ROM nur ein, wenn du sie vertreiben darfst. Das Teilen urheberrechtlich geschützter ROMs kann illegal sein."
 
@@ -3722,6 +3782,11 @@ msgstr "Öffnen"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.openFlow"
 msgstr "{flow} öffnen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.testBody2"
+msgstr "Öffne eine ROM-, ZIP- oder 7z-Datei oder schicke ein gepatchtes Ergebnis direkt aus Anwenden. Spielstände bleiben in deinem Browser, und du kannst sie exportieren und wiederherstellen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3752,6 +3817,11 @@ msgstr "Öffne Komprimieren, füge das ISO-, BIN/CUE- oder GDI-Abbild hinzu und 
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.emulator.openTest"
 msgstr "Im Test-Tab öffnen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.compressBody3"
+msgstr "Öffne Optionen, um den Codec oder die Komprimierungsstufe zu ändern. Um CHD oder RVZ wieder in ISO umzuwandeln, nutze Dateien extrahieren."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3817,6 +3887,11 @@ msgstr "Optionen"
 #: src/presentation/localization/messages.ts
 msgid "ui.create.outputHelp"
 msgstr "Unter Optionen → Typ legst du den Download fest: Keine liefert die reine Patch-Datei, ZIP oder 7z packt sie in ein Archiv. Neue Einstellungen starten mit Keine."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.routesMoreOr"
+msgstr "oder"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3975,6 +4050,11 @@ msgstr "Teilweise wiederherstellbar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.about.checksumBody2"
+msgstr "Füge einen erwarteten Wert ein, um ihn mit dem Ergebnis zu vergleichen. Patch-Autoren und ROM-Datenbanken veröffentlichen Prüfsummen, daher bestätigt eine Übereinstimmung, dass du genau die beschriebene Datei hast."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.validation.conflictingChecksum"
 msgstr "Patch {index}, {side} {algorithm}, steht im Konflikt mit der im Patch enthaltenen Prüfsumme"
 
@@ -4060,13 +4140,28 @@ msgstr "Patch-Format"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.patchGcWiiGuide"
+msgstr "GameCube- und Wii-Spiele patchen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.drop.routeRomBody"
 msgstr "Patche es oder spiele es so, wie es ist."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.patch3dsGuide"
+msgstr "Nintendo-3DS-ROMs patchen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.position"
 msgstr "Patch-Position"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.patchPs2Guide"
+msgstr "PS2-Spiele patchen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4190,6 +4285,11 @@ msgstr "Wähle einen Workflow"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.about.applyCheatsBody2"
+msgstr "Wähle Codes aus der integrierten Liste oder gib eigene ein. rom-weaver erkennt System und Codetyp, und du kannst beides überschreiben, zum Beispiel um die genaue GameShark- oder Action-Replay-Version eines Game-Boy-Advance-Codes zu wählen."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.pickCheats"
 msgstr "Aus der Cheat-Datenbank wählen"
 
@@ -4230,6 +4330,11 @@ msgstr "Spiele eine ROM im Test oder importiere einen rom-weaver-Spielstand."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.about.testBody1"
+msgstr "Spiele eine ROM mit EmulatorJS im Browser, um zu prüfen, ob ein Spiel oder ein neuer Patch funktioniert. Testen unterstützt Spiele für NES, SNES, Game Boy, Game Boy Advance, Nintendo 64, Nintendo DS, PlayStation und weitere Systeme."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.test.tutorial.play.title"
 msgstr "Spiel es"
 
@@ -4262,6 +4367,16 @@ msgstr "Mögliche Treffer"
 #: src/presentation/localization/messages.ts
 msgid "ui.saves.editor.potentialFormat"
 msgstr "Mögliches Format: {name}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.ppfUndoBody3"
+msgstr "PPF-Patches sind bei PlayStation-Spielen verbreitet. Prüfe die wiederhergestellte Kopie mit einer bekannten Prüfsumme, bevor du sie erneut patchst."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.goPpfUndo"
+msgstr "PPF rückgängig"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4430,6 +4545,11 @@ msgstr "Lies die Anleitung für Cheat-Codes"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.checksumGuide"
+msgstr "Lies die Prüfsummen-Anleitung"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.compressGuide"
 msgstr "Lies die Compress-Anleitung"
 
@@ -4540,6 +4660,11 @@ msgstr "Vorabprüfung bestanden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patch.preflightPassedUncompared"
+msgstr "Vorabprüfung bestanden, nichts verglichen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.routeDiscBody"
 msgstr "Komprimiere ein Disc-Image in ein anderes Format neu oder extrahiere eine CHD als ISO oder BIN/CUE."
 
@@ -4582,11 +4707,6 @@ msgstr "Entfernen"
 #: src/presentation/localization/messages.ts
 msgid "ui.common.remove"
 msgstr "Entfernen"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patch.preflightPassedUncompared"
-msgstr "Vorabprüfung bestanden, nichts verglichen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4755,11 +4875,6 @@ msgstr "Ressourcen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.playlistDescription"
-msgstr "Liste alle Discs eines Spiels mit mehreren Discs in einer .m3u-Playlist auf, damit ein Emulator die Disc wechseln kann."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.hero.toolsDescription"
 msgstr "Stelle die Original-ROM mit einem PPF3-Patch wieder her, der Undo-Daten enthält."
 
@@ -4840,21 +4955,6 @@ msgstr "Der gewählte Quelltyp wird nicht unterstützt."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patch.preflightApplied"
-msgstr "Der Patch lässt sich anwenden, hat aber keine Prüfsumme zum Vergleichen."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patch.preflightCompared"
-msgstr "Die Quell-Prüfsumme des Patches wurde verglichen und stimmt."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patch.preflightMatched"
-msgstr "Die Eingabe entspricht dem, wofür dieser Patch erstellt wurde."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.saves.editor.noDocument"
 msgstr "Die Prüfung des Spielstands hat kein Dokument geliefert."
 
@@ -4932,11 +5032,6 @@ msgstr "RVZ-Codec"
 #: src/presentation/localization/messages.ts
 msgid "ui.compress.rvzNeedsDisc"
 msgstr "RVZ speichert nur GameCube- und Wii-Disc-Abbilder, und {name} ist keines. Wähle ein anderes Ausgabeformat."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.compress.z3dsNeeds3ds"
-msgstr "Z3DS speichert nur Nintendo-3DS-Dateien, und {name} ist keine. Wähle ein anderes Ausgabeformat."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5027,6 +5122,16 @@ msgstr "Suche nach einem Spielnamen oder einer Prüfsumme oder drücke Weiter, u
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.searchAgain"
 msgstr "Erneut suchen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.guideSearchChecksum"
+msgstr "Nach Prüfsumme suchen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.searchChecksumGuide"
+msgstr "Nach Prüfsumme suchen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5147,6 +5252,11 @@ msgstr "Patches bündeln."
 #: src/presentation/localization/messages.ts
 msgid "ui.tutorial.tryWeave"
 msgstr "Bündeln"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.createCheatsBody3"
+msgstr "Teile den kleinen Patch statt der ROM. Um deine eigene Kopie sofort zu ändern, wende die Cheats stattdessen direkt an."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5342,11 +5452,6 @@ msgstr "Jedes Format, das dir begegnet"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.supportedFormats"
 msgstr "Unterstützte Formate"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.howItWorks"
-msgstr "So funktioniert's"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5575,6 +5680,11 @@ msgstr "Der kombinierte Patch ist in diesem Browser nicht verfügbar."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.about.trimBody3"
+msgstr "Der Download ist standardmäßig ZIP für DS- und GBA-ROMs und Z3DS für 3DS-ROMs. GameCube- und Wii-Discs lassen sich nicht kürzen; wandle sie stattdessen mit Komprimieren in RVZ um."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.saves.editor.rawDataMissing"
 msgstr "Der bearbeitete Spielstand enthält die erwarteten rohen Spieldaten nicht mehr."
 
@@ -5635,6 +5745,16 @@ msgstr "Die Identifikationsdaten sind auf diesem Gerät nicht verfügbar, daher 
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patch.preflightMatchedReverse"
+msgstr "Die Eingabe entspricht dem, was dieser Patch erzeugt."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.preflightMatched"
+msgstr "Die Eingabe entspricht dem, wofür dieser Patch erstellt wurde."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.before"
 msgstr "Der Name endet auf"
 
@@ -5660,13 +5780,13 @@ msgstr "Die Ausgabe-Endung folgt der Auswahl: {headeredExtension} mit Header, {h
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patch.preflightMatchedReverse"
-msgstr "Die Eingabe entspricht dem, was dieser Patch erzeugt."
+msgid "ui.patch.preflightOutputPending"
+msgstr "Die Ausgabe wurde noch nicht erstellt."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patch.preflightOutputPending"
-msgstr "Die Ausgabe wurde noch nicht erstellt."
+msgid "ui.patch.preflightApplied"
+msgstr "Der Patch lässt sich anwenden, hat aber keine Prüfsumme zum Vergleichen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5685,13 +5805,13 @@ msgstr "Die Patch-Datei ist beschädigt (ihre Prüfsumme ist ungültig). Besorge
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "error.NOT_3DS_INPUT"
-msgstr "Z3DS speichert nur Nintendo-3DS-Dateien, und die Eingabe ist keine. Wähle ein anderes Ausgabeformat."
+msgid "ui.patch.validationCorruptHint"
+msgstr "Die Patch-Datei ist beschädigt. Besorge eine neue Kopie und ersetze diesen Patch. Die ROM wurde damit ebenfalls nicht geprüft."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patch.validationCorruptHint"
-msgstr "Die Patch-Datei ist beschädigt. Besorge eine neue Kopie und ersetze diesen Patch. Die ROM wurde damit ebenfalls nicht geprüft."
+msgid "ui.patch.preflightCompared"
+msgstr "Die Quell-Prüfsumme des Patches wurde verglichen und stimmt."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5782,6 +5902,11 @@ msgstr "Design und Akzentfarbe werden sofort angewendet. Andere Einstellungen we
 #: src/presentation/localization/messages.ts
 msgid "ui.home.trustTitle"
 msgstr "Es gibt keinen Server, an den deine Dateien gehen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.OUT_OF_MEMORY"
+msgstr "Es war nicht genug Arbeitsspeicher vorhanden, um den Vorgang abzuschließen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5965,13 +6090,13 @@ msgstr "Kürzen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.docs.toolTrim"
-msgstr "ROMs kürzen"
+msgid "ui.home.goTrim"
+msgstr "ROMs trimmen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.docs.toolPlaylist"
-msgstr "Disc-Playlists erstellen"
+msgid "ui.docs.toolTrim"
+msgstr "ROMs kürzen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5997,6 +6122,11 @@ msgstr "Probier es aus"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.bulkSelectionAll"
 msgstr "Alle einschalten"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.createCheatsBody1"
+msgstr "Mach aus unterstützten Cheats eine Patch-Datei. Beim Anwenden schreibt der Patch die Codes in die ROM, daher braucht das Spiel keine Cheat-Engine."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -6027,11 +6157,6 @@ msgstr "Codes eingeben"
 #: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.unchanged"
 msgstr "Unverändert"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.playlistThesis"
-msgstr "Erstelle eine Disc-Playlist."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -6100,6 +6225,11 @@ msgstr "Auf v{version} aktualisiert"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.guideUps"
+msgstr "UPS-Anleitung"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.combinedPatch.romChoice.modified"
 msgstr "Als geänderte ROM verwenden"
 
@@ -6117,6 +6247,11 @@ msgstr "Doppelte ROMs verwenden"
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.duplicateTitle"
 msgstr "Doppelte ROMs verwenden?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.about.extractBody3"
+msgstr "Nutze es, wenn ein Emulator, ein Disc-Werkzeug oder ein Patch das unkomprimierte Image braucht. Zum Komprimieren nutze Komprimieren."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -6390,6 +6525,11 @@ msgstr "Schreibvorgang"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.about.applyCheatsBody1"
+msgstr "Schreibe unterstützte Cheats in eine Kopie deiner ROM und lade sie herunter. Die Änderungen sind Teil der Spieldatei, daher braucht das Spiel keine Cheat-Engine."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.routeCheatsBody"
 msgstr "Schreibe unterstützte Codes ins ROM, damit sie in jedem Emulator funktionieren."
 
@@ -6402,6 +6542,11 @@ msgstr "schreibt"
 #: src/presentation/localization/messages.ts
 msgid "ui.cheats.delivery.rom"
 msgstr "In die Ausgabe eingebettet"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.guideXdelta"
+msgstr "xdelta-Anleitung"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -6480,6 +6625,26 @@ msgstr "deiner Suche"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.compress.z3dsNeeds3ds"
+msgstr "Z3DS speichert nur Nintendo-3DS-Dateien, und {name} ist keine. Wähle ein anderes Ausgabeformat."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "error.NOT_3DS_INPUT"
+msgstr "Z3DS speichert nur Nintendo-3DS-Dateien, und die Eingabe ist keine. Wähle ein anderes Ausgabeformat."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.guideExtractZ3ds"
+msgstr "Anleitung: Z3DS zu 3DS"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.extractZ3dsGuide"
+msgstr "Anleitung: Z3DS zu 3DS"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.settings.zipCodec"
 msgstr "ZIP"
 
@@ -6492,23 +6657,3 @@ msgstr "ZIP-Codec"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.archives"
 msgstr "ZIP, 7z und Weaves"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.playlistTitle"
-msgstr "Über M3U-Playlists"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.playlistBody1"
-msgstr "Eine .m3u-Playlist listet die Discs eines Spiels mit mehreren Discs der Reihe nach auf. Emulatoren wie RetroArch lesen sie, damit du die Disc wechseln kannst."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.playlistBody2"
-msgstr "Füge die Discs eines Spiels hinzu. Sie werden nach der Nummer im Namen geordnet, etwa Disc 1 oder .disc02; Track-Dateien wie .bin werden weggelassen."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.about.playlistBody3"
-msgstr "Lade die Playlist herunter. In Chrome oder Edge auf einem Computer kannst du sie auch im Ordner des Spiels speichern und die Discs passend umbenennen. Es wird nichts hochgeladen."

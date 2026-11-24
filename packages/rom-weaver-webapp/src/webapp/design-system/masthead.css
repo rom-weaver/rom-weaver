@@ -365,9 +365,6 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
-.rw-app .nav-row[hidden] {
-  display: none;
-}
 .rw-app .nav-row {
   display: flex;
   gap: 10px;

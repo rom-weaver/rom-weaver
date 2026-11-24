@@ -27,10 +27,23 @@ const readStructuredData = (html: string) => {
   return JSON.parse(html.slice(start, html.indexOf("</script>", start)));
 };
 
+const findGraphEntity = (html: string, type: string) =>
+  readStructuredData(html)["@graph"].find((entry: { "@type": string }) => entry["@type"] === type);
+
 describe("createDocsRouteHtml", () => {
-  it("stamps the route's structured data into the shell", () => {
+  it("stamps the route's article and breadcrumb structured data into the shell", () => {
     const html = createDocsRouteHtml(SHELL, route(), "prod", "");
-    expect(readStructuredData(html)).toMatchObject({ "@type": "TechArticle", headline: "FAQ" });
+    expect(findGraphEntity(html, "TechArticle")).toMatchObject({ "@type": "TechArticle", headline: "FAQ" });
+    expect(findGraphEntity(html, "BreadcrumbList")).toEqual({
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", item: "https://rom-weaver.com/", name: "rom-weaver", position: 1 },
+        { "@type": "ListItem", item: "https://rom-weaver.com/docs", name: "Documentation", position: 2 },
+        { "@type": "ListItem", item: "https://rom-weaver.com/docs/faq", name: "FAQ", position: 3 },
+      ],
+    });
+    const hubHtml = createDocsRouteHtml(SHELL, route({ slug: "docs", title: "Documentation" }), "prod", "");
+    expect(findGraphEntity(hubHtml, "BreadcrumbList").itemListElement).toHaveLength(2);
   });
 
   it("points the Markdown alternate at the app root through the page base", () => {
@@ -40,8 +53,8 @@ describe("createDocsRouteHtml", () => {
 
   it("dates the page only when its last change is known", () => {
     const dated = createDocsRouteHtml(SHELL, route(), "prod", "", "2026-10-01T12:00:00.000Z");
-    expect(readStructuredData(dated).dateModified).toBe("2026-10-01T12:00:00.000Z");
-    expect(readStructuredData(createDocsRouteHtml(SHELL, route(), "prod", "", null))).not.toHaveProperty(
+    expect(findGraphEntity(dated, "TechArticle").dateModified).toBe("2026-10-01T12:00:00.000Z");
+    expect(findGraphEntity(createDocsRouteHtml(SHELL, route(), "prod", "", null), "TechArticle")).not.toHaveProperty(
       "dateModified",
     );
   });
@@ -50,7 +63,7 @@ describe("createDocsRouteHtml", () => {
     const title = "FAQ</script><script>alert(1)</script>";
     const html = createDocsRouteHtml(SHELL, route({ title }), "prod", "");
     expect(html).not.toContain("<script>alert(1)</script>");
-    expect(readStructuredData(html).headline).toBe(title);
+    expect(findGraphEntity(html, "TechArticle").headline).toBe(title);
   });
 });
 

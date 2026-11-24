@@ -199,7 +199,7 @@ const DocsNav = ({
         open={openShelves[shelf.title]}
       >
         <summary>
-          <h3 className="guide-shelf-title">{shelf.title}</h3>
+          <span className="guide-shelf-title">{shelf.title}</span>
           <span className="guide-shelf-count">{routes.length}</span>
         </summary>
         <ul className="guide-nav-list">
@@ -228,14 +228,14 @@ const DocsNav = ({
           </li>
         ))}
       </ul>
-      <h2 className="guide-group" id="docs-rail-task-label">
+      <p className="guide-group" id="docs-rail-task-label">
         Task guides
-      </h2>
+      </p>
       <AudienceSwitch audience={audience} labelId="docs-rail-task-label" onChange={onAudienceChange} />
       {TASK_SHELVES.map(renderShelf)}
-      <h2 className="guide-group">Look things up</h2>
+      <p className="guide-group">Look things up</p>
       {LOOKUP_SHELVES.map(renderShelf)}
-      <h2 className="guide-group">About the project</h2>
+      <p className="guide-group">About the project</p>
       {PROJECT_SHELVES.map(renderShelf)}
     </nav>
   );
@@ -330,8 +330,10 @@ const DocsDrawerNav = ({
             <ChevronLeft aria-hidden="true" />
             All docs
           </button>
-          <h2>{shelf.title}</h2>
-          <p>{isTask ? `${routes.length} ${AUDIENCE_NAMES[audience]} ${noun}` : `${routes.length} pages`}</p>
+          <p className="docs-drawer-title">{shelf.title}</p>
+          <p className="docs-drawer-subtitle">
+            {isTask ? `${routes.length} ${AUDIENCE_NAMES[audience]} ${noun}` : `${routes.length} pages`}
+          </p>
         </div>
         <ul className="docs-drawer-pages">
           {routes.map((route) => (
@@ -366,12 +368,14 @@ const DocsDrawerNav = ({
   return (
     <div className="docs-drawer-level">
       <div className="docs-drawer-group">
-        <h2 id="docs-drawer-task-label">Task guides</h2>
+        <p className="docs-drawer-group-title" id="docs-drawer-task-label">
+          Task guides
+        </p>
         <AudienceSwitch audience={audience} labelId="docs-drawer-task-label" onChange={setAudience} />
       </div>
       <ul className="docs-rows">{rows(TASK_SHELVES)}</ul>
       <div className="docs-drawer-group">
-        <h2>Look things up</h2>
+        <p className="docs-drawer-group-title">Look things up</p>
       </div>
       <ul className="docs-rows">
         {START_SHELF?.routes.map((route) => (
@@ -391,7 +395,7 @@ const DocsDrawerNav = ({
         {rows(LOOKUP_SHELVES)}
       </ul>
       <div className="docs-drawer-group">
-        <h2>About the project</h2>
+        <p className="docs-drawer-group-title">About the project</p>
       </div>
       <ul className="docs-rows">{rows(PROJECT_SHELVES)}</ul>
     </div>

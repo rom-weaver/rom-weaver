@@ -318,6 +318,8 @@ if (functionRoutes.include.length + functionRoutes.exclude.length > 100)
 for (const { path: routePath, markdownPath } of MARKDOWN_ROUTES) {
   if (!routesThroughFunctions(routePath))
     throw new Error(`Markdown negotiation is not routed through Functions: ${routePath}`);
+  if (routePath !== "/" && !routesThroughFunctions(`${routePath}/`))
+    throw new Error(`Trailing-slash canonicalization is not routed through Functions: ${routePath}/`);
   if (routesThroughFunctions(markdownPath))
     throw new Error(`Direct Markdown unnecessarily invokes Functions: ${markdownPath}`);
 }
@@ -459,9 +461,30 @@ if ((homeHtml.match(/<h1\b/g) || []).length !== 1) throw new Error("the home pag
 assertIncludes(homeHtml, 'class="btn ghost slim home-route-go" href="/apply-rom-patches"', "home Apply action");
 assertIncludes(homeHtml, 'id="home-file-input"', "home drop zone picker");
 assertIncludes(homeHtml, 'href="/create-rom-patch"', "home Create card");
+assertIncludes(homeHtml, 'href="/apply-cheats"', "home Cheats card");
+assertIncludes(homeHtml, 'href="/trim-rom"', "home Trim link");
+assertIncludes(homeHtml, 'href="/ppf-undo"', "home PPF undo link");
 assertIncludes(homeHtml, 'href="/docs/features"', "home feature reference link");
+assertIncludes(homeHtml, 'href="/docs/apply-bps-patch"', "home BPS patch guide link");
+assertIncludes(homeHtml, 'href="/docs/fix-checksum-errors"', "home checksum troubleshooting link");
 assertIncludes(homeHtml, 'href="/docs/extract-chd"', "home CHD to ISO guide link");
+assertIncludes(homeHtml, 'href="/docs/convert-to-chd"', "home ISO to CHD guide link");
 assertIncludes(homeHtml, 'href="/docs/convert-rvz-to-iso"', "home RVZ to ISO guide link");
+assertIncludes(homeHtml, 'href="/docs/convert-to-rvz"', "home ISO to RVZ guide link");
+assertIncludes(homeHtml, 'href="/docs/extract-z3ds"', "home Z3DS extract guide link");
+assertIncludes(homeHtml, 'href="/docs/convert-to-z3ds"', "home Z3DS compress guide link");
+assertIncludes(homeHtml, 'href="/docs/search-rom-checksums"', "home checksum search guide link");
+assertIncludes(homeHtml, 'href="/docs/checksum-roms-browser"', "home checksum guide link");
+for (const [label, html] of [
+  ["home", homeHtml],
+  ["apply", applyHtml],
+  ["docs", read("docs.html")],
+]) {
+  assertExcludes(html, 'href="/create-m3u-playlist"', `${label} hidden beta playlist link`);
+  assertExcludes(html, 'href="/rom-save-editor"', `${label} hidden beta save editor link`);
+  const sideNav = html.match(/<nav[^>]*class="side-nav"[\s\S]*?<\/nav>/)?.[0] ?? "";
+  if (/<h[1-6]\b/i.test(sideNav)) throw new Error(`${label} side-nav must not contain heading tags`);
+}
 // Home is the only current Project destination on the landing page.
 const currentHomeRows = [...homeHtml.matchAll(/aria-current="page"[^>]*class="nav-row"[^>]*id="([^"]+)"/g)].map(
   (match) => match[1],
@@ -471,6 +494,9 @@ if (currentHomeRows.length !== 1 || currentHomeRows[0] !== "tab-home") {
 }
 assertIncludes(applyHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.patcher.slug}"`, "apply canonical");
 assertIncludes(applyHtml, WORKFLOW_SEO_ROUTES.patcher.description, "apply description");
+assertIncludes(applyHtml, 'href="/docs/apply-bps-patch"', "apply BPS guide link");
+assertIncludes(applyHtml, 'href="/docs/patch-3ds-roms"', "apply 3DS guide link");
+assertIncludes(applyHtml, 'href="/docs/fix-checksum-errors"', "apply fix checksum guide link");
 assertIncludes(weaveHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.weave.slug}"`, "weave canonical");
 assertIncludes(weaveHtml, WORKFLOW_SEO_ROUTES.weave.description, "weave description");
 assertIncludes(read("weave/index.html"), WORKFLOW_SEO_ROUTES.weave.description, "static-host weave description");
@@ -482,6 +508,8 @@ assertIncludes(
   "checksum canonical",
 );
 assertIncludes(checksumHtml, WORKFLOW_SEO_ROUTES.checksum.description, "checksum description");
+assertIncludes(checksumHtml, 'href="/docs/checksum-roms-browser"', "checksum guide link");
+assertIncludes(checksumHtml, 'href="/docs/fix-checksum-errors"', "checksum fix guide link");
 assertIncludes(
   read("checksum/index.html"),
   WORKFLOW_SEO_ROUTES.checksum.description,
@@ -493,6 +521,9 @@ assertIncludes(
   "compress canonical",
 );
 assertIncludes(compressHtml, WORKFLOW_SEO_ROUTES.compress.description, "compress description");
+assertIncludes(compressHtml, 'href="/docs/convert-to-chd"', "compress CHD guide link");
+assertIncludes(compressHtml, 'href="/docs/convert-to-rvz"', "compress RVZ guide link");
+assertIncludes(compressHtml, 'href="/docs/convert-to-z3ds"', "compress Z3DS guide link");
 assertIncludes(
   read("compress/index.html"),
   WORKFLOW_SEO_ROUTES.compress.description,
@@ -503,6 +534,7 @@ assertIncludes(extractHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.
 assertIncludes(extractHtml, WORKFLOW_SEO_ROUTES.extract.description, "extract description");
 assertIncludes(extractHtml, 'href="/docs/extract-chd"', "extract CHD to ISO guide link");
 assertIncludes(extractHtml, 'href="/docs/convert-rvz-to-iso"', "extract RVZ to ISO guide link");
+assertIncludes(extractHtml, 'href="/docs/extract-z3ds"', "extract Z3DS guide link");
 assertIncludes(read("extract/index.html"), WORKFLOW_SEO_ROUTES.extract.description, "static-host extract description");
 assertIncludes(
   identifyHtml,
@@ -510,6 +542,7 @@ assertIncludes(
   "identify canonical",
 );
 assertIncludes(identifyHtml, WORKFLOW_SEO_ROUTES.identify.description, "identify description");
+assertIncludes(identifyHtml, 'href="/docs/search-rom-checksums"', "identify checksum search guide link");
 assertIncludes(
   read("identify/index.html"),
   WORKFLOW_SEO_ROUTES.identify.description,
@@ -619,8 +652,18 @@ assertIncludes(homeHtml, '"@type":"WebSite"', "home WebSite JSON-LD");
 assertIncludes(homeHtml, `"name":"${SITE_NAME}"`, "canonical site name");
 assertIncludes(homeHtml, `"alternateName":${JSON.stringify(SITE_ALTERNATE_NAMES)}`, "site alternate names");
 assertIncludes(applyHtml, '"@type":"SoftwareApplication"', "apply SoftwareApplication JSON-LD");
+assertIncludes(
+  applyHtml,
+  `"name":${JSON.stringify(WORKFLOW_SEO_ROUTES.patcher.title.replace(` | ${SITE_NAME}`, ""))}`,
+  "apply SoftwareApplication name",
+);
 if (applyHtml.includes('"@type":"WebSite"')) throw new Error("WebSite JSON-LD belongs on the home route only");
 assertIncludes(createHtml, '"@type":"SoftwareApplication"', "create SoftwareApplication JSON-LD");
+assertIncludes(
+  createHtml,
+  `"name":${JSON.stringify(WORKFLOW_SEO_ROUTES.creator.title.replace(` | ${SITE_NAME}`, ""))}`,
+  "create SoftwareApplication name",
+);
 assertIncludes(createHtml, '"url":"https://rom-weaver.com/create-rom-patch"', "create JSON-LD canonical url");
 if (createHtml.includes('"@type":"WebSite"')) throw new Error("WebSite JSON-LD belongs on the home route only");
 
@@ -671,6 +714,9 @@ for (const route of DOC_ROUTES) {
   assertIncludes(docsHtml, 'rel="stylesheet" crossorigin href="./assets/', `${route.slug} app stylesheet`);
   const legalPage = isLegalDocRoute(route.slug);
   assertIncludes(docsHtml, `"@type":"${legalPage ? "WebPage" : "TechArticle"}"`, `${route.slug} structured data`);
+  assertIncludes(docsHtml, '"@type":"BreadcrumbList"', `${route.slug} breadcrumb structured data`);
+  const guideNav = docsHtml.match(/<nav[^>]*class="guide-nav"[\s\S]*?<\/nav>/)?.[0] ?? "";
+  if (/<h[1-6]\b/i.test(guideNav)) throw new Error(`${route.slug} guide-nav must not contain heading tags`);
   // The page MUST report the same modification date as its sitemap entry, including none.
   if (production) {
     const lastmod = sitemapSource.match(

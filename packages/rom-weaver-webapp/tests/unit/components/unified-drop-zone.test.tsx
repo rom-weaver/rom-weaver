@@ -3,7 +3,14 @@ import { fireEvent, render } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { UnifiedDropZone } from "../../../src/public/react/components/ds/unified-drop-zone.tsx";
-import { WORKFLOW_GUIDES } from "../../../src/public/react/workflow-guides.ts";
+import {
+  APPLY_FORMAT_GUIDES,
+  CHECKSUM_EXTRA_GUIDES,
+  COMPRESS_FORMAT_GUIDES,
+  EXTRACT_FORMAT_GUIDES,
+  IDENTIFY_EXTRA_GUIDES,
+  WORKFLOW_GUIDES,
+} from "../../../src/public/react/workflow-guides.ts";
 import { DOC_SOURCES } from "../../../src/webapp/docs-routing.mjs";
 
 /**
@@ -102,6 +109,21 @@ describe("UnifiedDropZone", () => {
     expect(DOC_SOURCES.some((source) => source.slug === guide.path)).toBe(true);
     const { container } = render(<UnifiedDropZone big guide={guide} onFiles={() => undefined} />);
     expect(container.querySelector(".hero-guide")?.textContent).toMatch(/^Read the .+ guide$/u);
+  });
+
+  it("links every extra workflow guide to a published doc", () => {
+    for (const guide of [
+      ...EXTRACT_FORMAT_GUIDES,
+      ...COMPRESS_FORMAT_GUIDES,
+      ...CHECKSUM_EXTRA_GUIDES,
+      ...IDENTIFY_EXTRA_GUIDES,
+      ...APPLY_FORMAT_GUIDES,
+    ]) {
+      expect(
+        DOC_SOURCES.some((source) => source.slug === guide.path),
+        guide.path,
+      ).toBe(true);
+    }
   });
 
   it("drops the help line once content is staged", () => {

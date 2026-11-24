@@ -545,23 +545,30 @@ describe("deferred precache", () => {
     }
   });
 
-  it("fetches directory documents without redirects and retains revisioned cache keys", async () => {
+  it("fetches directory documents without redirects, marks them for precache, and retains revisioned cache keys", async () => {
     const download = vi.fn(async (_request: Request) => new Response("guide"));
     const queue = createDeferredPrecache({
       cacheName: CACHE_NAME,
-      entries: [{ url: "docs/guide/index.html", revision: "guide-v1", sizeBytes: 5 }],
+      entries: [
+        { url: "docs/guide/index.html", revision: "guide-v1", sizeBytes: 5 },
+        { url: "assets/chunk.js", sizeBytes: 5 },
+      ],
       scope: `${SCOPE}app/`,
       download,
     });
     await queue.runNextBatch();
-    expect(download.mock.calls[0]?.[0].url).toBe(`${SCOPE}app/docs/guide/`);
+    const guideCall = download.mock.calls.find(([request]) => request.url === `${SCOPE}app/docs/guide/`);
+    const assetCall = download.mock.calls.find(([request]) => request.url === `${SCOPE}app/assets/chunk.js`);
+    expect(guideCall?.[0].headers.get("X-Rom-Weaver-Precache")).toBe("1");
+    expect(assetCall?.[0].headers.get("X-Rom-Weaver-Precache")).toBeNull();
     expect(await (await queue.match("docs/guide/index.html"))?.text()).toBe("guide");
     const cache = await cacheStorage.open(CACHE_NAME);
-    expect((await cache.keys()).map((request) => request.url)).toEqual([
+    expect((await cache.keys()).map((request) => request.url).sort()).toEqual([
+      `${SCOPE}app/assets/chunk.js`,
       `${SCOPE}app/docs/guide/index.html?__WB_REVISION__=guide-v1`,
     ]);
     await queue.serve("docs/guide/index.html");
-    expect(download).toHaveBeenCalledTimes(1);
+    expect(download).toHaveBeenCalledTimes(2);
   });
 
   it.each(["br", "identity"])("resumes completed original files over HTTP %s after restart", async (encoding) => {

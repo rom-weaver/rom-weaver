@@ -64,14 +64,29 @@ const withDocsBase = (html, slug, directoryIndex) => {
 const createDocsRouteHtml = (html, route, channel, channelLabel, dateModified) => {
   const { canonicalUrl, metadata, title } = createDocsSeoMetadata(route, channel === "prod" ? "" : channelLabel);
   const legalPage = isLegalDocRoute(route.slug);
+  const breadcrumbItems = [
+    { "@type": "ListItem", item: `${SITE_ORIGIN}/`, name: SITE_NAME, position: 1 },
+    { "@type": "ListItem", item: `${SITE_ORIGIN}/docs`, name: "Documentation", position: 2 },
+  ];
+  if (route.slug !== "docs") {
+    breadcrumbItems.push({ "@type": "ListItem", item: canonicalUrl, name: route.title, position: 3 });
+  }
   const structuredData = {
     "@context": "https://schema.org",
-    "@type": legalPage ? "WebPage" : "TechArticle",
-    ...(dateModified ? { dateModified } : {}),
-    description: route.description,
-    headline: route.title,
-    publisher: { "@type": "Organization", name: SITE_NAME, url: SITE_ORIGIN },
-    url: canonicalUrl,
+    "@graph": [
+      {
+        "@type": legalPage ? "WebPage" : "TechArticle",
+        ...(dateModified ? { dateModified } : {}),
+        description: route.description,
+        headline: route.title,
+        publisher: { "@type": "Organization", name: SITE_NAME, url: SITE_ORIGIN },
+        url: canonicalUrl,
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: breadcrumbItems,
+      },
+    ],
   };
   let routeHtml = replaceBetween(html, /(<title>)[^<]*(<\/title>)/, title);
   routeHtml = replaceBetween(routeHtml, /(<link\s+rel="canonical"\s+href=")[^"]*(")/, canonicalUrl);

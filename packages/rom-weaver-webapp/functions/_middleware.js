@@ -1,6 +1,19 @@
 import { SITE_ORIGIN } from "../src/webapp/docs-routing.mjs";
 import { MARKDOWN_ROUTES } from "./markdown-routes.js";
 
+const PRECACHE_REQUEST_HEADER = "X-Rom-Weaver-Precache";
+
+const mergeVary = (existing, ...tokens) => {
+  const vary = new Set(
+    (existing ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
+  for (const token of tokens) vary.add(token);
+  return [...vary].join(", ");
+};
+
 const wantsMarkdown = (accept) => {
   const ranges = accept
     .toLowerCase()
@@ -23,8 +36,35 @@ const wantsMarkdown = (accept) => {
 
 export const onRequest = async ({ request, env, next }) => {
   const url = new URL(request.url);
+  if (!["GET", "HEAD"].includes(request.method)) return next();
+  if (url.pathname.length > 1 && url.pathname.endsWith("/")) {
+    const canonicalRoute = MARKDOWN_ROUTES.find(({ path }) => path === url.pathname.slice(0, -1));
+    if (canonicalRoute) {
+      if (request.headers.get(PRECACHE_REQUEST_HEADER) === "1") {
+        const response = await next();
+        const headers = new Headers(response.headers);
+        headers.set("Cache-Control", "no-store");
+        headers.set("Vary", mergeVary(headers.get("Vary"), PRECACHE_REQUEST_HEADER));
+        return new Response(request.method === "HEAD" ? null : response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers,
+        });
+      }
+      // Canonicalize trailing-slash duplicates to the extensionless URL while keeping
+      // precache directory fetches working above. Location stays relative so previews keep their host.
+      return new Response(null, {
+        status: 301,
+        headers: {
+          "Cache-Control": "public, max-age=0, must-revalidate",
+          Location: `${canonicalRoute.path}${url.search}`,
+          Vary: PRECACHE_REQUEST_HEADER,
+        },
+      });
+    }
+  }
   const route = MARKDOWN_ROUTES.find(({ path }) => path === url.pathname);
-  if (!(route && ["GET", "HEAD"].includes(request.method))) return next();
+  if (!route) return next();
   const markdown = wantsMarkdown(request.headers.get("Accept") ?? "");
   let response;
   if (markdown) {
@@ -47,14 +87,7 @@ export const onRequest = async ({ request, env, next }) => {
   if (!markdown && response.ok && url.search) {
     headers.append("Link", `<${SITE_ORIGIN}${route.path}>; rel="canonical"`);
   }
-  const vary = new Set(
-    (headers.get("Vary") ?? "")
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean),
-  );
-  vary.add("Accept");
-  headers.set("Vary", [...vary].join(", "));
+  headers.set("Vary", mergeVary(headers.get("Vary"), "Accept"));
   // Stable URLs MUST expire even if a deployment purge fails.
   headers.set(
     "Cache-Control",

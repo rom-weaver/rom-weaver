@@ -57,12 +57,13 @@ const createStructuredDataLdJson = (route, includeWebsite) => {
       url: "https://rom-weaver.com/",
     });
   }
+  const applicationName = route.slug ? route.title.replace(` | ${SITE_NAME}`, "") : SITE_NAME;
   graph.push({
     "@type": "SoftwareApplication",
     alternateName: SITE_ALTERNATE_NAMES,
     applicationCategory: "UtilitiesApplication",
     description: route.description,
-    name: SITE_NAME,
+    name: applicationName,
     offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
     operatingSystem: "Web browser",
     url: `https://rom-weaver.com/${route.slug}`,
@@ -125,20 +126,62 @@ export const createNotFoundHtml = (html, channel, channelLabel) => {
   return notFoundHtml;
 };
 
-// A workflow page's <lastmod> is the newest commit of the files that carry its indexable text: the
-// route table, the message catalog and, for the apex, the landing components and format lists.
-// Hard-coded form text in a view's own component is not tracked, so a commit that edits only that
-// can leave the date behind. A dirty or shallow checkout yields none, and the entry then omits
-// <lastmod> rather than guess.
-const WORKFLOW_LASTMOD_SOURCES = ["src/webapp/workflow-seo.mjs", "src/presentation/localization/messages.ts"];
-const HOME_LASTMOD_SOURCES = [
-  "src/webapp/components/home-page.tsx",
-  "src/webapp/components/home-sections.tsx",
-  "src/webapp/components/home-loom.tsx",
-  "src/wasm/generated/rom-weaver-format-metadata.ts",
+// A workflow page's <lastmod> is the newest commit of the route table plus that route's own
+// view files. The shared message catalog is deliberately excluded so unrelated UI edits never
+// mass-bump every workflow's sitemap date. A dirty or shallow checkout yields none, and the
+// entry omits <lastmod> rather than guess.
+const WORKFLOW_SEO_SOURCE = "src/webapp/workflow-seo.mjs";
+export const WORKFLOW_ROUTE_LASTMOD_SOURCES = Object.freeze({
+  "": [
+    "src/webapp/components/home-page.tsx",
+    "src/webapp/components/home-sections.tsx",
+    "src/webapp/components/home-loom.tsx",
+    "src/wasm/generated/rom-weaver-format-metadata.ts",
+  ],
+  "apply-rom-patches": [
+    "src/public/react/apply-workflow-form-view.tsx",
+    "src/public/react/workflow-guides.ts",
+    "src/webapp/components/workflow-about.tsx",
+  ],
+  "apply-cheats": [
+    "src/public/react/apply-workflow-form-view.tsx",
+    "src/public/react/use-apply-cheats.ts",
+    "src/webapp/components/workflow-about.tsx",
+  ],
+  "create-rom-patch": [
+    "src/public/react/create-patch-form.tsx",
+    "src/public/react/create-patch-form-view.tsx",
+    "src/webapp/components/workflow-about.tsx",
+  ],
+  "create-rom-cheat-patch": [
+    "src/public/react/create-patch-form.tsx",
+    "src/public/react/create-cheat-codes-model.ts",
+    "src/webapp/components/workflow-about.tsx",
+  ],
+  "weave-rom-patches": [
+    "src/public/react/apply-workflow-form-view.tsx",
+    "src/public/react/weave-export.tsx",
+    "src/webapp/components/workflow-about.tsx",
+  ],
+  "file-checksum": ["src/webapp/components/checksum-form.tsx", "src/webapp/components/workflow-about.tsx"],
+  "compress-files": ["src/webapp/components/compress-form.tsx", "src/webapp/components/workflow-about.tsx"],
+  "extract-files": ["src/webapp/components/extract-form.tsx", "src/webapp/components/workflow-about.tsx"],
+  "identify-rom": ["src/webapp/components/identify-form.tsx", "src/webapp/components/workflow-about.tsx"],
+  "ppf-undo": ["src/webapp/components/ppf-undo-form.tsx", "src/webapp/components/workflow-about.tsx"],
+  "trim-rom": [
+    "src/public/react/trim-form.tsx",
+    "src/public/react/trim-form-view.tsx",
+    "src/webapp/components/workflow-about.tsx",
+  ],
+  "play-rom": ["src/public/react/emulator-test-view.tsx", "src/webapp/components/workflow-about.tsx"],
+});
+const ALL_WORKFLOW_LASTMOD_SOURCES = [
+  ...new Set([WORKFLOW_SEO_SOURCE, ...Object.values(WORKFLOW_ROUTE_LASTMOD_SOURCES).flat()]),
 ];
 const readWorkflowLastmod = (route, sourceLastmods) => {
-  const files = route.slug === "" ? [...WORKFLOW_LASTMOD_SOURCES, ...HOME_LASTMOD_SOURCES] : WORKFLOW_LASTMOD_SOURCES;
+  const routeSources = WORKFLOW_ROUTE_LASTMOD_SOURCES[route.slug];
+  if (!routeSources) throw new Error(`Missing workflow lastmod sources for route: ${route.slug || "home"}`);
+  const files = [WORKFLOW_SEO_SOURCE, ...routeSources];
   const dates = files.map((file) => sourceLastmods.get(file));
   return dates.includes(null) ? null : dates.sort((a, b) => a.localeCompare(b)).at(-1);
 };
@@ -162,7 +205,7 @@ export const createSitemapSource = ({
   generatedLastmod,
   docLastmods = readDocLastmods(repo, generatedLastmod),
 } = {}) => {
-  const workflowSourceLastmods = readFileLastmods([...WORKFLOW_LASTMOD_SOURCES, ...HOME_LASTMOD_SOURCES], root);
+  const workflowSourceLastmods = readFileLastmods(ALL_WORKFLOW_LASTMOD_SOURCES, root);
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${[...Object.values(WORKFLOW_SEO_ROUTES), ...Object.values(WORKFLOW_ENTRY_ROUTES)]

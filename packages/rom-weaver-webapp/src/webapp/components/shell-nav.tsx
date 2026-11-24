@@ -37,8 +37,6 @@ const NAV_GROUP_TITLES: Record<NavGroup, MessageId> = {
 /** One rendered nav row, shared by the desktop sidebar and the phone menu. */
 type NavEntry = {
   beta?: boolean;
-  /** Rendered but not shown: a beta row before the client setting is known. */
-  hidden?: boolean;
   className?: string;
   /** `true` marks the page itself; `"location"` marks the section the page belongs to. */
   current?: boolean | "location";
@@ -129,7 +127,6 @@ const NavRow = ({
         aria-label={name}
         className={rowClass}
         data-nav={navId}
-        hidden={entry.hidden}
         href={entry.href}
         id={idPrefix ? `${idPrefix}${entry.id}` : undefined}
         onClick={(event) => {
@@ -152,7 +149,6 @@ const NavRow = ({
       aria-label={name}
       className={rowClass}
       data-nav={navId}
-      hidden={entry.hidden}
       id={idPrefix ? `${idPrefix}${entry.id}` : undefined}
       onClick={() => {
         onNavigate?.();
@@ -187,9 +183,9 @@ const SideNav = ({
   <nav aria-label={navLabel} className="side-nav">
     {sections.map((section) => (
       <div className="nav-group" key={section.id}>
-        {section.title ? <h2 className="nav-group-label">{section.title}</h2> : null}
+        {section.title ? <p className="nav-group-label">{section.title}</p> : null}
         {section.entries.map((entry) => (
-          <div hidden={entry.hidden} key={entry.id}>
+          <div key={entry.id}>
             <NavRow className="nav-row" entry={entry} idPrefix={idPrefix} localizer={localizer} />
           </div>
         ))}
@@ -309,11 +305,11 @@ const MenuSheet = ({
         {opened
           ? sections.map((section) => (
               <div className="nav-group" key={section.id}>
-                {section.title ? <h2 className="nav-group-label">{section.title}</h2> : null}
+                {section.title ? <p className="nav-group-label">{section.title}</p> : null}
                 {/* Tool rows pair up on phones. */}
                 <div className="nav-group-grid">
                   {section.entries.map((entry) => (
-                    <div hidden={entry.hidden} key={entry.id}>
+                    <div key={entry.id}>
                       <NavRow className="nav-row" entry={entry} localizer={localizer} onNavigate={onClose} />
                     </div>
                   ))}
