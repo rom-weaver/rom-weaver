@@ -52,7 +52,7 @@ const createDeferredPrecache = ({
   const createDownloadRequest = (file: (typeof files)[number]) =>
     new Request(file.downloadUrl, {
       cache: file.revision ? "reload" : "default",
-      // Tells the Pages middleware this is a directory-index precache fetch, not a slash navigation to redirect.
+      // Tells the Pages middleware this directory-index fetch is precache, not a slash navigation to redirect.
       ...(file.isDirectory ? { headers: { [PRECACHE_REQUEST_HEADER]: "1" } } : {}),
     });
   const byUrl = new Map(files.map((file) => [file.url, file]));

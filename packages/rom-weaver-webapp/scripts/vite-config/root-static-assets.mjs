@@ -116,9 +116,8 @@ const setRootStaticAssetContentType = (requestPath, res) => {
   }
 };
 
-// Request paths the host answers with a redirect (`_redirects` 30x rules plus the
-// middleware's trailing-slash canonical redirects). The service worker keeps these on
-// the network online so redirects run; offline fallback still serves their cached copy.
+// Paths the host answers with a redirect: `_redirects` 30x rules and Pages middleware trailing-slash redirects.
+// The service worker sends these to the network when online, so redirects run. Offline, it still serves the cached copy.
 export const redirectSourcePaths = () => {
   const paths = new Set();
   for (const line of fs.readFileSync(path.join(rootAssetDir, "_redirects"), "utf8").split("\n")) {

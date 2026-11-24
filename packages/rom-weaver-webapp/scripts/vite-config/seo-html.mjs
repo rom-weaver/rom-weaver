@@ -45,8 +45,8 @@ export const createWorkflowRouteHtml = (html, route, channel, channelLabel) => {
   );
 };
 
-// Describe both the site name and free browser tool in one graph. alternateName
-// keeps legacy spellings discoverable without making the visible brand inconsistent.
+// Describe both the site name and free browser tool in one graph.
+// Only the home entities carry alternateName, which keeps legacy spellings discoverable.
 const createStructuredDataLdJson = (route, includeWebsite) => {
   const graph = [];
   if (includeWebsite) {
@@ -60,7 +60,7 @@ const createStructuredDataLdJson = (route, includeWebsite) => {
   const applicationName = route.slug ? route.title.replace(` | ${SITE_NAME}`, "") : SITE_NAME;
   graph.push({
     "@type": "SoftwareApplication",
-    alternateName: SITE_ALTERNATE_NAMES,
+    ...(route.slug ? {} : { alternateName: SITE_ALTERNATE_NAMES }),
     applicationCategory: "UtilitiesApplication",
     description: route.description,
     name: applicationName,
@@ -126,7 +126,7 @@ export const createNotFoundHtml = (html, channel, channelLabel) => {
   return notFoundHtml;
 };
 
-// Newest commit to the route table and view files sets <lastmod>, not the message catalog.
+// The newest commit to the route table and view files sets <lastmod>.
 // A dirty or shallow checkout omits it.
 const WORKFLOW_SEO_SOURCE = "src/webapp/workflow-seo.mjs";
 export const WORKFLOW_ROUTE_LASTMOD_SOURCES = Object.freeze({

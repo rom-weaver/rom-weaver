@@ -72,6 +72,7 @@ test("workflow descriptions propagate to metadata and structured data", () => {
     const ldJson = html.match(/<script type="application\/ld\+json">(.*?)<\/script>/)?.[1];
     const application = JSON.parse(ldJson)["@graph"].find((entry) => entry["@type"] === "SoftwareApplication");
     assert.doesNotMatch(application.name, /rom-weaver|\|/i, route.slug);
+    assert.equal(application.alternateName, undefined, route.slug);
   }
 });
 
@@ -160,7 +161,7 @@ test("workflow pages take their lastmod from their own view sources without shar
   for (const route of [...Object.values(WORKFLOW_SEO_ROUTES), ...Object.values(WORKFLOW_ENTRY_ROUTES)]) {
     assert.match(lastmodOf(route.slug) ?? "", /^\d{4}-\d{2}-\d{2}T/, route.slug || "home");
   }
-  // Editing messages.ts must not bump any workflow's lastmod.
+  // Editing messages.ts MUST NOT bump any workflow's lastmod.
   assert.ok(lastmodOf("file-checksum").startsWith("2026-01-01"), lastmodOf("file-checksum"));
   // Editing one workflow's view bumps only that route, not unrelated tools or the landing page.
   assert.ok(lastmodOf("").startsWith("2026-02-01"), lastmodOf(""));

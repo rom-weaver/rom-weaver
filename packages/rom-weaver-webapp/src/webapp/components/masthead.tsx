@@ -129,8 +129,8 @@ const Masthead = ({
   const findTriggerRef = useRef<HTMLButtonElement | null>(null);
   const navLabel = localizer.message("ui.nav.primary");
 
-  /* The beta-tools setting is client-only, so the prerendered shell and first hydration
-     omit disabled beta rows, except the current page's own. Enabled rows mount after hydration. */
+  /* The beta-tools setting is client-only. The prerendered shell and first hydration omit
+     disabled beta rows, except the current page's own. Enabled rows mount after hydration. */
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => setHydrated(true), []);
   const betaVisible = hydrated && betaToolsEnabled;

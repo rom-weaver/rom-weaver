@@ -168,7 +168,7 @@ test("offline precache directory fetches pass through without redirecting", asyn
   });
   assert.deepEqual(calls, ["next"]);
   assert.equal(response.status, 200);
-  assert.equal(response.headers.get("Cache-Control"), "no-store");
+  assert.equal(response.headers.get("Cache-Control"), "no-cache");
   assert.equal(response.headers.get("Vary"), "Accept-Encoding, X-Rom-Weaver-Precache");
 });
 

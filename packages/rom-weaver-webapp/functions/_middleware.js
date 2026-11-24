@@ -51,7 +51,8 @@ const handleTrailingSlash = async (request, url, next) => {
   }
   const response = await next();
   const headers = new Headers(response.headers);
-  headers.set("Cache-Control", "no-store");
+  // The offline copy stores and serves this header, so it must not block the back/forward cache.
+  headers.set("Cache-Control", "no-cache");
   headers.set("Vary", mergeVary(headers.get("Vary"), PRECACHE_REQUEST_HEADER));
   return new Response(request.method === "HEAD" ? null : response.body, {
     status: response.status,
