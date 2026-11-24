@@ -37,7 +37,7 @@ rom-weaver patch apply \
 
 `patch apply` is the canonical spelling; `weave` remains accepted for compatibility.
 
-An output extension matching the selected ROM leaf writes a plain ROM (except ambiguous disc-image extensions such as `.bin`, which require `--no-compress` or `--compress-format`), so `translated.sfc` does not need `--no-compress`. A registered container extension such as `.zip` still compresses the result. Use `--no-compress` to force raw bytes. The [output reference](../reference/cli.md#output-and-compression) lists compression overrides and aliases.
+An output extension matching the selected ROM leaf writes a plain ROM, so `translated.sfc` needs no `--no-compress`. Ambiguous disc-image extensions such as `.bin` still require `--no-compress` or `--compress-format`. A registered container extension such as `.zip` still compresses the result. Use `--no-compress` to force raw bytes. The [output reference](../reference/cli.md#output-and-compression) lists compression overrides and aliases.
 
 For an ordinary file apply, omit `--output` to write a sibling such as `original-patched.sfc`. Existing names are preserved by adding a numeric suffix. Weave applies keep their weave-provided output name; a weave without one still requires `--output`.
 

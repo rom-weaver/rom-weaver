@@ -47,7 +47,7 @@ Apply compares the patched ROM last, and stops with an error if it differs.
 
 ## If the checks fail
 
-With the wrong ROM, the patch card shows **Checks failed** (**Input checks do not match the ROM**) and **APPLY & DOWNLOAD** is blocked. Open **Checks** on the ROM card (or **Input** under **Checks** on the patch card) to compare your ROM's **Computed** CRC32 with the **Expected** CRC32.
+With the wrong ROM, the patch card shows **Checks failed** (**Input checks do not match the ROM**). **APPLY & DOWNLOAD** stays blocked. Open **Checks** on the ROM card, or **Input** under **Checks** on the patch card. Compare your ROM's **Computed** CRC32 with the **Expected** CRC32.
 
 The usual causes are the wrong region or revision, or a copy that is already patched. Find the ROM with the expected CRC32 and drop it into **0x01 Inputs**; it replaces the wrong one. [Fix a source ROM checksum mismatch](fix-checksum-errors.md) covers each cause in order.
 

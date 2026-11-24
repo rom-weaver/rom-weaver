@@ -107,7 +107,7 @@ The install script covers macOS and Linux: it downloads the latest release to `~
 
 Windows, Scoop, PowerShell, cargo-binstall, mise, Docker, shell completions, and building from source are all in [Install the CLI](./docs/how-to/install-cli.md).
 
-Homebrew and npm carry the identify and cheat databases, so they need no extra step. The install script extracts those databases when `brotli` is on `PATH`; otherwise it installs the executable only and tells you to run `rom-weaver setup`. Methods that install only the executable - `cargo install`, `cargo binstall`, and `mise` - also need `rom-weaver setup` afterwards to download that data, which `identify` and cheat baking read.
+Homebrew and npm carry the identify and cheat databases, so they need no extra step. The install script extracts those databases when `brotli` is on `PATH`. Without `brotli`, it skips those databases and tells you to run `rom-weaver setup`. Methods that install only the executable - `cargo install`, `cargo binstall`, and `mise` - also need `rom-weaver setup` afterwards to download that data, which `identify` and cheat baking read.
 
 Hitting `Permission denied`? See [File permissions](./docs/reference/cli.md#file-permissions).
 

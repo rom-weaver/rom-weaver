@@ -28,7 +28,7 @@ Once the ROM is staged, the output step states what the run will do for that fil
 4. Read the warning dialog that opens, then select **Got it**. The dialog is informational: closing it, by button, Esc, or clicking outside, never cancels or changes the run.
 5. Save the result and test it in the emulator or hardware you use.
 
-The format starts from the **Download format** setting in [Settings](browser-settings.md): ZIP for Nintendo DS/DSi, Game Boy Advance, and Xbox XISO images and Z3DS for Nintendo 3DS ROMs by default, `.7z` or the plain file if you chose those there. Change it in the output step for one run.
+The format starts from **Download format** in [Settings](browser-settings.md). Defaults are ZIP for DS/DSi, GBA, and Xbox XISO, and Z3DS for 3DS. If you chose `.7z` or plain output in Settings, Trim uses that instead. Change it in the output step for one run.
 
 GameCube and Wii discs cannot be trimmed: Trim flags them when staged and keeps the button disabled. An archive that holds only discs is flagged from its file list and the discs' first bytes, without extracting them. Convert them to RVZ with [Compress](convert-to-rvz-browser.md) instead.
 

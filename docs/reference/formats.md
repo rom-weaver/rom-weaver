@@ -66,7 +66,7 @@ Every supported Apply entry also supports probe/parse, except DCP. DCP uses a sp
 >
 > ⁴ The native CLI creates this format. Browser Create does not offer it. Browser Apply supports it.
 
-PPF, EBP, MOD, and IPS32 cannot encode a target smaller than the Original. Browser Create hides PPF, EBP, and MOD for such a target (IPS32 is CLI-only), and CLI `patch create` and `patch create --plan` reject or omit all four.
+PPF, EBP, MOD, and IPS32 cannot encode a target smaller than the Original. Browser Create hides PPF, EBP, and MOD for smaller targets (IPS32 is CLI-only). CLI `patch create` and `patch create --plan` reject or omit all four.
 
 BSP scripts with nonempty menus fail during apply or validation in the browser and CLI. Interactive choices are unsupported; no branch is selected automatically. Scripts without menus and empty menus remain supported.
 
