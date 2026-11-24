@@ -34,46 +34,41 @@ const wantsMarkdown = (accept) => {
   return markdown > 0 && markdown >= html;
 };
 
-export const onRequest = async ({ request, env, next }) => {
-  const url = new URL(request.url);
-  if (!["GET", "HEAD"].includes(request.method)) return next();
-  if (url.pathname.length > 1 && url.pathname.endsWith("/")) {
-    const canonicalRoute = MARKDOWN_ROUTES.find(({ path }) => path === url.pathname.slice(0, -1));
-    if (canonicalRoute) {
-      if (request.headers.get(PRECACHE_REQUEST_HEADER) === "1") {
-        const response = await next();
-        const headers = new Headers(response.headers);
-        headers.set("Cache-Control", "no-store");
-        headers.set("Vary", mergeVary(headers.get("Vary"), PRECACHE_REQUEST_HEADER));
-        return new Response(request.method === "HEAD" ? null : response.body, {
-          status: response.status,
-          statusText: response.statusText,
-          headers,
-        });
-      }
-      // Canonicalize trailing-slash duplicates to the extensionless URL while keeping
-      // precache directory fetches working above. Location stays relative so previews keep their host.
-      return new Response(null, {
-        status: 301,
-        headers: {
-          "Cache-Control": "public, max-age=0, must-revalidate",
-          Location: `${canonicalRoute.path}${url.search}`,
-          Vary: PRECACHE_REQUEST_HEADER,
-        },
-      });
-    }
+const handleTrailingSlash = async (request, url, next) => {
+  if (url.pathname.length <= 1 || !url.pathname.endsWith("/")) return null;
+  const canonicalRoute = MARKDOWN_ROUTES.find(({ path }) => path === url.pathname.slice(0, -1));
+  if (!canonicalRoute) return null;
+  if (request.headers.get(PRECACHE_REQUEST_HEADER) !== "1") {
+    // Canonicalize trailing-slash duplicates to the extensionless URL while keeping
+    // precache directory fetches working below. Location stays relative so previews keep their host.
+    return new Response(null, {
+      status: 301,
+      headers: {
+        "Cache-Control": "public, max-age=0, must-revalidate",
+        Location: `${canonicalRoute.path}${url.search}`,
+        Vary: PRECACHE_REQUEST_HEADER,
+      },
+    });
   }
-  const route = MARKDOWN_ROUTES.find(({ path }) => path === url.pathname);
-  if (!route) return next();
-  const markdown = wantsMarkdown(request.headers.get("Accept") ?? "");
-  let response;
-  if (markdown) {
-    const assetUrl = new URL(route.markdownPath, url);
-    response = await env.ASSETS.fetch(new Request(assetUrl, { method: request.method }));
-    if (!(response.ok && (response.headers.get("Content-Type") ?? "").startsWith("text/markdown"))) return next();
-  } else {
-    response = await next();
-  }
+  const response = await next();
+  const headers = new Headers(response.headers);
+  headers.set("Cache-Control", "no-store");
+  headers.set("Vary", mergeVary(headers.get("Vary"), PRECACHE_REQUEST_HEADER));
+  return new Response(request.method === "HEAD" ? null : response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+};
+
+const fetchMarkdownTwin = async (request, url, route, env) => {
+  const assetUrl = new URL(route.markdownPath, url);
+  const response = await env.ASSETS.fetch(new Request(assetUrl, { method: request.method }));
+  const contentType = response.headers.get("Content-Type") ?? "";
+  return response.ok && contentType.startsWith("text/markdown") ? response : null;
+};
+
+const applyNegotiatedHeaders = (response, url, route, markdown) => {
   const headers = new Headers(response.headers);
   // The `.md` rule's noindex belongs to the /<page>.md URL. This response is the page URL
   // itself, so drop it; the non-production `noindex, nofollow` from the `/*` rule stays.
@@ -89,17 +84,26 @@ export const onRequest = async ({ request, env, next }) => {
   }
   headers.set("Vary", mergeVary(headers.get("Vary"), "Accept"));
   // Stable URLs MUST expire even if a deployment purge fails.
-  headers.set(
-    "Cache-Control",
-    response.status === 200 && !url.search && !headers.has("Set-Cookie")
-      ? "public, max-age=0, s-maxage=3600, must-revalidate"
-      : "no-store",
-  );
+  const cacheable = response.status === 200 && !url.search && !headers.has("Set-Cookie");
+  headers.set("Cache-Control", cacheable ? "public, max-age=0, s-maxage=3600, must-revalidate" : "no-store");
   headers.delete("Pragma");
   headers.delete("Expires");
+  return headers;
+};
+
+export const onRequest = async ({ request, env, next }) => {
+  if (!["GET", "HEAD"].includes(request.method)) return next();
+  const url = new URL(request.url);
+  const slashResponse = await handleTrailingSlash(request, url, next);
+  if (slashResponse) return slashResponse;
+  const route = MARKDOWN_ROUTES.find(({ path }) => path === url.pathname);
+  if (!route) return next();
+  const markdown = wantsMarkdown(request.headers.get("Accept") ?? "");
+  const response = markdown ? await fetchMarkdownTwin(request, url, route, env) : await next();
+  if (!response) return next();
   return new Response(request.method === "HEAD" ? null : response.body, {
     status: response.status,
     statusText: response.statusText,
-    headers,
+    headers: applyNegotiatedHeaders(response, url, route, markdown),
   });
 };

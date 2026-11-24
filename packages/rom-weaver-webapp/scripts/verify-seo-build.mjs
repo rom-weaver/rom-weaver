@@ -1,4 +1,4 @@
-import { countVisibleWords, hasDescriptiveHeading } from "./html-document.mjs";
+import { countVisibleWords, documentNodes, hasDescriptiveHeading, parseDocument } from "./html-document.mjs";
 import { findCrawlerBrokenLinks } from "./crawler-links.mjs";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
@@ -475,6 +475,23 @@ assertIncludes(homeHtml, 'href="/docs/extract-z3ds"', "home Z3DS extract guide l
 assertIncludes(homeHtml, 'href="/docs/convert-to-z3ds"', "home Z3DS compress guide link");
 assertIncludes(homeHtml, 'href="/docs/search-rom-checksums"', "home checksum search guide link");
 assertIncludes(homeHtml, 'href="/docs/checksum-roms-browser"', "home checksum guide link");
+const hasClass = (node, className) => {
+  const attr = node.attrs?.find((item) => item.name === "class")?.value ?? "";
+  return attr.split(/\s+/).includes(className);
+};
+
+const assertContainerHasNoHeadings = (html, className, label) => {
+  const matches = [...documentNodes(parseDocument(html))].filter((node) => hasClass(node, className));
+  if (matches.length === 0) throw new Error(`${label} is missing .${className}`);
+  for (const container of matches) {
+    for (const node of documentNodes(container)) {
+      if (/^h[1-6]$/.test(node.tagName ?? "")) {
+        throw new Error(`${label} .${className} must not contain heading tag <${node.tagName}>`);
+      }
+    }
+  }
+};
+
 for (const [label, html] of [
   ["home", homeHtml],
   ["apply", applyHtml],
@@ -482,8 +499,7 @@ for (const [label, html] of [
 ]) {
   assertExcludes(html, 'href="/create-m3u-playlist"', `${label} hidden beta playlist link`);
   assertExcludes(html, 'href="/rom-save-editor"', `${label} hidden beta save editor link`);
-  const sideNav = html.match(/<nav[^>]*class="side-nav"[\s\S]*?<\/nav>/)?.[0] ?? "";
-  if (/<h[1-6]\b/i.test(sideNav)) throw new Error(`${label} side-nav must not contain heading tags`);
+  assertContainerHasNoHeadings(html, "side-nav", label);
 }
 // Home is the only current Project destination on the landing page.
 const currentHomeRows = [...homeHtml.matchAll(/aria-current="page"[^>]*class="nav-row"[^>]*id="([^"]+)"/g)].map(
@@ -715,8 +731,9 @@ for (const route of DOC_ROUTES) {
   const legalPage = isLegalDocRoute(route.slug);
   assertIncludes(docsHtml, `"@type":"${legalPage ? "WebPage" : "TechArticle"}"`, `${route.slug} structured data`);
   assertIncludes(docsHtml, '"@type":"BreadcrumbList"', `${route.slug} breadcrumb structured data`);
-  const guideNav = docsHtml.match(/<nav[^>]*class="guide-nav"[\s\S]*?<\/nav>/)?.[0] ?? "";
-  if (/<h[1-6]\b/i.test(guideNav)) throw new Error(`${route.slug} guide-nav must not contain heading tags`);
+  assertContainerHasNoHeadings(docsHtml, "side-nav", route.slug);
+  assertContainerHasNoHeadings(docsHtml, "guide-nav", route.slug);
+  assertContainerHasNoHeadings(docsHtml, "docs-rail-head", route.slug);
   // The page MUST report the same modification date as its sitemap entry, including none.
   if (production) {
     const lastmod = sitemapSource.match(

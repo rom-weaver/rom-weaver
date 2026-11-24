@@ -96,6 +96,54 @@ const compareChecksum = (expected: string, sets: ChecksumSet[], algorithms: stri
 
 /* `bytes` renders right after CRC32, as the ROM card orders them, so the two
    short rows pair onto one grid row. Without CRC32 it leads the list. */
+const checksumAlgorithmMark = ({
+  algorithm,
+  compare,
+  expected,
+  setId,
+}: {
+  algorithm: (typeof CHECKSUM_ALGORITHMS)[number];
+  compare: CompareResult;
+  expected: string;
+  setId: string;
+}): "bad" | "ok" | undefined => {
+  const matched = Boolean(compare?.matches?.some((entry) => entry.setId === setId && entry.algorithm === algorithm.id));
+  if (matched) return "ok";
+  if (expected.length === algorithm.hexLength && !compare?.match) return "bad";
+  return undefined;
+};
+
+const ChecksumAlgorithmItem = ({
+  algorithm,
+  bytes,
+  compare,
+  expected,
+  pending,
+  set,
+}: {
+  algorithm: (typeof CHECKSUM_ALGORITHMS)[number];
+  bytes?: number;
+  compare: CompareResult;
+  expected: string;
+  pending: boolean;
+  set: ChecksumSet;
+}) => {
+  const value = set.checksums[algorithm.id] || "";
+  const className = algorithm.hexLength > 40 ? "ck-long" : undefined;
+  const mark = checksumAlgorithmMark({ algorithm, compare, expected, setId: set.id });
+  const row = value ? (
+    <ChecksumRow className={className} label={algorithm.label} mark={mark} value={value} />
+  ) : pending ? (
+    <PendingChecksumRow className={className} label={algorithm.label} length={algorithm.hexLength} />
+  ) : null;
+  return (
+    <Fragment>
+      {row}
+      {algorithm.id === "crc32" && bytes !== undefined ? <ChecksumRow label="BYTES" value={String(bytes)} /> : null}
+    </Fragment>
+  );
+};
+
 const ChecksumSetRows = ({
   algorithms,
   bytes,
@@ -113,32 +161,17 @@ const ChecksumSetRows = ({
 }) => (
   <>
     {bytes !== undefined && !algorithms.includes("crc32") ? <ChecksumRow label="BYTES" value={String(bytes)} /> : null}
-    {CHECKSUM_ALGORITHMS.filter((algorithm) => algorithms.includes(algorithm.id)).map((algorithm) => {
-      const value = set.checksums[algorithm.id] || "";
-      const sameLength = expected.length === algorithm.hexLength;
-      const matched = !!compare?.matches?.some((entry) => entry.setId === set.id && entry.algorithm === algorithm.id);
-      const mark = matched ? "ok" : sameLength && !compare?.match ? "bad" : undefined;
-      const row = value ? (
-        <ChecksumRow
-          className={algorithm.hexLength > 40 ? "ck-long" : undefined}
-          label={algorithm.label}
-          mark={mark}
-          value={value}
-        />
-      ) : pending ? (
-        <PendingChecksumRow
-          className={algorithm.hexLength > 40 ? "ck-long" : undefined}
-          label={algorithm.label}
-          length={algorithm.hexLength}
-        />
-      ) : null;
-      return (
-        <Fragment key={algorithm.id}>
-          {row}
-          {algorithm.id === "crc32" && bytes !== undefined ? <ChecksumRow label="BYTES" value={String(bytes)} /> : null}
-        </Fragment>
-      );
-    })}
+    {CHECKSUM_ALGORITHMS.filter((algorithm) => algorithms.includes(algorithm.id)).map((algorithm) => (
+      <ChecksumAlgorithmItem
+        algorithm={algorithm}
+        bytes={bytes}
+        compare={compare}
+        expected={expected}
+        key={algorithm.id}
+        pending={pending}
+        set={set}
+      />
+    ))}
   </>
 );
 

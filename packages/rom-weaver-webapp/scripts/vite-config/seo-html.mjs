@@ -146,34 +146,63 @@ export const WORKFLOW_ROUTE_LASTMOD_SOURCES = Object.freeze({
   "apply-cheats": [
     "src/public/react/apply-workflow-form-view.tsx",
     "src/public/react/use-apply-cheats.ts",
+    "src/public/react/workflow-guides.ts",
     "src/webapp/components/workflow-about.tsx",
   ],
   "create-rom-patch": [
     "src/public/react/create-patch-form.tsx",
     "src/public/react/create-patch-form-view.tsx",
+    "src/public/react/workflow-guides.ts",
     "src/webapp/components/workflow-about.tsx",
   ],
   "create-rom-cheat-patch": [
     "src/public/react/create-patch-form.tsx",
     "src/public/react/create-cheat-codes-model.ts",
+    "src/public/react/workflow-guides.ts",
     "src/webapp/components/workflow-about.tsx",
   ],
   "weave-rom-patches": [
     "src/public/react/apply-workflow-form-view.tsx",
     "src/public/react/weave-export.tsx",
+    "src/public/react/workflow-guides.ts",
     "src/webapp/components/workflow-about.tsx",
   ],
-  "file-checksum": ["src/webapp/components/checksum-form.tsx", "src/webapp/components/workflow-about.tsx"],
-  "compress-files": ["src/webapp/components/compress-form.tsx", "src/webapp/components/workflow-about.tsx"],
-  "extract-files": ["src/webapp/components/extract-form.tsx", "src/webapp/components/workflow-about.tsx"],
-  "identify-rom": ["src/webapp/components/identify-form.tsx", "src/webapp/components/workflow-about.tsx"],
-  "ppf-undo": ["src/webapp/components/ppf-undo-form.tsx", "src/webapp/components/workflow-about.tsx"],
+  "file-checksum": [
+    "src/webapp/components/checksum-form.tsx",
+    "src/public/react/workflow-guides.ts",
+    "src/webapp/components/workflow-about.tsx",
+  ],
+  "compress-files": [
+    "src/webapp/components/compress-form.tsx",
+    "src/public/react/workflow-guides.ts",
+    "src/webapp/components/workflow-about.tsx",
+  ],
+  "extract-files": [
+    "src/webapp/components/extract-form.tsx",
+    "src/public/react/workflow-guides.ts",
+    "src/webapp/components/workflow-about.tsx",
+  ],
+  "identify-rom": [
+    "src/webapp/components/identify-form.tsx",
+    "src/public/react/workflow-guides.ts",
+    "src/webapp/components/workflow-about.tsx",
+  ],
+  "ppf-undo": [
+    "src/webapp/components/ppf-undo-form.tsx",
+    "src/public/react/workflow-guides.ts",
+    "src/webapp/components/workflow-about.tsx",
+  ],
   "trim-rom": [
     "src/public/react/trim-form.tsx",
     "src/public/react/trim-form-view.tsx",
+    "src/public/react/workflow-guides.ts",
     "src/webapp/components/workflow-about.tsx",
   ],
-  "play-rom": ["src/public/react/emulator-test-view.tsx", "src/webapp/components/workflow-about.tsx"],
+  "play-rom": [
+    "src/public/react/emulator-test-view.tsx",
+    "src/public/react/workflow-guides.ts",
+    "src/webapp/components/workflow-about.tsx",
+  ],
 });
 const ALL_WORKFLOW_LASTMOD_SOURCES = [
   ...new Set([WORKFLOW_SEO_SOURCE, ...Object.values(WORKFLOW_ROUTE_LASTMOD_SOURCES).flat()]),

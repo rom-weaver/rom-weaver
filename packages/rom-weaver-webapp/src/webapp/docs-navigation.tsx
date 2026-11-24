@@ -298,6 +298,57 @@ const ShelfRow = ({
   );
 };
 
+const DocsDrawerShelf = ({
+  audience,
+  currentSlug,
+  onAudienceChange,
+  onBack,
+  onNavigate,
+  shelf,
+}: {
+  audience: DocsAudience;
+  currentSlug: string;
+  onAudienceChange: (audience: DocsAudience) => void;
+  onBack: () => void;
+  onNavigate: () => void;
+  shelf: DocShelf;
+}) => {
+  const routes = routesForAudience(shelf, audience);
+  const isTask = TASK_SHELVES.includes(shelf);
+  const other: DocsAudience = audience === "browser" ? "cli" : "browser";
+  const otherCount = isTask ? shelf.routes.filter((route) => route.audience === other).length : 0;
+  const noun = routes.length === 1 ? "guide" : "guides";
+  return (
+    <div className="docs-drawer-level">
+      <div className="docs-drawer-head">
+        <button className="docs-drawer-back" onClick={onBack} type="button">
+          <ChevronLeft aria-hidden="true" />
+          All docs
+        </button>
+        <p className="docs-drawer-title">{shelf.title}</p>
+        <p className="docs-drawer-subtitle">
+          {isTask ? `${routes.length} ${AUDIENCE_NAMES[audience]} ${noun}` : `${routes.length} pages`}
+        </p>
+      </div>
+      <ul className="docs-drawer-pages">
+        {routes.map((route) => (
+          <li key={route.slug}>
+            <GuideLink audience={audience} currentSlug={currentSlug} onNavigate={onNavigate} route={route} />
+          </li>
+        ))}
+      </ul>
+      {otherCount ? (
+        <div className="docs-drawer-twin">
+          <span>{`${otherCount} ${otherCount === 1 ? "guide" : "guides"} for the ${AUDIENCE_NAMES[other]}`}</span>
+          <button onClick={() => onAudienceChange(other)} type="button">
+            {`Show ${AUDIENCE_NAMES[other]}`}
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
 /**
  * Phone drawer: level one lists shelves, level two lists one shelf's pages.
  * Each level fits about one screen, which a single long list of every page did not.
@@ -318,39 +369,15 @@ const DocsDrawerNav = ({
   const currentShelf = docShelfFor(currentSlug);
   const shelf = openShelf ? DOC_SHELVES.find((entry) => entry.title === openShelf) : undefined;
   if (shelf) {
-    const routes = routesForAudience(shelf, audience);
-    const isTask = TASK_SHELVES.includes(shelf);
-    const other: DocsAudience = audience === "browser" ? "cli" : "browser";
-    const otherCount = isTask ? shelf.routes.filter((route) => route.audience === other).length : 0;
-    const noun = routes.length === 1 ? "guide" : "guides";
     return (
-      <div className="docs-drawer-level">
-        <div className="docs-drawer-head">
-          <button className="docs-drawer-back" onClick={() => onOpenShelf(null)} type="button">
-            <ChevronLeft aria-hidden="true" />
-            All docs
-          </button>
-          <p className="docs-drawer-title">{shelf.title}</p>
-          <p className="docs-drawer-subtitle">
-            {isTask ? `${routes.length} ${AUDIENCE_NAMES[audience]} ${noun}` : `${routes.length} pages`}
-          </p>
-        </div>
-        <ul className="docs-drawer-pages">
-          {routes.map((route) => (
-            <li key={route.slug}>
-              <GuideLink audience={audience} currentSlug={currentSlug} onNavigate={onNavigate} route={route} />
-            </li>
-          ))}
-        </ul>
-        {otherCount ? (
-          <div className="docs-drawer-twin">
-            <span>{`${otherCount} ${otherCount === 1 ? "guide" : "guides"} for the ${AUDIENCE_NAMES[other]}`}</span>
-            <button onClick={() => setAudience(other)} type="button">
-              {`Show ${AUDIENCE_NAMES[other]}`}
-            </button>
-          </div>
-        ) : null}
-      </div>
+      <DocsDrawerShelf
+        audience={audience}
+        currentSlug={currentSlug}
+        onAudienceChange={setAudience}
+        onBack={() => onOpenShelf(null)}
+        onNavigate={onNavigate}
+        shelf={shelf}
+      />
     );
   }
   const rows = (shelves: readonly DocShelf[]) =>
