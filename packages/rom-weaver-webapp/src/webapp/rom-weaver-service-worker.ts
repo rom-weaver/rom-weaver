@@ -839,7 +839,7 @@ const hasOtherWindowClient = async (newPageClientId: string | undefined) =>
 // A reloading tab stays a window client until its new page commits. Wait for the new page to be
 // the only window client. Give up when another tab stays open.
 const removeOutgoingBuildFilesWithoutTabs = async (newPageClientId: string | undefined) => {
-  if (!(await caches.keys()).includes(OUTGOING_BUILD_CACHE_NAME)) return;
+  if (!(await caches.has(OUTGOING_BUILD_CACHE_NAME))) return;
   const giveUpAt = Date.now() + OUTGOING_BUILD_CLEANUP_WAIT_MS;
   while (await hasOtherWindowClient(newPageClientId)) {
     if (Date.now() >= giveUpAt) {

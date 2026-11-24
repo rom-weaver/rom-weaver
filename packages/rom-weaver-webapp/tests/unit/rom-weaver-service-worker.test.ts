@@ -149,6 +149,9 @@ class FakeCacheStorage {
   async keys() {
     return [...this.caches.keys()];
   }
+  async has(name: string) {
+    return this.caches.has(name);
+  }
   async open(name: string) {
     let cache = this.caches.get(name);
     if (!cache) {
