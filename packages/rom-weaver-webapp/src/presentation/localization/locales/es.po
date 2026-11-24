@@ -50,6 +50,36 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.home.guideToZ3ds"
+#~ msgstr "Guía de 3DS a Z3DS"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.home.guideChd"
+#~ msgstr "Guía de CHD a ISO"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.home.guideToChd"
+#~ msgstr "Guía de ISO a CHD"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.home.guideToRvz"
+#~ msgstr "Guía de ISO a RVZ"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.home.guideRvz"
+#~ msgstr "Guía de RVZ a ISO"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.home.guideExtractZ3ds"
+#~ msgstr "Guía de Z3DS a 3DS"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
 msgstr ", una extensión de salida. El selector de formato agrega la extensión; elimínala para evitar un nombre duplicado."
 
@@ -252,11 +282,6 @@ msgstr "{title}: {platform}"
 #: src/presentation/localization/messages.ts
 msgid "ui.cheats.visibleOfTotal"
 msgstr "{visible} de {count, plural, one {# truco} other {# trucos}}"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.guideToZ3ds"
-msgstr "Guía de 3DS a Z3DS"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1192,11 +1217,6 @@ msgstr "Cambios"
 #: src/presentation/localization/messages.ts
 msgid "ui.status.channel"
 msgstr "Canal"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.guideChd"
-msgstr "Guía de CHD a ISO"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2960,18 +2980,8 @@ msgstr "¿Es gratis rom-weaver?"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.guideToChd"
-msgstr "Guía de ISO a CHD"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.hero.compressChdGuide"
 msgstr "Guía de ISO a CHD"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.guideToRvz"
-msgstr "Guía de ISO a RVZ"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5035,11 +5045,6 @@ msgstr "RVZ solo almacena imágenes de disco de GameCube y Wii, y {name} no es u
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.guideRvz"
-msgstr "Guía de RVZ a ISO"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.hero.extractRvzGuide"
 msgstr "Guía de RVZ a ISO"
 
@@ -6632,11 +6637,6 @@ msgstr "Z3DS solo almacena archivos de Nintendo 3DS, y {name} no es uno. Elige o
 #: src/presentation/localization/messages.ts
 msgid "error.NOT_3DS_INPUT"
 msgstr "Z3DS solo almacena archivos de Nintendo 3DS, y la entrada no es uno. Elige otro formato de salida."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.guideExtractZ3ds"
-msgstr "Guía de Z3DS a 3DS"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

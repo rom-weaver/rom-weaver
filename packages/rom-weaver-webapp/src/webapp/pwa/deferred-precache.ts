@@ -6,10 +6,10 @@ import {
 } from "./response-encoded-size.ts";
 import { cacheWithDownloadLog } from "./offline-download-log.ts";
 import type { OfflineCopyPolicy } from "./offline-copy-policy.ts";
+import { PRECACHE_REQUEST_HEADER } from "./precache-request-header.mjs";
 
 const DOWNLOAD_CONCURRENCY = 4;
 const BATCH_FILE_LIMIT = 16;
-const PRECACHE_REQUEST_HEADER = "X-Rom-Weaver-Precache";
 
 type DeferredEntry = { url: string; revision?: string | null; sizeBytes?: number };
 

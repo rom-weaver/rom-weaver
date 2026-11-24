@@ -1,5 +1,6 @@
 import type { MessageId } from "../../presentation/localization/catalog.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
+import { COMPRESS_FORMAT_GUIDES, EXTRACT_FORMAT_GUIDES } from "../../public/react/workflow-guides.ts";
 import {
   ROM_WEAVER_CHECKSUM_ALGORITHMS,
   ROM_WEAVER_CONTAINER_FORMATS,
@@ -24,6 +25,11 @@ const CONTAINER_EXTENSIONS: readonly string[] = ROM_WEAVER_CONTAINER_FORMATS.fla
 );
 /** Matches the algorithm list in docs/reference/formats.md#checksum-support. */
 const CHECKSUM_ALGORITHMS = ROM_WEAVER_CHECKSUM_ALGORITHMS.map((algorithm) => algorithm.id);
+/** Each extract guide beside its compress counterpart, in the shared guides' order. */
+const DISC_GUIDES = EXTRACT_FORMAT_GUIDES.flatMap((extract, index) => {
+  const compress = COMPRESS_FORMAT_GUIDES[index];
+  return (compress ? [extract, compress] : [extract]).map((guide) => ({ label: guide.label, slug: guide.path }));
+});
 
 type HomeRoute = {
   body: MessageId;
@@ -60,14 +66,7 @@ const HOME_ROUTES: readonly HomeRoute[] = [
     go: "ui.home.goCompress",
     slug: "compress-files",
     secondary: { go: "ui.home.goExtract", slug: "extract-files" },
-    guides: [
-      { label: "ui.home.guideChd", slug: "docs/extract-chd" },
-      { label: "ui.home.guideToChd", slug: "docs/convert-to-chd" },
-      { label: "ui.home.guideRvz", slug: "docs/convert-rvz-to-iso" },
-      { label: "ui.home.guideToRvz", slug: "docs/convert-to-rvz" },
-      { label: "ui.home.guideExtractZ3ds", slug: "docs/extract-z3ds" },
-      { label: "ui.home.guideToZ3ds", slug: "docs/convert-to-z3ds" },
-    ],
+    guides: DISC_GUIDES,
     swatch: "source",
     title: "ui.home.routeDisc",
   },

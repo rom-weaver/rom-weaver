@@ -1,7 +1,6 @@
 import { SITE_ORIGIN } from "../src/webapp/docs-routing.mjs";
+import { PRECACHE_REQUEST_HEADER } from "../src/webapp/pwa/precache-request-header.mjs";
 import { MARKDOWN_ROUTES } from "./markdown-routes.js";
-
-const PRECACHE_REQUEST_HEADER = "X-Rom-Weaver-Precache";
 
 const mergeVary = (existing, ...tokens) => {
   const vary = new Set(

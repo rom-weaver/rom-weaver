@@ -129,9 +129,8 @@ const Masthead = ({
   const findTriggerRef = useRef<HTMLButtonElement | null>(null);
   const navLabel = localizer.message("ui.nav.primary");
 
-  /* The beta-tools setting is client-only, so the prerendered shell and first
-     hydration pass both omit disabled beta rows; they mount after hydration
-     when the setting is on, keeping beta URLs out of public prerendered HTML. */
+  /* The beta-tools setting is client-only, so the prerendered shell and first hydration
+     omit disabled beta rows, except the current page's own. Enabled rows mount after hydration. */
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => setHydrated(true), []);
   const betaVisible = hydrated && betaToolsEnabled;
@@ -332,7 +331,7 @@ const Masthead = ({
   const sections: NavSectionData[] = useMemo(() => {
     const workflowGroup = (group: NavGroup): NavSectionData => ({
       entries: tabs
-        // Keep the current page in the nav even if it is a beta URL visited while the setting is off.
+        // Keep the current beta page in the nav while the setting is off.
         .filter((tab) => tab.group === group && (!tab.beta || betaVisible || tab.id === currentTab))
         .map((tab) => ({
           beta: tab.beta,

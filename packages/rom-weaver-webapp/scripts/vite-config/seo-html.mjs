@@ -126,10 +126,8 @@ export const createNotFoundHtml = (html, channel, channelLabel) => {
   return notFoundHtml;
 };
 
-// A workflow page's <lastmod> is the newest commit of the route table plus that route's own
-// view files. The shared message catalog is deliberately excluded so unrelated UI edits never
-// mass-bump every workflow's sitemap date. A dirty or shallow checkout yields none, and the
-// entry omits <lastmod> rather than guess.
+// Newest commit to the route table and view files sets <lastmod>, not the message catalog.
+// A dirty or shallow checkout omits it.
 const WORKFLOW_SEO_SOURCE = "src/webapp/workflow-seo.mjs";
 export const WORKFLOW_ROUTE_LASTMOD_SOURCES = Object.freeze({
   "": [

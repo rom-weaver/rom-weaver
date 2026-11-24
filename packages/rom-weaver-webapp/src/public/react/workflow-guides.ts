@@ -28,25 +28,25 @@ const EXTRACT_FORMAT_GUIDES = [
   { path: "docs/extract-z3ds", label: "ui.hero.extractZ3dsGuide" },
 ] as const satisfies readonly WorkflowGuide[];
 
-/** Format-specific how-tos linked beside the Compress guide. */
+/** Format-specific how-tos for Compress. */
 const COMPRESS_FORMAT_GUIDES = [
   { path: "docs/convert-to-chd", label: "ui.hero.compressChdGuide" },
   { path: "docs/convert-to-rvz", label: "ui.hero.compressRvzGuide" },
   { path: "docs/convert-to-z3ds", label: "ui.hero.compressZ3dsGuide" },
 ] as const satisfies readonly WorkflowGuide[];
 
-/** Checksum troubleshooting and lookup guides linked from Checksum. */
+/** Checksum troubleshooting and lookup guides. */
 const CHECKSUM_EXTRA_GUIDES = [
   { path: "docs/fix-checksum-errors", label: "ui.hero.fixChecksumGuide" },
   { path: "docs/search-rom-checksums", label: "ui.hero.searchChecksumGuide" },
 ] as const satisfies readonly WorkflowGuide[];
 
-/** Checksum-search guide linked beside the Identify guide. */
+/** Checksum-search guide. */
 const IDENTIFY_EXTRA_GUIDES = [
   { path: "docs/search-rom-checksums", label: "ui.hero.searchChecksumGuide" },
 ] as const satisfies readonly WorkflowGuide[];
 
-/** Format, console, and troubleshooting guides linked from the Apply workflow disclosure. */
+/** Format, console, and troubleshooting guides. */
 const APPLY_FORMAT_GUIDES = [
   { path: "docs/apply-bps-patch", label: "ui.hero.applyBpsGuide" },
   { path: "docs/apply-ips-patch", label: "ui.hero.applyIpsGuide" },
