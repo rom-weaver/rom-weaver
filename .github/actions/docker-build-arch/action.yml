@@ -47,10 +47,9 @@ inputs:
     default: ""
   cache-from:
     description: >-
-      Import the image's per-arch buildcache ref. Off for a build that skips the
-      expensive stages anyway (`DIST=prebuilt`), which would otherwise pull a
-      source layer graph it cannot use - and pull it unauthenticated on a pull
-      request, where nothing has logged in.
+      Import the image's per-arch buildcache ref. Off for `DIST=prebuilt`, which
+      skips the webapp builder stages. A pull request has not logged in to pull
+      the cache.
     default: "true"
   cache-to:
     description: Export the layer cache to the image's per-arch buildcache ref.
