@@ -11,7 +11,6 @@ import type {
   planBrowserPlaylist,
 } from "../../platform/browser/browser-playlist-api.ts";
 import { checkGameName, type GameNameProblem } from "../../storage/browser/playlist-game-name.ts";
-import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
 import { getBaseName } from "../../storage/shared/path-utils.ts";
 import { canWritePlaylistFolders } from "../../storage/browser/playlist-folder-support.ts";
 import { Notice, RunButton } from "../../public/react/components/ds/feedback.tsx";
@@ -25,6 +24,7 @@ import { WORKFLOW_GUIDES } from "../../public/react/workflow-guides.ts";
 import type { PlaylistLayout } from "../../wasm/generated/rom-weaver-rust-types.d.ts";
 import { useAgentWorkflow } from "../agent/workflow-registry.ts";
 import { trackFilePicker } from "../file-picker-state.ts";
+import { useKeptZip } from "../use-kept-zip.ts";
 
 const PLAYLIST_ACTIVITY_KEY = "playlist";
 // A game folder holds discs, their tracks, and maybe one folder per disc; deeper trees are not games.
@@ -561,10 +561,7 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
   const surveyRef = useRef<BrowserPlaylistPlan | null>(null);
   const plannedSourceRef = useRef<PlaylistSource | null>(null);
   const busyRef = useRef(false);
-  const zipAbortRef = useRef<AbortController | null>(null);
-  // `saveAs` returns once the browser starts reading the file, so the last ZIP MUST stay in storage
-  // until it is replaced; disposing it at once cancels a large download mid-transfer.
-  const zipOutputRef = useRef<PublicOutput | null>(null);
+  const { disposeZip, keepZip, zipAbortRef } = useKeptZip();
   const nameProblem = checkGameName(name);
 
   useEffect(() => {
@@ -581,18 +578,6 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
     );
   }, [busy, done, error, localizer, planning, source]);
   useEffect(() => () => setWorkbenchActivity(PLAYLIST_ACTIVITY_KEY, { state: "idle" }), []);
-  const disposeZip = useCallback(() => {
-    const old = zipOutputRef.current;
-    zipOutputRef.current = null;
-    void old?.dispose();
-  }, []);
-  useEffect(
-    () => () => {
-      zipAbortRef.current?.abort();
-      disposeZip();
-    },
-    [disposeZip],
-  );
 
   const games = useMemo(() => [...new Set((survey?.discs ?? []).map((disc) => disc.game))], [survey]);
   const allAtTop = !!plan && isAllAtTop(plan);
@@ -652,6 +637,7 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
           if (planRunRef.current !== run || isAbort(cause)) return;
           setPlan(null);
           setOutputPlan(null);
+          setOutputReason("");
           setError(getErrorMessage(cause));
         } finally {
           if (planRunRef.current === run) setPlanning(false);
@@ -791,12 +777,7 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
           signal: abort.signal,
           zip: { layout, rename },
         });
-        // The write can finish after a cancel or an unmount aborted the signal.
-        if (abort.signal.aborted) {
-          await output.dispose();
-          return;
-        }
-        zipOutputRef.current = output;
+        if (!keepZip(output, abort.signal)) return;
         await output.saveAs({ fileName: `${name}.zip`, interactive: true });
         setDone(localizer.message("ui.playlist.doneZip", { fileName: `${name}.zip` }));
       } catch (cause) {

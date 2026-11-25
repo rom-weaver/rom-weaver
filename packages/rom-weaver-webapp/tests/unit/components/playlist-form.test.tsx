@@ -347,6 +347,26 @@ describe("PlaylistForm", () => {
     await screen.findByText("Can't rename these discs: `Game.mds` cannot be renamed");
   });
 
+  it("drops the ZIP warning when the next plan fails for another reason", async () => {
+    const planFailure = { error: null as Error | null };
+    vi.mocked(planBrowserPlaylist).mockImplementation(async ({ zip }) => {
+      if (planFailure.error) throw planFailure.error;
+      if (zip) throw new Error("two files would both be written as `disc.gdi`");
+      return PLAN;
+    });
+    render(<PlaylistForm onSessionChange={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Drop the discs of one game"), {
+      target: { files: [new File(["one"], "Game (Disc 1).cue"), new File(["two"], "Game (Disc 2).cue")] },
+    });
+    await screen.findByText("Can't make the ZIP: two files would both be written as `disc.gdi`");
+
+    planFailure.error = new Error("Type a game name");
+    fireEvent.change(screen.getByLabelText("Game name"), { target: { value: "FF7" } });
+
+    await screen.findByText("Type a game name");
+    expect(screen.queryByText(/Can't make the ZIP/)).toBeNull();
+  });
+
   it("lists the ZIP's own lines when the browser cannot save the playlist into a folder", async () => {
     vi.mocked(planBrowserPlaylist).mockImplementation(async ({ zip }) =>
       zip ? PLAN : { ...PLAN, entries: ["CD1/Game (Disc 1).cue", "CD2/Game (Disc 2).cue"] },
@@ -365,6 +385,32 @@ describe("PlaylistForm", () => {
     fireEvent.change(screen.getByLabelText("Game name"), { target: { value: "CON" } });
     await screen.findByText('Windows reserves the name "CON".');
     expect((download as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("frees a ZIP that finishes after the page was left, without saving it", async () => {
+    const output = zipOutput();
+    const write: { signal: AbortSignal | null; finish: ((value: unknown) => void) | null } = {
+      finish: null,
+      signal: null,
+    };
+    support.writeZip.mockImplementation(
+      ({ signal }: { signal: AbortSignal }) =>
+        new Promise((resolve) => {
+          write.signal = signal;
+          write.finish = resolve;
+        }),
+    );
+    const { unmount } = render(<PlaylistForm onSessionChange={vi.fn()} />);
+    await dropDiscs();
+    fireEvent.click(screen.getByRole("button", { name: "Download Game.zip" }));
+    await waitFor(() => expect(write.finish).not.toBeNull());
+
+    unmount();
+    write.finish?.(output);
+
+    await waitFor(() => expect(output.dispose).toHaveBeenCalled());
+    expect(write.signal?.aborted).toBe(true);
+    expect(output.saveAs).not.toHaveBeenCalled();
   });
 
   it("cancels a ZIP being written without an error or a saved file", async () => {
