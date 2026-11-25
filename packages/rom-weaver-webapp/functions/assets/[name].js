@@ -23,7 +23,9 @@ const sidecarEncodedSize = (response) => {
 };
 
 export const onRequestGet = async ({ request, env, next }) => {
-  if (!acceptsBrotli(request.headers.get("Accept-Encoding") ?? "")) return next();
+  // Cloudflare can replace the incoming header before the function runs.
+  const acceptEncoding = request.cf?.clientAcceptEncoding ?? request.headers.get("Accept-Encoding") ?? "";
+  if (!acceptsBrotli(acceptEncoding)) return next();
   const url = new URL(request.url);
   // The build-checked type table avoids a separate request for the raw asset.
   // Unknown types fall through to Pages' static response.

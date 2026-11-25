@@ -60,15 +60,14 @@ export const writeBrotliSidecars = () => {
       };
       const sidecarUrls = [`/assets/${wasmNames[0]}`];
       assertSidecarTypeIsKnown(sidecarUrls[0]);
-      // Packs and cheat shards are staged as `.br`-only sidecars, all under one
-      // wildcard include; each still needs a known content type.
       const identifySidecars = fs
         .readdirSync(assetsDir)
-        .filter((name) => name.startsWith("identify-") && (name.endsWith(".pack.br") || name.endsWith(".json.br")));
+        .filter((name) => /^identify-(?:.*\.pack|cheats-.*\.json)\.br$/u.test(name));
       if (identifySidecars.length > 0) {
         for (const name of identifySidecars) assertSidecarTypeIsKnown(`/assets/${name.slice(0, -3)}`);
         sidecarUrls.push("/assets/identify-*");
       }
+      const prebuiltIdentifyAssets = new Set(identifySidecars.map((name) => name.slice(0, -3)));
       // Quality-11 compression is the slow step, so run it on libuv's thread pool
       // with bounded concurrency. Results are kept by index and consumed in sorted
       // name order, so the sidecars and routes never depend on completion order.
@@ -78,7 +77,8 @@ export const writeBrotliSidecars = () => {
         // `.map` sidecars are devtools-only: nothing on a normal page load
         // requests them, so a q11 pass and a _routes.json include each would
         // buy nothing and eat the include budget.
-        .filter((name) => !(name.endsWith(".wasm") || name.endsWith(".br") || name.endsWith(".map")));
+        .filter((name) => !(name.endsWith(".wasm") || name.endsWith(".br") || name.endsWith(".map")))
+        .filter((name) => !prebuiltIdentifyAssets.has(name));
       const compressed = await mapConcurrently(
         candidates,
         Math.max(1, Math.min(os.availableParallelism(), 8)),
