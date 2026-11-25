@@ -118,7 +118,9 @@ The file stores each record once, without the values a reader derives (`id`, `sy
 
 `index.json` lists each remaining shard under `cheats` with its platform, slug, Rust `cheatSystem` identifier, size, SHA-256, and pack group. `sources.libretro.licenseFile` names the copied license text.
 
-The webapp stages `assets/identify-cheats-<slug>.json` and its `.br` sidecar. Each shard belongs to its platform's identify pack group. The CLI release tree stores shards under `cheats/<slug>.json.br`. The `identify database install-group` command installs them beside the packs. The `identify database remove` command deletes them with the packs.
+The webapp stages `assets/identify-cheats-<slug>.json` and its `.br` sidecar. Each shard belongs to its platform's identify pack group.
+
+The CLI release tree stores shards under `cheats/<slug>.json.br`. The `identify database install-group` command installs them beside the packs. The `identify database remove` command deletes them with the packs.
 
 To add a platform, add a `CHEAT_PLATFORMS` entry whose key is an identify platform name and whose `cheatSystem` is a Rust `CheatSystem` identifier. Every cheat platform needs a Rust `CheatSystem` decoder.
 

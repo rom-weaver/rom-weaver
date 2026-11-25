@@ -78,6 +78,7 @@ export const writeBrotliSidecars = () => {
         // requests them, so a q11 pass and a _routes.json include each would
         // buy nothing and eat the include budget.
         .filter((name) => !(name.endsWith(".wasm") || name.endsWith(".br") || name.endsWith(".map")))
+        // Identify packs and shards already have prebuilt `.br` files.
         .filter((name) => !prebuiltIdentifyAssets.has(name));
       const compressed = await mapConcurrently(
         candidates,
