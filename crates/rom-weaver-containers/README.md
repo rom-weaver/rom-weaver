@@ -77,4 +77,4 @@ Before v1.0, breaking changes increase the minor version. Direct use of this cra
 
 ## License
 
-Copyright © Brandon Casey. Licensed under [AGPL-3.0-or-later](https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE). Bundled third-party components retain their own licenses: libarchive, the inlined `nod` and `xdvdfs` sources, and the C compression libraries.
+Copyright © Brandon Casey. Licensed under [AGPL-3.0-or-later](https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE). Bundled third-party components retain their own licenses: libarchive, the inlined `chd-rs`, `nod`, and `xdvdfs` sources, the 7-Zip LZMA SDK, and the C compression libraries.

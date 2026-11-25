@@ -19,7 +19,7 @@ Compress a GameCube or Wii ISO to RVZ with local browser compression. Use this R
 
 Use a valid GameCube or Wii disc image. Renaming another console's image to `.iso` does not make it compatible with RVZ.
 
-For a disc inside ZIP, 7z, or another supported container, add the container to Compress. Select the ISO, then select **Add N files**.
+For a disc inside ZIP, 7z, or another supported container, add the container to Compress. Select the ISO, then select **Add 1 file**.
 
 ## Create the RVZ
 
@@ -31,7 +31,7 @@ For a disc inside ZIP, 7z, or another supported container, add the container to 
 
 Block size defaults to 131072 bytes. Enter a power of two from 32768 to 1073741824 bytes. Examples include 32768, 65536, and 1048576. Invalid values show an error before compression starts.
 
-If RVZ is unavailable, check that **Inputs** contains only one compatible disc image. Multiple files offer archive output instead. An `.iso` that Rom Weaver does not recognise as a GameCube or Wii disc, such as a DVD image, is not offered RVZ.
+If RVZ is unavailable, check that **Inputs** contains only one compatible disc image. Multiple files offer archive output instead. An `.iso` that rom-weaver does not recognise as a GameCube or Wii disc, such as a DVD image, is not offered RVZ.
 
 Keep the page open until compression and download finish. To stop compression, use the cancel control on the progress bar.
 

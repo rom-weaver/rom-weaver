@@ -47,7 +47,7 @@ The Save Editor changes persistent game data. It does not change emulator save s
 
 The Pokémon handlers cover the English layouts named above. A matching file size alone does not prove support.
 
-The default registry also includes 1196 fixed profiles for 96 title groups. The [catalog](../../data/save-schemas/README.md) lists their profile counts, exact editable scope, accepted physical variants, and creation support.
+The default registry also includes 1196 fixed profiles for 97 title groups. The [catalog](../../data/save-schemas/README.md) lists their profile counts, exact editable scope, accepted physical variants, and creation support.
 
 ## Editable fields
 

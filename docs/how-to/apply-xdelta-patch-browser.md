@@ -33,8 +33,8 @@ The download is named after the source file and the patch, such as `game [hack].
 
 An xdelta patch has no fixed checksum of the file it expects unless the author used xdelta3's armor option. What it catches depends on how the author made it.
 
-- A patch made with the armor option records a BLAKE3 digest of the source. A wrong source fails with a `checksum mismatch` message, and **APPLY & DOWNLOAD** is blocked.
-- A patch with window checksums catches a wrong source. The card shows **Checks failed** with a `checksum mismatch` message, and **APPLY & DOWNLOAD** is blocked.
+- A patch made with the armor option records a BLAKE3 digest of the source. A wrong source fails with a `source file BLAKE3 mismatch` message, and **APPLY & DOWNLOAD** is blocked.
+- A patch with window checksums catches a wrong source. The card shows **Checks failed** with a `target window checksum mismatch` message, and **APPLY & DOWNLOAD** is blocked.
 - A patch with neither applies to a wrong source without a warning.
 
 For patches without armor, a dashed circle means the patch only applies, so compare the author's checksum yourself. Add it as an input check on the patch card, as in [Check the ROM yourself](apply-ips-patch-browser.md#check-the-rom-yourself). A wrong file then fails the check.

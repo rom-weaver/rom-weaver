@@ -20,8 +20,8 @@ The default registry includes 1218 profiles: the original seven game-family defi
 | `donkey_kong_country_2_diddy_s_kong_quest.rs` | 1 | 3 | 240 | Template only |
 | `donkey_kong_country_3_dixie_kong_s_double_trouble.rs` | 1 | 3 | 42 | Template only |
 | `final_fantasy_nes.rs` | 1 | 1 | 311 | Template only |
-| `mario_party.rs` | 1 | 1 | 15 | Template only |
-| `mario_party_2.rs` | 1 | 1 | 11 | Template only |
+| `mario_party.rs` | 1 | 1 | 219 | Template only |
+| `mario_party_2.rs` | 1 | 1 | 284 | Template only |
 | `pokemon_generation_i.rs` | 3 | 3 | 1,031 | Template only |
 | `pokemon_generation_ii.rs` | 3 | 3 | 1,806 | Template only |
 | `secret_of_mana.rs` | 1 | 4 | 52 | Template only |
@@ -39,14 +39,14 @@ The default registry includes 1218 profiles: the original seven game-family defi
 | `actraiser.rs` | 1 | 3 | 126 | Template only |
 | `capcom_gba_eeprom.rs` | 2 | 2 | 70 | Template only |
 | `chrono_trigger.rs` | 1 | 3 | 324 | Template only |
-| `diddy_kong_racing.rs` | 1 | 1 | 9 | Template only |
+| `diddy_kong_racing.rs` | 1 | 1 | 589 | Template only |
 | `donkey_kong_land.rs` | 1 | 1 | 369 | Template only |
 | `f_zero_maximum_velocity.rs` | 1 | 1 | 1938 | Template only |
-| `f_zero_x.rs` | 1 | 1 | 5 | Template only |
+| `f_zero_x.rs` | 1 | 1 | 874 | Template only |
 | `final_fantasy_vi.rs` | 1 | 3 | 993 | Template only |
-| `lylat_wars.rs` | 1 | 1 | 15 | Template only |
-| `mario_kart_64.rs` | 1 | 1 | 16 | Template only |
-| `mission_impossible.rs` | 1 | 1 | 16 | Template only |
+| `lylat_wars.rs` | 1 | 1 | 601 | Template only |
+| `mario_kart_64.rs` | 1 | 1 | 209 | Template only |
+| `mission_impossible.rs` | 1 | 1 | 24 | Template only |
 | `mystic_quest_legend.rs` | 1 | 3 | 486 | Template only |
 | `pokemon_trading_card_game.rs` | 1 | 1 | 506 | Template only |
 | `super_punch_out.rs` | 1 | 8 | 88 | Template only |
@@ -62,7 +62,7 @@ The default registry includes 1218 profiles: the original seven game-family defi
 | `wario_land_ii.rs` | 1 | 1 | 208 | Template only |
 | `yoshis_story.rs` | 1 | 3 | 39 | Template only |
 | `zelda_links_awakening.rs` | 1 | 4 | 288 | Template only |
-| **Total** | **51** | **118** | **11,013** | **2 fresh profiles** |
+| **Total** | **51** | **118** | **16,544** | **2 fresh profiles** |
 
 Fresh creation uses a verified initializer. Template creation starts from an existing valid save and preserves bytes outside the requested edits and integrity repairs. A profile without an initializer cannot create a fresh save.
 

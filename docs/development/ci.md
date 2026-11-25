@@ -56,6 +56,7 @@ Every workflow in `.github/workflows`, what triggers it, what it gates, and what
 | --- | --- | --- | --- |
 | `ci.yml` | PR, push to `main`, `v*` tags, nightly 05:41 UTC, manual | **Yes** | Build, lint, test, deploy the webapp; nightly and the release PR also run fast quality signals and the full native matrix |
 | `pull-request.yml` | PR (open/reopen/sync/edit), PR comment | **Yes** | The required `CLA Signed` and `PR Title Lint` checks |
+| `merge-conflicts.yml` | PR (open/reopen/sync/base change), branch push | No | Posts the `Merge Conflict Check` commit status for open pull requests |
 | `dependabot-auto-merge.yml` | Dependabot PR open/reopen/sync | No | Arm native squash auto-merge for patch and minor updates after required checks pass |
 | `codeql.yml` | nightly (05:27 UTC), release PR, manual | No | Static analysis into the Security tab |
 | `coverage.yml` | weekly Sunday 06:43 UTC, manual | No | Rust + React coverage reports |
@@ -113,8 +114,6 @@ Release Please rewrites the branch and the body on every dispatch, so the script
 > **`main` is protected by the active `main protection` ruleset.** Pull requests must use squash merge and pass `CI gate`, `PR Title Lint`, and `CLA Signed`.
 >
 > The ruleset has no bypass actors, so a status that is never reported blocks the merge outright. That is why the required CI name belongs to the one gate job that always runs, never to a job that path classification can skip or drop from a matrix. It is also why `CLA Signed` comes from a workflow that can be rerun rather than an app that cannot.
->
-> **Switching from the three aggregates.** `CI gate` replaced the `Rust`, `Webapp`, and `Plumbing` aggregates. The ruleset MUST change in the same window the change merges: pull requests opened before it report the old names, and after it nothing reports them, so a ruleset still requiring them blocks every merge. Replace the three required contexts with `CI gate` (source: GitHub Actions) right after merging, then rerun or update open pull requests so their head commit reports the new name.
 
 ## `ci.yml` - the required gate
 
@@ -169,10 +168,12 @@ security ── advisories (warn only, always green)
 | `rust-macos`, `rust-windows` | Rust tests on macOS and Windows (full native runs only) | `CI gate` |
 | `cli-platforms` | Builds and smoke-tests the native release targets | `CI gate` |
 | `cli-linux-arm64` | Runs the cross-built arm64 musl binary on a native arm64 runner | `CI gate` |
+| `cli-release-attest` | Attests the release pull request's CLI binaries so `release.yml` can verify and reuse them | not required |
 | `quality-fast`, `quality-reference` | Nightly architecture, verification, and pinned-reference checks | `CI gate` (nightly and release PR) |
 | `quality-analysis` | Mutation and fuzz signals on nightly and manual runs | not required (advisory) |
 | `security` | `cargo deny advisories` and `npm audit` | not required (warn only) |
 | `webapp-static`, `webapp-lighthouse`, `webapp-browser`, `webapp-wasm-browser`, `webapp-e2e`, `webapp-webkit-e2e` | Webapp lint, unit, browser, and E2E suites and the Lighthouse audit, on the prebuilt module | `CI gate` |
+| `wait-webapp-bundle` | On a tag push, waits for `main`'s `save-webapp-bundle` so deploy legs can reuse its tested bundle | not required |
 | `deploy` | Cloudflare Pages deployments | not required |
 | `gate` | Asserts every gating job against its selection flag; reports `CI gate` | branch protection |
 | `nightly-alert` | Opens, updates, or closes the nightly tracking issue and a separate advisory-quality issue; runs on the `schedule` event only | not required |
@@ -183,7 +184,7 @@ security ── advisories (warn only, always green)
   - Browser runtime, worker, and storage changes also select that direct WASM suite; UI-only changes do not. Webapp-only changes restore the exact cached WASM module.
   - Dependency manifests select the advisory scanners. Workflows, composite actions, shell scripts, Dockerfiles, and Markdown select the plumbing lint.
   - Published documentation also selects the webapp checks because Vite renders those pages. A pull request that changes only published guide Markdown keeps `webapp-static` and Chromium `webapp-e2e` (rendering, accessibility, links) but skips `webapp-browser` and `webapp-webkit-e2e` through the `webapp_browser` flag; screenshots, samples, and schemas under `docs/` are webapp assets and keep both. Unpublished notes select repository lint unless their location also matches a Rust, package, or build-input rule. `docs/reference/cli.md` also selects Rust, because a CLI smoke test compares it with `extract --help`.
-  - A pull request whose webapp changes are all Vitest-only inputs skips `webapp-webkit-e2e` through the `webkit_e2e` flag. Those inputs are `tests/browser/`, `tests/unit/`, `tests/setup/`, the `vitest.*.mjs` configs, `scripts/run-browser-tests.mjs` and its `.test.mjs`, and `scripts/browser-test-durations.json`. The E2E runner never loads them, and each skip frees two macOS legs. Pushes to `main`, manual runs, and the release pull request keep WebKit for the same change; tag pushes and the nightly schedule never run it.
+  - A pull request whose webapp changes are all Vitest-only inputs skips `webapp-webkit-e2e` through the `webkit_e2e` flag. Those inputs (all under `packages/rom-weaver-webapp/`) are `tests/browser/`, `tests/unit/`, `tests/setup/`, the `vitest.*.mjs` configs, `scripts/run-browser-tests.mjs` and its `.test.mjs`, and `scripts/browser-test-durations.json`. The E2E runner never loads them, and each skip frees two macOS legs. Pushes to `main`, manual runs, and the release pull request keep WebKit for the same change; tag pushes and the nightly schedule never run it.
   - Crate Markdown (`crates/**/*.md` outside `vendor/`) selects Rust only: no crate embeds it, so it is not a WASM compiler input. Crate LICENSE files stay inputs because the module's attribution bundle copies them.
   - `tests/fixtures/` selects Rust as well as the WASM runtime suite. `fuzz/` selects `rust-lint` alone, which then builds the separate fuzz workspace. `design/` selects the webapp checks, whose `webapp-static` lint runs `brand:check`.
   - Manual runs and changes to CI, coverage, the toolchain, or the classifier run everything. CI script tests run in `repo-lint`, so a change to one does not select compiled stacks.
@@ -375,9 +376,9 @@ Production bundles carry external source maps (`build.sourcemap`), so a stack tr
 
 Quality 11 on the wasm costs ~15s, which every build would otherwise repay for an unchanged asset, so `scripts/wasm/brotli-compress.mjs` keys its output by input digest and brotli parameters under `node_modules/.cache/rom-weaver-brotli` and verifies a hit by decompressing it before reuse. Entries unused for 14 days are pruned; the build's sidecar pass compresses assets on the libuv thread pool with bounded concurrency and writes results in sorted order, so output bytes do not depend on completion order; `ROM_WEAVER_BROTLI_CACHE=0` disables the cache.
 
-Cost model: sidecar-backed URLs invoke the function, everything else stays on the unmetered static path, and repeat visits are covered by the immutable browser/service-worker cache. To keep invocations from scaling with traffic, the nightly deploy leg idempotently installs a zone Cache Rule ("Ensure zone cache rule for /assets" in `ci.yml`). The rule makes `/assets/*` on the prod, beta, and nightly custom domains eligible for edge caching with `respect_origin` TTLs, so the function runs roughly once per URL per PoP instead of per request. That is safe because every routed URL is immutable, and each identify pack URL carries its own `sha256` query, so a rebuilt pack is a different URL.
+Cost model: sidecar-backed URLs invoke the function, everything else stays on the unmetered static path, and repeat visits are covered by the immutable browser/service-worker cache. To keep invocations from scaling with traffic, the nightly deploy runs "Ensure zone cache rules for assets and negotiated pages" in `ci.yml`. It idempotently installs `respect_origin` TTL Cache Rules for `/assets/*` and negotiated pages on the prod, beta, and nightly domains, so the function runs roughly once per URL per PoP instead of per request. After a custom-domain deploy, "Purge negotiated page cache after custom-domain deployment" clears cached negotiated pages so visitors see the update immediately. That is safe because every routed `/assets/*` URL is immutable, and each identify pack URL carries its own `sha256` query, so a rebuilt pack is a different URL.
 
-The ruleset read retries HTTP 5xx responses up to three attempts, waiting one then two seconds, with a 30-second timeout per read. Permanent errors and writes are not retried. The step skips with a notice until two pieces of one-time setup exist: a `CLOUDFLARE_ZONE_ID` repository secret (the `rom-weaver.com` zone) and `Zone -> Cache Rules -> Edit` added to the `CLOUDFLARE_API_TOKEN`.
+The ruleset read retries HTTP 5xx responses up to three attempts, waiting one then two seconds, with a 30-second timeout per read. Permanent errors and writes are not retried. Both steps skip with a notice until setup is complete. Add `CLOUDFLARE_ZONE_ID` (the `rom-weaver.com` zone) as a repository secret, and grant `CLOUDFLARE_API_TOKEN` `Zone -> Cache Rules -> Edit` and `Zone -> Cache Purge -> Purge`.
 
 `pages.dev` previews sit outside the zone, so preview traffic stays per-request - fine, it is internal. A `caches.default` lookup inside the function would not reduce the bill (the invocation is counted whether or not it hits cache). Function usage and over-limit behavior depend on the account plan and fail-open setting; see [Cloudflare Pages Functions pricing](https://developers.cloudflare.com/pages/functions/pricing/) for current limits and charges.
 
@@ -745,7 +746,7 @@ A Homebrew or Scoop failure can be retried by rerunning its job. These jobs upda
 
 ### Prerelease routing
 
-One rule, applied in five places: a hyphen in the version means prerelease.
+One rule, applied in six places: a hyphen in the version means prerelease.
 
 | Target | Stable | Prerelease |
 | --- | --- | --- |
@@ -754,6 +755,7 @@ One rule, applied in five places: a hyphen in the version means prerelease.
 | web channel | rom-weaver.com | beta.rom-weaver.com |
 | GitHub release | normal | marked prerelease |
 | Homebrew | formula updated | skipped |
+| Scoop | manifest updated | skipped |
 
 The docker major tag starts at 1.0.0 because `0` would float across 0.5 → 0.6, which semver treats as breaking.
 
@@ -821,7 +823,7 @@ Cache **mounts** (`--mount=type=cache`) are a separate mechanism and remain loca
 | Secret | Used by | For |
 | --- | --- | --- |
 | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | `ci.yml`, preview cleanup | Pages Direct Upload and preview deletion |
-| `CLOUDFLARE_ZONE_ID` (optional) | `ci.yml` | Maintaining the `/assets/*` zone Cache Rule; the API token also needs Cache Rules edit permission |
+| `CLOUDFLARE_ZONE_ID` (optional) | `ci.yml` | Maintaining the `/assets/*` and negotiated-page zone Cache Rules and purging negotiated pages after custom-domain deploys; the API token also needs Cache Rules edit and Cache Purge permissions |
 | `RELEASE_PLEASE_TOKEN` | `release.yml` | Release pull request and release-metadata operations |
 | `PACKAGE_MANAGER_TOKEN` | `release.yml` | Pushing stable releases to the Homebrew tap and Scoop bucket repositories |
 | `NPM_BOOTSTRAP_TOKEN` (optional) | `npm-publish.yml` | First publication of a newly added npm package before trusted publishing can be configured |

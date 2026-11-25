@@ -100,4 +100,4 @@ rom-weaver weave parse --input release.zip
 rom-weaver patch apply -i original.sfc --weave release.zip -o translated.sfc
 ```
 
-Add `--output extracted` to `weave parse` to extract packaged files. Use `--with NAME` and `--without NAME` on apply to change the selected optional patches; each matches a patch name or file name and fails if it matches nothing. Test each combination you publish from the documented Original.
+Add `--output extracted` to `weave parse` to extract packaged files. On apply, use `--with GLOB` to enable optional patches and `--without GLOB` to disable any weave patch. Each matches a patch name, file name, or glob, and fails when nothing matches. Test each combination you publish from the documented Original.

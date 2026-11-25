@@ -1,6 +1,6 @@
 # Environment variables
 
-This page lists the supported runtime variables and the main developer overrides. Most runtime numbers and booleans are parsed by `rom_weaver_core::env`; the table notes exceptions.
+This page lists the supported runtime variables and the main developer overrides. Most runtime unsigned integers are parsed by `rom_weaver_core::env`; the table notes exceptions.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -24,14 +24,14 @@ The browser OPFS runner likewise has no constructor-level `program`, `argv0`, or
 | Variable | Type | Default | Read at | Purpose |
 | --- | --- | --- | --- | --- |
 | `ROM_WEAVER_LOG` | filter string | unset | `crates/rom-weaver-cli/src/lib.rs` | Tracing filter spec (e.g. `rom_weaver_app=trace`); also honored via `RUST_LOG` when no explicit CLI log level is selected. |
-| `ROM_WEAVER_DATA_DIR` | directory path | platform data directory + `rom-weaver` | `crates/rom-weaver-cli/src/identify_database.rs` | Parent of the native identify database's `identify` directory. An empty value counts as unset. `--database-dir` overrides the full database path. |
+| `ROM_WEAVER_DATA_DIR` | directory path | platform data directory + `rom-weaver` | `crates/rom-weaver-cli/src/identify_database.rs` | Parent of the native identify database's `identify` directory, and the default discovery base for native cheat shards when `--cheat-database` and `ROM_WEAVER_CHEAT_DATABASE` are unset. An empty value counts as unset. `--database-dir` overrides the full database path. |
 | `ROM_WEAVER_CHEAT_DATABASE` | directory path | unset | `crates/rom-weaver-cli/src/cheat_database.rs` | Cheat shard directory used when `--cheat-database` is absent. It wins over the discovered data directories, even when it lacks the needed shard. |
 | `ROM_WEAVER_MAN_DIR` | directory path | `$XDG_DATA_HOME/man/man1` (else `~/.local/share/man/man1`) on Unix, `%LOCALAPPDATA%\rom-weaver\docs\man` on Windows | `crates/rom-weaver-cli/src/manpages.rs` | Install directory for `rom-weaver man --install`. An empty value counts as unset. `--man-dir` overrides it. |
 | `ROM_WEAVER_PATCH_IN_MEMORY_LIMIT` | u64 (bytes) | 256 MiB | `crates/rom-weaver-patches/src/lib.rs` | Cap for buffering patch apply/create in memory; above it patches stream. On native builds only, sparse PPF/MOD/APS/APSGBA patches stream at 32 MiB and above (PAT at 64 MiB), even under the cap. `0` forces streaming. |
 | `ROM_WEAVER_DISC_TRACK_IN_MEMORY_LIMIT` | u64 (bytes) | 256 MiB | `crates/rom-weaver-cli/src/patch_apply_disc.rs` | Cap for buffering a single freshly produced disc track in memory during compression instead of a temp file (only ever bounds one track, never the whole disc). `0` forces temporary-file storage. |
-| `ROM_WEAVER_MEMORY_LIMIT_BYTES` | u64 (bytes) | physical RAM on Linux and macOS, 1 GiB on wasm, unlimited elsewhere | `crates/rom-weaver-core/src/threads.rs` | Memory the engine may use. Three quarters of it caps how many 7z solid blocks decode at once, because each decoding worker allocates its own dictionary, sized to the block's output when that is smaller than the declared size. The browser runner sets it to the shared memory maximum the browser granted. |
-| `ROM_WEAVER_ZIP_ZSTD_MEM_BUDGET_MB` | u64 (MiB) | physical RAM / 2 (1-2 GiB fallback) | `crates/rom-weaver-containers/src/handlers/zip.rs` | Memory budget that caps zstd multi-thread job count for zip create. |
-| `ROM_WEAVER_7Z_MEM_BUDGET_MB` | u64 (MiB) | physical RAM / 2 (1 GiB wasm / 2 GiB native fallback) | `crates/rom-weaver-containers/src/handlers/sevenz.rs` | Memory budget that caps the LZMA2 multi-thread count for 7z create. Invalid text is ignored. |
+| `ROM_WEAVER_MEMORY_LIMIT_BYTES` | u64 (bytes) | physical RAM on Linux and macOS, 1 GiB on wasm, unlimited elsewhere | `crates/rom-weaver-core/src/threads.rs` | Memory the engine may use. Three quarters of it caps how many 7z solid blocks decode at once (each worker allocates its own dictionary, sized to the block's output when smaller than declared) and bounds buffered parallel writes during IPS and VCDIFF/xdelta patch application. The browser runner sets it to the shared memory maximum the browser granted. |
+| `ROM_WEAVER_ZIP_ZSTD_MEM_BUDGET_MB` | u64 (MiB) | physical RAM / 2 on Linux/macOS, 512 MiB on wasm, 2 GiB fallback elsewhere | `crates/rom-weaver-containers/src/handlers/zip.rs` | Memory budget that caps zstd multi-thread job count for zip create. |
+| `ROM_WEAVER_7Z_MEM_BUDGET_MB` | u64 (MiB) | physical RAM / 2 on Linux/macOS, 1 GiB on wasm, 2 GiB fallback elsewhere | `crates/rom-weaver-containers/src/handlers/sevenz.rs` (raw `std::env::var`) | Memory budget that caps the LZMA2 multi-thread count for 7z create. Invalid text is silently ignored. |
 | `ROM_WEAVER_7Z_ENCODER` | `liblzma` | 7-Zip SDK encoder | `handlers/sevenz.rs` planner and `archive_write_set_format_7zip.c` writer (raw `getenv`) | Selects the seeded parallel-block liblzma LZMA2 encoder for 7z create instead of the default 7-Zip SDK one. Output is slightly smaller than 7zz's, at a large time cost on inputs bigger than the dictionary; any other value keeps the SDK encoder. Native builds only - the wasm build never compiles the SDK encoder in, so it always uses liblzma and ignores this. |
 
 ## Test / build-only knobs
@@ -63,4 +63,4 @@ These JavaScript globals expose diagnostics and service-worker controls. They ar
 
 The webapp build/test/bench also reads a `ROM_WEAVER_*` family in `*.mjs` (vite/vitest configs, scripts) - e.g. `ROM_WEAVER_COMMIT_HASH`, `ROM_WEAVER_WASM_ARTIFACT_DIR`, `ROM_WEAVER_COVERAGE`, `ROM_WEAVER_BROWSER`, `ROM_WEAVER_WASM_STRESS_1GB`, `ROM_WEAVER_WASM_STRESS_WBFS_4GB`, and the `ROM_WEAVER_WASM_BENCH*` benchmark toggles. Those are front-end tooling knobs, not part of the Rust runtime surface above.
 
-`ROM_WEAVER_APP_VERSION` is both. The tooling reads it as a version override. The page passes it to the WASM module, which writes the version into xdelta headers.
+`ROM_WEAVER_APP_VERSION` is both. The tooling reads it as a version override. The page passes it to the WASM module, which uses it in xdelta application headers and startup trace logs. Native builds ignore it and always use the compiled crate version.

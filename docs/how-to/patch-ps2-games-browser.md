@@ -24,7 +24,7 @@ Patch a PlayStation 2 (PS2) disc online with rom-weaver's [Apply](https://rom-we
 2. Drop the disc files and the patch into **0x01 Inputs**, or choose **Add files**.
 3. Wait for **Reading** and **Checksumming**. Apply may ask which file to use from a CHD or archive. Choose the one the author names.
 4. Read the patch card's **Checks** line. For an xdelta patch, [Check the source file](apply-xdelta-patch-browser.md#check-the-source-file) explains what it can catch.
-5. In **Apply**, the format selector starts on **.chd**. Pick **.iso** to keep a raw image instead.
+5. In **Apply**, the format selector starts on **.chd**. Pick **.iso** (or **.bin/.cue** for a BIN/CUE CD) to keep a raw image instead.
 6. Choose **APPLY & DOWNLOAD** and save the result.
 
 Your original disc stays unchanged. Check that your emulator reads CHD before you keep only the CHD.

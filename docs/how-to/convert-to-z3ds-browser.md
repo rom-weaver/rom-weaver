@@ -21,7 +21,7 @@ Compress `.3ds`, `.cci`, `.cxi`, `.cia`, `.3dsx`, or `.app` files locally in you
 2. Add one `.3ds`, `.cci`, `.cxi`, `.cia`, `.3dsx`, or `.app` file to **Inputs**.
 3. Remove other files before choosing the output format.
 
-For a ROM inside ZIP, 7z, or an existing compressed 3DS file, add that file to Compress. Select the ROM, then select **Add N files**.
+For a ROM inside ZIP, 7z, or an existing compressed 3DS file, add that file to Compress. Select the ROM, then select **Add 1 file**.
 
 ## Create the compressed file
 

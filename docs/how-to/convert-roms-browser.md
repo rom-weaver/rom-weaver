@@ -1,6 +1,8 @@
-# Extract or compress files in the browser
+# Compress files in the browser
 
 Use Compress to package files in a ZIP or 7z archive. You can also create CHD, RVZ, or Z3DS images from compatible disc images and ROMs.
+
+<a id="extract-or-compress-files-in-the-browser"></a>
 
 To take every file out of an archive, use [Extract files](extract-files-browser.md). For directory packaging, use the [CLI archive guide](work-with-archives.md).
 
@@ -23,7 +25,7 @@ To decompress images, use [CHD to ISO, BIN/CUE, or GDI](extract-chd-browser.md),
 2. Add the files that you want to package or compress.
 3. For a CUE disc, add the CUE file and every referenced track file.
 4. When you add an archive or a compressed disc image, Compress lists the files inside it. Select the files to add, then select **Add N files**. Compress extracts only the selected files.
-5. To add the archive itself without extracting it, turn on **Keep packed**, then select **Add N files**.
+5. To add the archive itself without extracting it, turn on **Keep packed**, then select **Add archive**.
 
 <figure class="docs-screenshot">
   <picture>

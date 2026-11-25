@@ -94,7 +94,7 @@ Each slot has a ten-word control buffer and a 2 MiB data buffer. Large reads and
 | 8 | result | proxy to client |
 | 9 | WASI status code | proxy to client |
 
-The proxy supports open, read, positional read, write, truncate, flush, close, unlink, make-directory, and size operations. Operation code 9 was the removed rename operation and must not be reused.
+The proxy supports open, read, positional read, write, truncate, flush, close, unlink, make-directory, size, and move (opcode 12) operations. Operation code 9 was the removed rename operation and must not be reused.
 
 ### States
 

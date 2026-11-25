@@ -17,7 +17,7 @@ Use Make playlist to list every disc of a multi-disc game in an `.m3u` file, so 
 2. Drop the discs of one game, with the track files their sheets name, or select **Open game folder** and pick the folder that holds them.
 3. Check the disc list. Discs are ordered by the number in names such as `Disc 1`, `(Disc 2)`, and `.disc02`. Track files such as `.bin` are not listed as discs of their own.
 4. Type a **Game name** to name the playlist, or keep the name taken from the first disc. Discs named only by number, such as `Disc 1.cue`, give no name, so type one.
-5. Select **Download**, then save the `.m3u` in the folder that holds the discs.
+5. Select **Download `<game>.m3u`** (the playlist download button), then save the `.m3u` in the folder that holds the discs.
 
 When the folder holds discs of more than one game, choose the game in the **Game** list.
 
@@ -40,15 +40,16 @@ Renaming the discs also needs Chrome or Edge on a computer. In other browsers, t
 
 1. Select **Open game folder** and pick the game's folder.
 2. Type the **Game name**.
-3. Turn on **Rename the discs**. The list shows each file's new name, `<game> (Disc N)` in playlist order.
+3. Turn on **Rename the discs to `<game>` (Disc N)**. The list shows each file's new name, `<game> (Disc N)` in playlist order.
 4. Select **Rename discs and save playlist**, and allow the browser to change files in that folder when it asks.
 
-Track files are renamed with their disc, and each `.cue` is rewritten to name its renamed tracks. A file that shares a disc's name, such as a LibCrypt `.sbi` beside a PlayStation `.cue`, is renamed with it. Other files in the folder stay as they are.
+Track files are renamed with their disc, and each `.cue` or `.gdi` is rewritten to name its renamed tracks. A file that shares a disc's name, such as a LibCrypt `.sbi` beside a PlayStation `.cue`, is renamed with it. Other files in the folder stay as they are.
 
 Before renaming, the page checks the folder again. Nothing is renamed when:
 
 - a disc and its track files are not all in the folder itself;
 - the disc numbers in the names do not run from 1 to the number of discs;
+- a disc is an `.mds` image (which can name its `.mdf` internally);
 - another file already has one of the new names;
 - a file changed after the list was shown.
 
