@@ -6,7 +6,7 @@ const SITE_ALTERNATE_NAMES = Object.freeze(["RomWeaver", "Rom Weaver", "rom weav
 const WORKFLOW_SEO_ROUTES = Object.freeze({
   weave: Object.freeze({
     description:
-      "Package multiple ROM patches, their order, and expected checksums into one weave locally in your browser, then optionally apply it with checksum validation. No uploads or account required.",
+      "Package multiple ROM patches, their order, and checksums into one weave locally in your browser, then apply with verification. No uploads.",
     slug: "weave-rom-patches",
     title: `Package multiple ROM patches into one weave | ${SITE_NAME}`,
   }),
@@ -18,26 +18,26 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   }),
   checksum: Object.freeze({
     description:
-      "Calculate and compare CRC32, MD5, SHA-1, SHA-256, and other file hashes locally in your browser. Check ROMs or archive contents against expected checksums. No uploads.",
+      "Calculate and compare CRC32, MD5, SHA-1, and SHA-256 checksums locally in your browser. Verify ROMs or archive files against expected hashes.",
     slug: "file-checksum",
     title: `CRC32, MD5 & SHA checksum calculator online | ${SITE_NAME}`,
   }),
   compress: Object.freeze({
     description:
-      "Compress ISO, BIN/CUE, or GDI disc images to CHD and GameCube or Wii ISO to RVZ locally in your browser. Create Z3DS, ZCCI, ZCXI, ZCIA, or Z3DSX 3DS ROMs, ZIP, and 7z archives. No uploads.",
+      "Convert ISO, BIN/CUE, or GDI to CHD, GameCube/Wii ISO to RVZ, and 3DS ROMs to Z3DS/ZCCI locally in your browser, plus ZIP and 7z. No uploads.",
     slug: "compress-files",
     title: `ISO to CHD & RVZ: Compress ROMs online | ${SITE_NAME}`,
   }),
   extract: Object.freeze({
     description:
-      "Decompress GameCube or Wii RVZ to ISO. Decompress CHD to ISO for DVDs, BIN/CUE for CDs, or GDI with tracks for GD-ROMs locally in your browser. Extract archives and Z3DS, ZCCI, ZCXI, ZCIA, or Z3DSX.",
+      "Convert RVZ to ISO and CHD to ISO, BIN/CUE, or GDI locally in your browser. Extract ZIP, 7z, RAR archives and Z3DS/ZCCI 3DS ROMs. No uploads.",
     slug: "extract-files",
     title: `RVZ to ISO & CHD to ISO converter online | ${SITE_NAME}`,
   }),
   // The apex. An empty slug is deliberate: the canonical URL is the bare origin.
   home: Object.freeze({
     description:
-      "Free online ROM patcher and toolkit: apply BPS, IPS, UPS and xdelta patches, convert CHD or RVZ to ISO and back, identify dumps. Runs in your browser; no uploads.",
+      "Free online ROM patcher and toolkit: apply BPS, IPS, UPS, and xdelta patches, convert CHD or RVZ to ISO, and identify ROMs locally. No uploads.",
     slug: "",
     title: `${SITE_NAME}: Online ROM Patcher & ROM Toolkit`,
   }),
@@ -49,13 +49,13 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   }),
   patcher: Object.freeze({
     description:
-      "Apply BPS, IPS, UPS, xdelta, and other ROM patches online, including files in ZIP, 7z, or RAR archives. Add supported cheat codes. Process files locally with no uploads.",
+      "Apply BPS, IPS, UPS, xdelta, and PPF ROM patches online, including ZIP, 7z, or RAR archives. Add supported cheat codes locally. No uploads.",
     slug: "apply-rom-patches",
     title: `ROM Patcher Online: BPS, IPS, UPS, xdelta & PPF | ${SITE_NAME}`,
   }),
   trim: Object.freeze({
     description:
-      "Trim unused padding from Nintendo DS, Game Boy Advance, Nintendo 3DS, and Xbox XISO ROMs, or pad a trimmed ROM back to full size, locally in your browser. No uploads.",
+      "Trim unused padding from Nintendo DS, GBA, 3DS, and Xbox XISO ROMs, or restore padding back to full size, locally in your browser. No uploads.",
     slug: "trim-rom",
     title: `Trim ROMs online: NDS, GBA, 3DS & Xbox | ${SITE_NAME}`,
   }),

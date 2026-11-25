@@ -138,9 +138,8 @@ const Masthead = ({
   const findTriggerRef = useRef<HTMLButtonElement | null>(null);
   const navLabel = localizer.message("ui.nav.primary");
 
-  /* The beta-tools setting is client-only, so the prerendered shell must not
-     disagree with the first hydration pass: every beta row is in the markup
-     from the start and is revealed once the client setting is known. */
+  /* The beta-tools setting is client-only. The prerendered shell and first hydration omit
+     disabled beta rows, except the current page's own. Enabled rows mount after hydration. */
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => setHydrated(true), []);
   const betaVisible = hydrated && betaToolsEnabled;
@@ -341,13 +340,11 @@ const Masthead = ({
   const sections: NavSectionData[] = useMemo(() => {
     const workflowGroup = (group: NavGroup): NavSectionData => ({
       entries: tabs
-        .filter((tab) => tab.group === group)
+        // Keep the current beta page in the nav while the setting is off.
+        .filter((tab) => tab.group === group && (!tab.beta || betaVisible || tab.id === currentTab))
         .map((tab) => ({
           beta: tab.beta,
           current: tab.id === currentTab && (tab.id !== "docs" || docsSlug === "docs"),
-          // The page you are on is always in the nav, even a beta one reached
-          // by URL while the setting is off.
-          hidden: tab.beta && !betaVisible && tab.id !== currentTab,
           href: tab.href,
           icon: tab.icon,
           id: tab.id,
@@ -507,10 +504,10 @@ const Masthead = ({
           >
             <ArrowLeft aria-hidden="true" />
           </button>
-          <h2 className="docs-rail-title">
+          <p className="docs-rail-title">
             {tabs.find((tab) => tab.id === "docs")?.icon}
             {localizer.message("ui.nav.docs")}
-          </h2>
+          </p>
         </div>
       ),
     },

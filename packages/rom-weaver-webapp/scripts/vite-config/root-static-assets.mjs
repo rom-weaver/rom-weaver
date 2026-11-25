@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
+import { MARKDOWN_ROUTES } from "../../functions/markdown-routes.js";
 import { LEGACY_WORKFLOW_ROUTES, WORKFLOW_SEO_ROUTES } from "../../src/webapp/workflow-seo.mjs";
 import { DOCS_SCREENSHOT_NAMES } from "../docs-screenshot-manifest.mjs";
 import { createFirstSampleAssetFiles } from "../first-sample-assets.mjs";
@@ -115,16 +116,18 @@ const setRootStaticAssetContentType = (requestPath, res) => {
   }
 };
 
-// Request paths the host answers with a redirect (`_redirects` rules with a 30x status). The service
-// worker keeps these on the network: a prerendered legacy document exists for several of them, but
-// serving it from the precache would skip the redirect.
+// Paths the host answers with a redirect: `_redirects` 30x rules and Pages middleware trailing-slash redirects.
+// The service worker sends these to the network when online, so redirects run. Offline, it still serves the cached copy.
 export const redirectSourcePaths = () => {
-  const paths = [];
+  const paths = new Set();
   for (const line of fs.readFileSync(path.join(rootAssetDir, "_redirects"), "utf8").split("\n")) {
     const match = /^(\/\S*)\s+\S+\s+30[1278]\s*$/.exec(line.trim());
-    if (match && !/[*:]/.test(match[1])) paths.push(match[1]);
+    if (match && !/[*:]/.test(match[1])) paths.add(match[1]);
   }
-  return paths;
+  for (const { path: routePath } of MARKDOWN_ROUTES) {
+    if (routePath !== "/") paths.add(`${routePath}/`);
+  }
+  return [...paths];
 };
 
 const applyRootStaticAssetMiddleware = (middlewares, channel, channelLabel, siteOrigin) => {

@@ -1399,6 +1399,37 @@ describe("navigation requests", () => {
     await expect(buildInfo.text()).resolves.toBe("precached");
   });
 
+  it("lets online trailing-slash canonical navigations reach the network redirect while keeping offline fallback", async () => {
+    const harness = await loadCompleteWorker({ redirectSourcePaths: ["/docs/create-bundles/"] });
+    setPrecache({
+      "docs/create-bundles/index.html": () => new Response("cached-guide", { status: 200 }),
+    });
+    harness.fetchStub.handlers.set(
+      `${APP_ORIGIN}/docs/create-bundles/`,
+      () => new Response(null, { headers: { Location: "/docs/create-bundles" }, status: 301 }),
+    );
+    const online = await routed(
+      harness,
+      harness.networkFirstRoute,
+      asNavigationRequest(`${APP_ORIGIN}/docs/create-bundles/`),
+      { resultingClientId: "page", type: "fetch" },
+    );
+    expect(online.status).toBe(301);
+    expect(online.headers.get("Location")).toBe("/docs/create-bundles");
+
+    harness.fetchStub.handlers.set(`${APP_ORIGIN}/docs/create-bundles/`, () =>
+      Promise.reject(new TypeError("offline")),
+    );
+    const offline = await routed(
+      harness,
+      harness.networkFirstRoute,
+      asNavigationRequest(`${APP_ORIGIN}/docs/create-bundles/`),
+      { resultingClientId: "page", type: "fetch" },
+    );
+    expect(offline.status).toBe(200);
+    await expect(offline.text()).resolves.toBe("cached-guide");
+  });
+
   it.each([
     ["stalls", () => new Promise<Response>(() => undefined)],
     ["fails", () => Promise.reject(new TypeError("offline"))],

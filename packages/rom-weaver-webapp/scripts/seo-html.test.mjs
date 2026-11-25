@@ -14,6 +14,7 @@ import {
 import { documentNodes, parseDocument } from "./html-document.mjs";
 import { applyChannelIdentity } from "./vite-config/channel.mjs";
 import { rootDir } from "./vite-config/paths.mjs";
+import { redirectSourcePaths } from "./vite-config/root-static-assets.mjs";
 import {
   createNotFoundHtml,
   createRobotsSource,
@@ -22,6 +23,7 @@ import {
   createWorkflowMarkdown,
   injectLdJson,
   makeBetaRouteNoindex,
+  WORKFLOW_ROUTE_LASTMOD_SOURCES,
 } from "./vite-config/seo-html.mjs";
 
 const routeShell = `<!doctype html><html><head>
@@ -36,8 +38,19 @@ const routeShell = `<!doctype html><html><head>
 </head><body></body></html>`;
 
 test("workflow descriptions propagate to metadata and structured data", () => {
-  for (const key of ["home", "identify", "patcher", "creator", "ppf-undo", "trim"]) {
-    const route = WORKFLOW_SEO_ROUTES[key];
+  const expectedNames = {
+    home: "rom-weaver",
+    identify: "ROM identifier & checksum checker online",
+    patcher: "ROM Patcher Online: BPS, IPS, UPS, xdelta & PPF",
+    creator: "Create ROM patches online",
+    "ppf-undo": "Undo PPF patches online",
+    trim: "Trim ROMs online: NDS, GBA, 3DS & Xbox",
+    "apply-cheats": "Apply cheat codes to ROMs online",
+    "create-rom-cheat-patch": "Create ROM patches from cheat codes online",
+  };
+  const routesByKey = { ...WORKFLOW_SEO_ROUTES, ...WORKFLOW_ENTRY_ROUTES };
+  for (const [key, expectedName] of Object.entries(expectedNames)) {
+    const route = routesByKey[key];
     const html = injectLdJson(createWorkflowRouteHtml(routeShell, route, "prod", "Production"), route, key === "home");
     const expectedCanonical = `https://rom-weaver.com/${route.slug}`;
 
@@ -51,6 +64,42 @@ test("workflow descriptions propagate to metadata and structured data", () => {
     const application = JSON.parse(ldJson)["@graph"].find((entry) => entry["@type"] === "SoftwareApplication");
     assert.equal(application.description, route.description, `${key} JSON-LD description`);
     assert.equal(application.url, expectedCanonical, `${key} JSON-LD URL`);
+    assert.equal(application.name, expectedName, `${key} JSON-LD name`);
+  }
+  for (const route of [...Object.values(WORKFLOW_SEO_ROUTES), ...Object.values(WORKFLOW_ENTRY_ROUTES)]) {
+    if (!route.slug) continue;
+    const html = injectLdJson(createWorkflowRouteHtml(routeShell, route, "prod", "Production"), route, false);
+    const ldJson = html.match(/<script type="application\/ld\+json">(.*?)<\/script>/)?.[1];
+    const application = JSON.parse(ldJson)["@graph"].find((entry) => entry["@type"] === "SoftwareApplication");
+    assert.doesNotMatch(application.name, /rom-weaver|\|/i, route.slug);
+    assert.equal(application.alternateName, undefined, route.slug);
+  }
+});
+
+test("redirectSourcePaths includes trailing-slash canonical routes but not root", () => {
+  const paths = new Set(redirectSourcePaths());
+  assert.ok(!paths.has("/"));
+  for (const expected of ["/docs/", "/docs/create-bundles/", "/apply-rom-patches/", "/apply-cheats/"]) {
+    assert.ok(paths.has(expected), expected);
+  }
+});
+
+test("every indexed workflow meta description fits within 155 characters", () => {
+  const tooLong = [...Object.values(WORKFLOW_SEO_ROUTES), ...Object.values(WORKFLOW_ENTRY_ROUTES)]
+    .filter((route) => route.description.length > 155)
+    .map((route) => `${route.slug || "home"} (${route.description.length})`);
+  assert.deepEqual(tooLong, []);
+});
+
+test("every workflow lastmod source path exists on disk and covers every indexed workflow route", () => {
+  const expectedSlugs = [...Object.values(WORKFLOW_SEO_ROUTES), ...Object.values(WORKFLOW_ENTRY_ROUTES)]
+    .map((route) => route.slug)
+    .sort();
+  assert.deepEqual(Object.keys(WORKFLOW_ROUTE_LASTMOD_SOURCES).sort(), expectedSlugs);
+  for (const files of Object.values(WORKFLOW_ROUTE_LASTMOD_SOURCES)) {
+    for (const file of files) {
+      assert.ok(fs.existsSync(path.join(rootDir, file)), `missing lastmod source: ${file}`);
+    }
   }
 });
 
@@ -71,7 +120,7 @@ test("sitemap lastmod values are ISO dates or absent, and never on a Markdown UR
   }
 });
 
-test("workflow pages take their lastmod from the newest commit of their text sources", (context) => {
+test("workflow pages take their lastmod from their own view sources without shared messages noise", (context) => {
   // A throwaway repository, so the assertion holds in the shallow clones CI uses.
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "seo-sitemap-"));
   context.after(() => fs.rmSync(directory, { recursive: true, force: true }));
@@ -84,10 +133,7 @@ test("workflow pages take their lastmod from the newest commit of their text sou
   const files = [
     "src/webapp/workflow-seo.mjs",
     "src/presentation/localization/messages.ts",
-    "src/webapp/components/home-page.tsx",
-    "src/webapp/components/home-sections.tsx",
-    "src/webapp/components/home-loom.tsx",
-    "src/wasm/generated/rom-weaver-format-metadata.ts",
+    ...new Set(Object.values(WORKFLOW_ROUTE_LASTMOD_SOURCES).flat()),
   ];
   for (const file of files) {
     fs.mkdirSync(path.dirname(path.join(directory, file)), { recursive: true });
@@ -103,14 +149,35 @@ test("workflow pages take their lastmod from the newest commit of their text sou
   fs.appendFileSync(path.join(directory, "src/webapp/components/home-loom.tsx"), "// changed\n");
   git("2026-02-01T00:00:00Z", "add", ".");
   git("2026-02-01T00:00:00Z", "commit", "-m", "fix: change landing");
+  fs.appendFileSync(path.join(directory, "src/webapp/components/compress-form.tsx"), "// changed\n");
+  git("2026-02-15T00:00:00Z", "add", ".");
+  git("2026-02-15T00:00:00Z", "commit", "-m", "fix: change compress");
+  fs.appendFileSync(path.join(directory, "src/presentation/localization/messages.ts"), "// unrelated UI string\n");
+  git("2026-03-01T00:00:00Z", "add", ".");
+  git("2026-03-01T00:00:00Z", "commit", "-m", "fix: change messages");
   const sitemap = createSitemapSource({ root: directory, repo: directory });
   const lastmodOf = (slug) =>
     sitemap.match(new RegExp(`<loc>https://rom-weaver.com/${slug}</loc><lastmod>([^<]+)</lastmod>`))?.[1];
   for (const route of [...Object.values(WORKFLOW_SEO_ROUTES), ...Object.values(WORKFLOW_ENTRY_ROUTES)]) {
     assert.match(lastmodOf(route.slug) ?? "", /^\d{4}-\d{2}-\d{2}T/, route.slug || "home");
   }
-  // The landing change is newer than the shared sources, so only the apex follows it.
-  assert.ok(lastmodOf("") > lastmodOf("compress-files"));
+  // Editing messages.ts MUST NOT bump any workflow's lastmod.
+  assert.ok(lastmodOf("file-checksum").startsWith("2026-01-01"), lastmodOf("file-checksum"));
+  // Editing one workflow's view bumps only that route, not unrelated tools or the landing page.
+  assert.ok(lastmodOf("").startsWith("2026-02-01"), lastmodOf(""));
+  assert.ok(lastmodOf("compress-files").startsWith("2026-02-15"), lastmodOf("compress-files"));
+  assert.ok(lastmodOf("compress-files") > lastmodOf("file-checksum"));
+  assert.ok(lastmodOf("") > lastmodOf("file-checksum"));
+  // Editing workflow-guides.ts updates workflow routes that render links from it, without touching home.
+  fs.appendFileSync(path.join(directory, "src/public/react/workflow-guides.ts"), "// guide added\n");
+  git("2026-03-15T00:00:00Z", "add", ".");
+  git("2026-03-15T00:00:00Z", "commit", "-m", "feat: add guide link");
+  const afterGuides = createSitemapSource({ root: directory, repo: directory });
+  const lastmodAfterGuides = (slug) =>
+    afterGuides.match(new RegExp(`<loc>https://rom-weaver.com/${slug}</loc><lastmod>([^<]+)</lastmod>`))?.[1];
+  assert.ok(lastmodAfterGuides("extract-files").startsWith("2026-03-15"), lastmodAfterGuides("extract-files"));
+  assert.ok(lastmodAfterGuides("file-checksum").startsWith("2026-03-15"), lastmodAfterGuides("file-checksum"));
+  assert.ok(lastmodAfterGuides("").startsWith("2026-02-01"), lastmodAfterGuides(""));
 });
 
 test("the Notices entry takes the injected generated-page date, and none when it is unknown", () => {

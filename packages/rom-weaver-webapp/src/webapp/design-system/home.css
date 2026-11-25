@@ -73,6 +73,7 @@
 .rw-app .home-blurb a,
 .rw-app .home-trust-list a,
 .rw-app .home-route-body a,
+.rw-app .home-routes-more a,
 .rw-app .home-faq-more {
   color: var(--ink-2);
   text-decoration: underline;
@@ -409,6 +410,16 @@
   font-size: 0.875rem;
   color: var(--ink-2);
   text-wrap: pretty;
+}
+/* Lift inline guide links above `.home-route-go::after` on single-action cards. */
+.rw-app .home-route-body a {
+  position: relative;
+  z-index: 1;
+}
+.rw-app .home-routes-more {
+  margin-top: 14px;
+  font-size: 0.875rem;
+  color: var(--ink-3);
 }
 .rw-app .home-route-go {
   grid-area: go;

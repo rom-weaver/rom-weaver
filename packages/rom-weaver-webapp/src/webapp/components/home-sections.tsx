@@ -1,5 +1,6 @@
 import type { MessageId } from "../../presentation/localization/catalog.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
+import { COMPRESS_FORMAT_GUIDES, EXTRACT_FORMAT_GUIDES } from "../../public/react/workflow-guides.ts";
 import {
   ROM_WEAVER_CHECKSUM_ALGORITHMS,
   ROM_WEAVER_CONTAINER_FORMATS,
@@ -24,6 +25,11 @@ const CONTAINER_EXTENSIONS: readonly string[] = ROM_WEAVER_CONTAINER_FORMATS.fla
 );
 /** Matches the algorithm list in docs/reference/formats.md#checksum-support. */
 const CHECKSUM_ALGORITHMS = ROM_WEAVER_CHECKSUM_ALGORITHMS.map((algorithm) => algorithm.id);
+/** Each extract guide beside its compress counterpart, in the shared guides' order. */
+const DISC_GUIDES = EXTRACT_FORMAT_GUIDES.flatMap((extract, index) => {
+  const compress = COMPRESS_FORMAT_GUIDES[index];
+  return (compress ? [extract, compress] : [extract]).map((guide) => ({ label: guide.label, slug: guide.path }));
+});
 
 type HomeRoute = {
   body: MessageId;
@@ -43,6 +49,13 @@ const HOME_ROUTES: readonly HomeRoute[] = [
     body: "ui.home.routePatchBody",
     file: "translation.bps",
     go: "ui.home.goApply",
+    guides: [
+      { label: "ui.home.guideBps", slug: "docs/apply-bps-patch" },
+      { label: "ui.home.guideIps", slug: "docs/apply-ips-patch" },
+      { label: "ui.home.guideUps", slug: "docs/apply-ups-patch" },
+      { label: "ui.home.guideXdelta", slug: "docs/apply-xdelta-patch" },
+      { label: "ui.home.guideFixChecksum", slug: "docs/fix-checksum-errors" },
+    ],
     slug: "apply-rom-patches",
     swatch: "weft-1",
     title: "ui.home.routePatch",
@@ -53,10 +66,7 @@ const HOME_ROUTES: readonly HomeRoute[] = [
     go: "ui.home.goCompress",
     slug: "compress-files",
     secondary: { go: "ui.home.goExtract", slug: "extract-files" },
-    guides: [
-      { label: "ui.home.guideChd", slug: "docs/extract-chd" },
-      { label: "ui.home.guideRvz", slug: "docs/convert-rvz-to-iso" },
-    ],
+    guides: DISC_GUIDES,
     swatch: "source",
     title: "ui.home.routeDisc",
   },
@@ -64,6 +74,7 @@ const HOME_ROUTES: readonly HomeRoute[] = [
     body: "ui.home.routeUnknownBody",
     file: "mystery.bin",
     go: "ui.home.goIdentify",
+    guides: [{ label: "ui.home.guideSearchChecksum", slug: "docs/search-rom-checksums" }],
     slug: "identify-rom",
     swatch: "muted",
     title: "ui.home.routeUnknown",
@@ -80,7 +91,7 @@ const HOME_ROUTES: readonly HomeRoute[] = [
     body: "ui.home.routeCheatsBody",
     file: "game.gba",
     go: "ui.home.goCheats",
-    slug: "apply-rom-patches",
+    slug: "apply-cheats",
     swatch: "weft-3",
     title: "ui.home.routeCheats",
   },
@@ -96,6 +107,7 @@ const HOME_ROUTES: readonly HomeRoute[] = [
     body: "ui.home.routeChecksumBody",
     file: "dump.sfc",
     go: "ui.home.goChecksum",
+    guides: [{ label: "ui.home.guideChecksum", slug: "docs/checksum-roms-browser" }],
     slug: "file-checksum",
     swatch: "seam",
     title: "ui.home.routeChecksum",
@@ -178,6 +190,12 @@ const HomeRoutes = ({ featuresHref, route }: HomeRoutesProps): React.ReactElemen
           </li>
         ))}
       </ul>
+      <p className="home-routes-more">
+        {localizer.message("ui.home.routesMoreBefore")}{" "}
+        <a href={route("trim-rom")}>{localizer.message("ui.home.goTrim")}</a>{" "}
+        {localizer.message("ui.home.routesMoreOr")}{" "}
+        <a href={route("ppf-undo")}>{localizer.message("ui.home.goPpfUndo")}</a>.
+      </p>
     </section>
   );
 };

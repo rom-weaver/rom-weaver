@@ -199,7 +199,7 @@ const DocsNav = ({
         open={openShelves[shelf.title]}
       >
         <summary>
-          <h3 className="guide-shelf-title">{shelf.title}</h3>
+          <span className="guide-shelf-title">{shelf.title}</span>
           <span className="guide-shelf-count">{routes.length}</span>
         </summary>
         <ul className="guide-nav-list">
@@ -228,15 +228,21 @@ const DocsNav = ({
           </li>
         ))}
       </ul>
-      <h2 className="guide-group" id="docs-rail-task-label">
-        Task guides
-      </h2>
-      <AudienceSwitch audience={audience} labelId="docs-rail-task-label" onChange={onAudienceChange} />
-      {TASK_SHELVES.map(renderShelf)}
-      <h2 className="guide-group">Look things up</h2>
-      {LOOKUP_SHELVES.map(renderShelf)}
-      <h2 className="guide-group">About the project</h2>
-      {PROJECT_SHELVES.map(renderShelf)}
+      <fieldset className="guide-group">
+        <legend className="guide-group-label" id="docs-rail-task-label">
+          Task guides
+        </legend>
+        <AudienceSwitch audience={audience} labelId="docs-rail-task-label" onChange={onAudienceChange} />
+        {TASK_SHELVES.map(renderShelf)}
+      </fieldset>
+      <fieldset className="guide-group">
+        <legend className="guide-group-label">Look things up</legend>
+        {LOOKUP_SHELVES.map(renderShelf)}
+      </fieldset>
+      <fieldset className="guide-group">
+        <legend className="guide-group-label">About the project</legend>
+        {PROJECT_SHELVES.map(renderShelf)}
+      </fieldset>
     </nav>
   );
 };
@@ -298,6 +304,57 @@ const ShelfRow = ({
   );
 };
 
+const DocsDrawerShelf = ({
+  audience,
+  currentSlug,
+  onAudienceChange,
+  onBack,
+  onNavigate,
+  shelf,
+}: {
+  audience: DocsAudience;
+  currentSlug: string;
+  onAudienceChange: (audience: DocsAudience) => void;
+  onBack: () => void;
+  onNavigate: () => void;
+  shelf: DocShelf;
+}) => {
+  const routes = routesForAudience(shelf, audience);
+  const isTask = TASK_SHELVES.includes(shelf);
+  const other: DocsAudience = audience === "browser" ? "cli" : "browser";
+  const otherCount = isTask ? shelf.routes.filter((route) => route.audience === other).length : 0;
+  const noun = routes.length === 1 ? "guide" : "guides";
+  return (
+    <div className="docs-drawer-level">
+      <div className="docs-drawer-head">
+        <button className="docs-drawer-back" onClick={onBack} type="button">
+          <ChevronLeft aria-hidden="true" />
+          All docs
+        </button>
+        <p className="docs-drawer-title">{shelf.title}</p>
+        <p className="docs-drawer-subtitle">
+          {isTask ? `${routes.length} ${AUDIENCE_NAMES[audience]} ${noun}` : `${routes.length} pages`}
+        </p>
+      </div>
+      <ul className="docs-drawer-pages">
+        {routes.map((route) => (
+          <li key={route.slug}>
+            <GuideLink audience={audience} currentSlug={currentSlug} onNavigate={onNavigate} route={route} />
+          </li>
+        ))}
+      </ul>
+      {otherCount ? (
+        <div className="docs-drawer-twin">
+          <span>{`${otherCount} ${otherCount === 1 ? "guide" : "guides"} for the ${AUDIENCE_NAMES[other]}`}</span>
+          <button onClick={() => onAudienceChange(other)} type="button">
+            {`Show ${AUDIENCE_NAMES[other]}`}
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
 /**
  * Phone drawer: level one lists shelves, level two lists one shelf's pages.
  * Each level fits about one screen, which a single long list of every page did not.
@@ -318,37 +375,15 @@ const DocsDrawerNav = ({
   const currentShelf = docShelfFor(currentSlug);
   const shelf = openShelf ? DOC_SHELVES.find((entry) => entry.title === openShelf) : undefined;
   if (shelf) {
-    const routes = routesForAudience(shelf, audience);
-    const isTask = TASK_SHELVES.includes(shelf);
-    const other: DocsAudience = audience === "browser" ? "cli" : "browser";
-    const otherCount = isTask ? shelf.routes.filter((route) => route.audience === other).length : 0;
-    const noun = routes.length === 1 ? "guide" : "guides";
     return (
-      <div className="docs-drawer-level">
-        <div className="docs-drawer-head">
-          <button className="docs-drawer-back" onClick={() => onOpenShelf(null)} type="button">
-            <ChevronLeft aria-hidden="true" />
-            All docs
-          </button>
-          <h2>{shelf.title}</h2>
-          <p>{isTask ? `${routes.length} ${AUDIENCE_NAMES[audience]} ${noun}` : `${routes.length} pages`}</p>
-        </div>
-        <ul className="docs-drawer-pages">
-          {routes.map((route) => (
-            <li key={route.slug}>
-              <GuideLink audience={audience} currentSlug={currentSlug} onNavigate={onNavigate} route={route} />
-            </li>
-          ))}
-        </ul>
-        {otherCount ? (
-          <div className="docs-drawer-twin">
-            <span>{`${otherCount} ${otherCount === 1 ? "guide" : "guides"} for the ${AUDIENCE_NAMES[other]}`}</span>
-            <button onClick={() => setAudience(other)} type="button">
-              {`Show ${AUDIENCE_NAMES[other]}`}
-            </button>
-          </div>
-        ) : null}
-      </div>
+      <DocsDrawerShelf
+        audience={audience}
+        currentSlug={currentSlug}
+        onAudienceChange={setAudience}
+        onBack={() => onOpenShelf(null)}
+        onNavigate={onNavigate}
+        shelf={shelf}
+      />
     );
   }
   const rows = (shelves: readonly DocShelf[]) =>
@@ -366,12 +401,14 @@ const DocsDrawerNav = ({
   return (
     <div className="docs-drawer-level">
       <div className="docs-drawer-group">
-        <h2 id="docs-drawer-task-label">Task guides</h2>
+        <p className="docs-drawer-group-title" id="docs-drawer-task-label">
+          Task guides
+        </p>
         <AudienceSwitch audience={audience} labelId="docs-drawer-task-label" onChange={setAudience} />
       </div>
       <ul className="docs-rows">{rows(TASK_SHELVES)}</ul>
       <div className="docs-drawer-group">
-        <h2>Look things up</h2>
+        <p className="docs-drawer-group-title">Look things up</p>
       </div>
       <ul className="docs-rows">
         {START_SHELF?.routes.map((route) => (
@@ -391,7 +428,7 @@ const DocsDrawerNav = ({
         {rows(LOOKUP_SHELVES)}
       </ul>
       <div className="docs-drawer-group">
-        <h2>About the project</h2>
+        <p className="docs-drawer-group-title">About the project</p>
       </div>
       <ul className="docs-rows">{rows(PROJECT_SHELVES)}</ul>
     </div>

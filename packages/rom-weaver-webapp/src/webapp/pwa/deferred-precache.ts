@@ -6,6 +6,7 @@ import {
 } from "./response-encoded-size.ts";
 import { cacheWithDownloadLog } from "./offline-download-log.ts";
 import type { OfflineCopyPolicy } from "./offline-copy-policy.ts";
+import { PRECACHE_REQUEST_HEADER } from "./precache-request-header.mjs";
 
 const DOWNLOAD_CONCURRENCY = 4;
 const BATCH_FILE_LIMIT = 16;
@@ -44,9 +45,16 @@ const createDeferredPrecache = ({
     if (entry.revision) key.searchParams.set("__WB_REVISION__", entry.revision);
     const downloadUrl = new URL(url);
     // Directory URLs MUST avoid the index.html redirect used by static hosts.
+    const isDirectory = downloadUrl.pathname.endsWith("/index.html");
     downloadUrl.pathname = downloadUrl.pathname.replace(/\/index\.html$/, "/");
-    return { ...entry, downloadUrl: downloadUrl.href, key: key.href, url: url.href };
+    return { ...entry, downloadUrl: downloadUrl.href, isDirectory, key: key.href, url: url.href };
   });
+  const createDownloadRequest = (file: (typeof files)[number]) =>
+    new Request(file.downloadUrl, {
+      cache: file.revision ? "reload" : "default",
+      // Tells the Pages middleware this directory-index fetch is precache, not a slash navigation to redirect.
+      ...(file.isDirectory ? { headers: { [PRECACHE_REQUEST_HEADER]: "1" } } : {}),
+    });
   const byUrl = new Map(files.map((file) => [file.url, file]));
   const requiredFiles = async () => {
     if (!selectEntries) return files;
@@ -133,7 +141,7 @@ const createDeferredPrecache = ({
     )
       return Response.error();
     if (policy && !(await policy.isEnabled())) {
-      return download(new Request(file.downloadUrl, { cache: file.revision ? "reload" : "default" }));
+      return download(createDownloadRequest(file));
     }
     const generation = policy?.token();
     const cache = await caches.open(cacheName);
@@ -161,9 +169,7 @@ const createDeferredPrecache = ({
         listeners: new Set(onBytes ? [onBytes] : []),
         loadedBytes: 0,
         promise: (async () => {
-          const response = await download(
-            new Request(file.downloadUrl, { cache: file.revision ? "reload" : "default" }),
-          );
+          const response = await download(createDownloadRequest(file));
           if (!response.ok) throw new Error(`Offline app download failed with HTTP ${response.status}: ${file.url}`);
           const buffer = await readWithByteProgress(response, (delta) => {
             if (policy && generation !== policy.token()) return;
