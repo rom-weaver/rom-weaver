@@ -174,7 +174,7 @@ const UnifiedDropZone = ({
       {big && (onboarding || guide || supportedFormats || heroDetails) ? (
         <div className="hero-help">
           {onboarding || guide ? (
-            <div className={extraGuides?.length ? "hero-help-links has-extra-guides" : "hero-help-links"}>
+            <div className="hero-help-links">
               {onboarding}
               {guide ? <HeroGuideLink guide={guide} /> : null}
               {extraGuides?.map((extra) => (
