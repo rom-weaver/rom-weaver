@@ -84,12 +84,10 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(controller.selectView("identify")).toBe("identify");
     expect(controller.selectView("ppf-undo")).toBe("ppf-undo");
     expect(controller.selectView("save-editor")).toBe("patcher");
-    expect(controller.selectView("playlist")).toBe("patcher");
     expect(controller.getState().currentView).toBe("patcher");
 
     controller.updateDraftSetting("betaToolsEnabled", true);
     expect(controller.saveDraftSettings()).toBe(true);
-    expect(controller.selectView("playlist")).toBe("playlist");
     expect(controller.selectView("save-editor")).toBe("save-editor");
     expect(controller.getState().currentView).toBe("save-editor");
     expect(controller.selectView("identify")).toBe("identify");
@@ -99,7 +97,6 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(controller.saveDraftSettings()).toBe(true);
     expect(controller.getState().currentView).toBe("identify");
     expect(controller.selectView("save-editor")).toBe("patcher");
-    expect(controller.selectView("playlist")).toBe("patcher");
   });
 
   it("opens Trim without beta tools", () => {
@@ -108,6 +105,14 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(controller.selectView("trim")).toBe("trim");
     expect(controller.getState().currentView).toBe("trim");
     expect(window.location.pathname).toBe("/trim-rom");
+  });
+
+  it("opens Make playlist without beta tools", () => {
+    const controller = createController();
+    expect(controller.getState().settings.betaToolsEnabled).toBe(false);
+    expect(controller.selectView("playlist")).toBe("playlist");
+    expect(controller.getState().currentView).toBe("playlist");
+    expect(window.location.pathname).toBe("/create-m3u-playlist");
   });
 
   it("keeps the legacy tools route pointing to PPF undo", () => {

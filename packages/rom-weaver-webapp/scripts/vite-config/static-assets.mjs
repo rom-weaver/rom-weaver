@@ -198,9 +198,14 @@ export const writeChannelPages = (
     ),
     WORKFLOW_SEO_ROUTES["ppf-undo"],
   );
-  const playlistHtml = withRoutePreloadLinks(
-    makeBetaRouteNoindex(withShell("playlist"), "create-m3u-playlist", channel, channelLabel),
-    routePreloadLinks.get("playlist"),
+  const playlistHtml = injectLdJson(
+    createWorkflowRouteHtml(
+      withRoutePreloadLinks(withShell("playlist"), routePreloadLinks.get("playlist")),
+      WORKFLOW_SEO_ROUTES.playlist,
+      channel,
+      channelLabel,
+    ),
+    WORKFLOW_SEO_ROUTES.playlist,
   );
   const saveEditorHtml = withRoutePreloadLinks(
     makeBetaRouteNoindex(withShell("save-editor"), "rom-save-editor", channel, channelLabel),

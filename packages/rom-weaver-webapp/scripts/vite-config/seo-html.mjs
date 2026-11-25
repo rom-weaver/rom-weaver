@@ -288,6 +288,10 @@ const WORKFLOW_MARKDOWN_GUIDES = {
     slug: "docs/identify-roms-browser",
     sections: ["Identify a file", "Search without a file", "Compare a checksum"],
   },
+  "create-m3u-playlist": {
+    slug: "docs/make-playlist-browser",
+    sections: ["Download a playlist", "Download the discs as a ZIP"],
+  },
   "ppf-undo": {
     slug: "docs/undo-ppf-browser",
     sections: ["Restore the saved bytes", "Check the restored copy"],

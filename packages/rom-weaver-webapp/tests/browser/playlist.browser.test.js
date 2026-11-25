@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, test } from "vitest";
 import { commands } from "vitest/browser";
-import { planBrowserPlaylist } from "../../src/platform/browser/browser-playlist-api.ts";
+import { planBrowserPlaylist, writeBrowserPlaylistZip } from "../../src/platform/browser/browser-playlist-api.ts";
 import { PlaylistForm } from "../../src/webapp/components/playlist-form.tsx";
 import { WORKER_OPFS_MOUNTPOINT } from "../../src/workers/shared/worker-storage/storage-layout.ts";
 
@@ -141,6 +141,71 @@ describe("planBrowserPlaylist", () => {
   });
 });
 
+const ff7Request = (zip) => ({
+  files: Object.entries(ff7Files()).map(([path, content]) => at(path, [content])),
+  name: "Final Fantasy VII",
+  zip,
+});
+
+const readOutput = async (output) => {
+  const bytes = new Uint8Array(output.size);
+  await output.vfs.read(output.path, bytes);
+  return bytes;
+};
+
+describe("planBrowserPlaylist ZIP", () => {
+  test("lists each file of a renamed ZIP with its source from the picked folder", async () => {
+    const plan = await planBrowserPlaylist(ff7Request({ layout: "flat", rename: true }));
+    expect(plan.bundle[0]).toEqual({ path: "Final Fantasy VII.m3u" });
+    const sheet = plan.bundle.find((file) => file.path === "Final Fantasy VII (Disc 2).cue");
+    expect(sheet?.source).toBe("ff7.disc02.cue");
+    expect(sheet?.text).toContain('FILE "Final Fantasy VII (Disc 2).bin" BINARY');
+    const bin = plan.bundle.find((file) => file.path === "Final Fantasy VII (Disc 2).bin");
+    expect(bin?.source).toBe("ff7.disc02.bin");
+    expect(plan.bundle.some((file) => file.path === "notes.txt")).toBe(false);
+  });
+
+  test("puts a layout's folder in the paths without renaming the discs", async () => {
+    const plan = await planBrowserPlaylist(ff7Request({ layout: "m3u-folder", rename: false }));
+    expect(plan.bundle.map((file) => file.path)).toContain("Final Fantasy VII.m3u/ff7.disc01.cue");
+    expect(plan.bundle[0]?.path).toBe("Final Fantasy VII.m3u/Final Fantasy VII.m3u");
+  });
+
+  test("asks for a game name before planning a ZIP", async () => {
+    const { name: _name, ...request } = ff7Request({ layout: "flat", rename: false });
+    await expect(planBrowserPlaylist(request)).rejects.toThrow("A ZIP needs a game name.");
+  });
+});
+
+describe("writeBrowserPlaylistZip", () => {
+  test("writes a stored ZIP of the renamed discs and their rewritten sheets", async () => {
+    const output = await writeBrowserPlaylistZip(ff7Request({ layout: "flat", rename: true }));
+    try {
+      const bytes = await readOutput(output);
+      expect(output.fileName).toBe("Final Fantasy VII.zip");
+      expect(String.fromCharCode(...bytes.slice(0, 4))).toBe("PK\u0003\u0004");
+      // The first local file header's method is 0 for a stored entry.
+      expect(bytes[8] | (bytes[9] << 8)).toBe(0);
+      const text = new TextDecoder("latin1").decode(bytes);
+      expect(text).toContain("Final Fantasy VII (Disc 1).cue\nFinal Fantasy VII (Disc 2).cue\n");
+      expect(text).toContain('FILE "Final Fantasy VII (Disc 2).bin" BINARY');
+      expect(text).not.toContain("ff7.disc01");
+      // A ZIP holds the playlist, the discs, and the track files their sheets name; other files beside them stay out.
+      expect(text).not.toContain(".sbi");
+      expect(text).not.toContain("notes.txt");
+    } finally {
+      await output.dispose();
+    }
+  });
+
+  test("rejects a cancelled write, and the next write still works", async () => {
+    const request = ff7Request({ layout: "flat", rename: true });
+    await expect(writeBrowserPlaylistZip({ ...request, signal: AbortSignal.abort() })).rejects.toThrow();
+    const output = await writeBrowserPlaylistZip(request);
+    await output.dispose();
+  });
+});
+
 const mountForm = () => {
   const element = document.createElement("div");
   element.id = "app";
@@ -180,7 +245,7 @@ const listFolder = async (directory) => {
   return files;
 };
 
-test("renames the discs in the picked folder where the browser can move files, and points to the CLI elsewhere", async () => {
+test("renames the discs in the picked folder where the browser can move files, and downloads the renamed discs as a ZIP elsewhere", async () => {
   const canWriteFolders = browserCanWriteFolders();
   const root = await navigator.storage.getDirectory();
   folderName = `playlist-folder-${crypto.randomUUID()}`;
@@ -199,8 +264,17 @@ test("renames the discs in the picked folder where the browser can move files, a
     expect(download.suggestedFilename).toBe("ff7.m3u");
     expect(lines(atob(download.contentBase64))).toEqual(["ff7.disc01.cue", "ff7.disc02.cue"]);
     expect(document.querySelector("#playlist-save-folder").disabled).toBe(true);
-    expect(document.querySelector("#playlist-rename-discs").disabled).toBe(true);
-    expect(document.querySelector('#playlist-container a[href$="docs/cli-playlist#rename-the-discs"]')).toBeTruthy();
+    const rename = document.querySelector("#playlist-rename-discs");
+    expect(rename.disabled).toBe(false);
+    rename.click();
+    await expect.poll(() => document.querySelector("#playlist-bundle")).toBeTruthy();
+    await expect.poll(() => document.querySelector("#playlist-download-zip").disabled).toBe(false);
+    const zip = await commands.clickAndReadDownload("#playlist-download-zip");
+    expect(zip.suggestedFilename).toBe("ff7.zip");
+    const text = atob(zip.contentBase64);
+    expect(text).toContain("ff7 (Disc 1).cue\nff7 (Disc 2).cue\n");
+    expect(text).toContain('FILE "ff7 (Disc 1).bin" BINARY');
+    expect(text).not.toContain("ff7.disc01");
     return;
   }
 

@@ -2211,7 +2211,7 @@ msgstr "Download requested"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.about.playlistBody3"
-msgstr "Download the playlist. In Chrome or Edge on a computer you can also save it into the game's folder and rename the discs to match. Nothing is uploaded."
+msgstr "Download the playlist, or a ZIP of the playlist and the discs, renamed and arranged for your frontend. In Chrome or Edge on a computer you can also save the playlist into the game's folder and rename the discs there. Nothing is uploaded."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2386,7 +2386,7 @@ msgstr "EmulatorJS: {name}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
-msgstr "Enable beta tools (Save Editor, Make playlist)"
+msgstr "Enable beta tools (Save Editor)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

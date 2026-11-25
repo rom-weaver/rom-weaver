@@ -2211,7 +2211,7 @@ msgstr "Descarga solicitada"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.about.playlistBody3"
-msgstr "Descarga la lista. En Chrome o Edge en un ordenador también puedes guardarla en la carpeta del juego y renombrar los discos para que coincidan. No se sube nada."
+msgstr "Descarga la lista, o un ZIP con la lista y los discos, renombrados y organizados para tu frontend si quieres. En Chrome o Edge en un ordenador también puedes guardar la lista en la carpeta del juego y renombrar los discos allí. No se sube nada."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2386,7 +2386,7 @@ msgstr "EmulatorJS: {name}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
-msgstr "Activar herramientas beta (Save Editor, Crear listas de discos)"
+msgstr "Activar herramientas beta (Save Editor)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

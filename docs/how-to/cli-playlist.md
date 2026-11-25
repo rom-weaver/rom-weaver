@@ -64,7 +64,7 @@ An `--output` ending in `.zip` holds the playlist, the discs, and the track file
 rom-weaver playlist -i 'Game (Disc 1).cue' -i 'Game (Disc 2).cue' -o Game.zip
 ```
 
-Unzip it into one folder and open the `.m3u`.
+Unzip it into one folder and open the `.m3u`. Add `--codec store` to skip compression, which saves time for discs that are already compressed, such as `.chd` files.
 
 When every disc has tracks with the same names, such as `track01.bin` beside each `.gdi`, add `--layout disc-folders`. Each disc then gets its own folder in the ZIP.
 

@@ -1372,7 +1372,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "settings.betaToolsEnabled": msg({
     id: "settings.betaToolsEnabled",
-    message: "Enable beta tools (Save Editor, Make playlist)",
+    message: "Enable beta tools (Save Editor)",
   }),
   "settings.accent": msg({ id: "settings.accent", message: "Accent" }),
   "settings.weavePackage": msg({ id: "settings.weavePackage", message: "What a shared weave includes" }),
@@ -1987,7 +1987,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.about.playlistBody3": msg({
     id: "ui.about.playlistBody3",
     message:
-      "Download the playlist. In Chrome or Edge on a computer you can also save it into the game's folder and rename the discs to match. Nothing is uploaded.",
+      "Download the playlist, or a ZIP of the playlist and the discs, renamed and arranged for your frontend. In Chrome or Edge on a computer you can also save the playlist into the game's folder and rename the discs there. Nothing is uploaded.",
   }),
   "ui.about.testTitle": msg({ id: "ui.about.testTitle", message: "About the online ROM tester" }),
   "ui.about.testBody1": msg({

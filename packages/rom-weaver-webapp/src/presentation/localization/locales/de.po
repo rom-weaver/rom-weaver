@@ -2211,7 +2211,7 @@ msgstr "Download angefordert"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.about.playlistBody3"
-msgstr "Lade die Playlist herunter. In Chrome oder Edge auf einem Computer kannst du sie auch im Ordner des Spiels speichern und die Discs passend umbenennen. Es wird nichts hochgeladen."
+msgstr "Lade die Playlist herunter, oder eine ZIP-Datei mit der Playlist und den Discs, auf Wunsch umbenannt und für dein Frontend angeordnet. In Chrome oder Edge auf einem Computer kannst du die Playlist auch im Ordner des Spiels speichern und die Discs dort umbenennen. Es wird nichts hochgeladen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2386,7 +2386,7 @@ msgstr "EmulatorJS: {name}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
-msgstr "Beta-Tools aktivieren (Save Editor, Disc-Playlists erstellen)"
+msgstr "Beta-Tools aktivieren (Save Editor)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

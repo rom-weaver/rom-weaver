@@ -113,7 +113,7 @@ const removeCreatorModeFromSearch = (search: string): string =>
     .join("&");
 
 /** Views that stay behind the beta-tools setting. */
-const BETA_WORKFLOW_VIEWS: ReadonlySet<WebappView> = new Set<WebappView>(["save-editor", "playlist"]);
+const BETA_WORKFLOW_VIEWS: ReadonlySet<WebappView> = new Set<WebappView>(["save-editor"]);
 
 export {
   appendCreatorMode,
