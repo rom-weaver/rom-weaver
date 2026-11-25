@@ -3,10 +3,9 @@
 #
 # `--build-arg DIST=prebuilt` serves `prebuilt/` out of the build context
 # instead, skipping the webapp source build below - the toolchain, rustup, the
-# WASI SDK, binaryen and a cold wasm compile included. The release fan-out fills it with
-# the same bundle it publishes as `rom-weaver-webapp.tar.gz`, then fills in
-# compression siblings for files Vite deliberately leaves raw. A plain
-# `docker build` still builds from source. BuildKit builds
+# WASI SDK, binaryen and a cold wasm compile included. The release build supplies
+# the bundle with Brotli sidecars. Docker adds sidecars for files Vite leaves raw.
+# A plain `docker build` builds from source. BuildKit builds
 # only the stages the selected one depends on, so the unused half costs nothing
 # - and `prebuilt/` only has to exist for the build that asks for it.
 #

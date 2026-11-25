@@ -370,9 +370,9 @@ The function takes the content type from `functions/assets/content-types.js` and
 
 Because function responses bypass `_headers`, the function restates the immutable cache rule and the cross-origin-isolation headers - COEP in particular, which dedicated-worker scripts must carry on a cross-origin-isolated page. Only `/assets/*` is eligible: the mutable root files (`index.html`, `rom-weaver-service-worker.js`, `changelog.json`) keep their no-cache semantics and never route through the function.
 
-Release archives, Docker images, Cloudflare deployments, and local production previews use the build's Brotli sidecars. This lets the preview server stand in for the edge in performance checks. The build also includes raw identify packs and cheat shards for clients without Brotli. Only Cloudflare reads the bundle's `_routes.json`.
+Docker images, Cloudflare deployments, and local production previews use the build's Brotli sidecars. This lets the preview server stand in for the edge in performance checks. The build also includes raw identify packs and cheat shards for clients without Brotli. Only Cloudflare reads the bundle's `_routes.json`.
 
-Production bundles carry external source maps (`build.sourcemap`), so a stack trace from a deployed build resolves to real source. They are the one class of asset that stays out of all three compression/caching paths: no q11 sidecar and no `_routes.json` include, no `compress-static-assets.mjs` pass in the Docker image, and no service-worker precache entry. Nothing but devtools ever requests them, so a normal visit pays only for the `sourceMappingURL` comments (~0.8 KB raw across the bundle). The maps themselves add ~5.7 MB to the release tarball and the image.
+Production bundles carry external source maps (`build.sourcemap`), so a stack trace from a deployed build resolves to real source. They are the one class of asset that stays out of all three compression/caching paths: no q11 sidecar and no `_routes.json` include, no `compress-static-assets.mjs` pass in the Docker image, and no service-worker precache entry. Nothing but devtools ever requests them, so a normal visit pays only for the `sourceMappingURL` comments (~0.8 KB raw across the bundle). The maps add ~9 MB to the image and ~2.3 MB to the release ZIP.
 
 Quality 11 on the wasm costs ~15s, which every build would otherwise repay for an unchanged asset, so `scripts/wasm/brotli-compress.mjs` keys its output by input digest and brotli parameters under `node_modules/.cache/rom-weaver-brotli` and verifies a hit by decompressing it before reuse. Entries unused for 14 days are pruned; the build's sidecar pass compresses assets on the libuv thread pool with bounded concurrency and writes results in sorted order, so output bytes do not depend on completion order; `ROM_WEAVER_BROTLI_CACHE=0` disables the cache.
 
@@ -634,7 +634,7 @@ The script imports nothing outside Node, so the dry-run and publish jobs install
 | --- | --- |
 | `semver-plan`, `semver-check` | nothing - `semver-plan` lists the published crates (and skips the check when every bump allows breaking changes) and `semver-check` runs one leg per crate, gating the publish on no accidental breaking API change |
 | `cargo-publish-dry-run` | nothing - gates npm and draft publication on crates.io accepting Cargo metadata |
-| `static-webapp` | `rom-weaver-webapp.tar.gz` on the draft release + signed build provenance |
+| `static-webapp` | `rom-weaver-webapp.zip` on the draft release + signed build provenance |
 | `npm-build` | nothing registry-facing - builds and dry-runs the 9 platform packages, attaches the identify data and CLI documentation to the draft; runs beside `semver-check` |
 | `publish-npm` | 9 platform packages → launcher → unscoped alias, in that order; the one npm job that waits for `semver-check` |
 | `build-containers` | nothing registry-facing - the four single-architecture images as OCI archives, built beside `publish-npm` |
@@ -686,8 +686,8 @@ Each Dockerfile keeps both paths and picks with a build arg (`BINARY`, `DIST`) t
 Two consequences worth knowing:
 
 - The CLI runtime is `gcr.io/distroless/cc-debian13`, and the `debian13` (trixie) half of that is load-bearing, not bookworm. The reused binary is linked against the glibc of the `ubuntu-24.04` runner `npm-build` builds on (2.39), which bookworm's 2.36 cannot load; trixie ships 2.41 and accepts both halves of the switch. `-cc` rather than `-base` supplies the libgcc/libstdc++ the vendored C deps expect. There is no shell in the image.
-- `static-webapp` packages a raw webapp tarball. The webapp Dockerfile adds the `.br` siblings that its static-web-server expects (`compression-static` in `sws.toml`) after the shared raw artifact is copied. No `.gz` siblings: sws gzips on demand for the rare client without brotli, which keeps ~2.8 MB out of the image.
-- `static-webapp` also owns the **build channel** for everything that is not a Cloudflare deploy. Its bundle becomes both `rom-weaver-webapp.tar.gz` and the container image, so it passes `ROM_WEAVER_CHANNEL` explicitly: `beta` for a prerelease, `prod` otherwise, on the same hyphen test as the rest of the prerelease routing. Without it a prerelease image would claim production while the deploy ladder put the same commit on `beta.rom-weaver.com`. The `deploy` job passes its own channel per target; an unset channel builds as `prod`, which is what a plain `npm run build` by a self-hoster should be.
+- `static-webapp` packages the self-hosted ZIP with maximum Deflate compression. Docker receives the build artifact and precompresses additional assets. Its static web server can gzip raw assets on demand.
+- `static-webapp` sets the build channel for the self-hosted ZIP and container image. It sets `ROM_WEAVER_CHANNEL` to `beta` when the version contains a hyphen and `prod` otherwise. The Cloudflare deploy job sets its own channel. Local `npm run build` uses production by default.
 
 A prebuilt build deliberately does **not** write the buildcache ref: exporting its layers would evict the source layer graph that the `docker` job in `ci.yml` restores.
 
@@ -778,7 +778,7 @@ Every artifact the fan-out publishes carries signed provenance, so what a user c
 | Artifact | Attested by |
 | --- | --- |
 | 9 CLI platform archives | `actions/attest-build-provenance` in `npm-publish.yml`'s `platform` job; the binary inside was either built by that release or attested by the release pull request's CI run (see [the reuse section](#the-release-reuses-the-release-pull-requests-cli-binaries)) |
-| static webapp tarball | the same, in `release.yml`'s `static-webapp` |
+| static webapp ZIP | the same, in `release.yml`'s `static-webapp` |
 | npm packages | `npm publish --provenance` (`scripts/ci/npm-publish-package.mjs`) |
 | container images | `provenance: mode=max` + `attest-retry`, in `docker-publish.yml` for `latest`/`beta` and in `ci.yml` for `nightly` |
 
