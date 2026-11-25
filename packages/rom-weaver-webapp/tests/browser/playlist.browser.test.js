@@ -267,7 +267,8 @@ test("renames the discs in the picked folder where the browser can move files, a
     expect(atob(plain.contentBase64)).toContain("ff7.disc01.cue\nff7.disc02.cue\n");
     expect(document.querySelector("#playlist-save-folder").disabled).toBe(true);
     const rename = document.querySelector("#playlist-rename-discs");
-    expect(rename.disabled).toBe(false);
+    // The form is still freeing the first ZIP when its download arrives.
+    await expect.poll(() => rename.disabled).toBe(false);
     rename.click();
     await expect.poll(() => document.querySelector("#playlist-bundle")).toBeTruthy();
     await expect.poll(() => document.querySelector("#playlist-download-zip").disabled).toBe(false);
