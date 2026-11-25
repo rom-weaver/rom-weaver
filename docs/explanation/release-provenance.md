@@ -15,7 +15,7 @@ Why rom-weaver downloads can be verified, what that verification actually proves
 
 ## What build provenance proves
 
-The release workflows attach signed [build provenance][slsa] to platform archives, the webapp tarball, npm packages, and container images. Provenance records the build identity and source commit. Uploading a file to a release does not create this build record.
+Platform archives and the webapp ZIP carry signed [build provenance][slsa]. So do npm packages and container images. Provenance records the build identity and source commit. Uploading a file to a release does not create this build record.
 
 The install scripts query GitHub for this repository's SLSA record for the downloaded digest. They trust the API response over TLS. They do not validate the signature locally or require a particular workflow identity. A signature check can add those restrictions. Provenance describes where an artifact came from; it does not establish that its code is correct.
 

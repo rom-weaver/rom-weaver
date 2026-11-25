@@ -11,7 +11,7 @@ Do not mount rom-weaver at the root of an origin that also serves other apps. At
   - [Run the published image](#run-the-published-image)
   - [Run with Compose](#run-with-compose)
 - [Static files](#static-files)
-  - [Download a release tarball](#download-a-release-tarball)
+  - [Download a release ZIP](#download-a-release-zip)
   - [Build static files from source](#build-static-files-from-source)
 - [Cross-origin isolation](#cross-origin-isolation)
 - [Service worker and subpaths](#service-worker-and-subpaths)
@@ -122,18 +122,17 @@ docker compose down
 
 ## Static files
 
-### Download a release tarball
+### Download a release ZIP
 
-Each GitHub release includes the same static build without the Docker image. Download and extract the latest one into the directory your static host serves:
+Open the [release page](https://github.com/rom-weaver/rom-weaver/releases) and download `rom-weaver-webapp.zip`. If the release only lists `rom-weaver-webapp.tar.gz`, download that archive. Extract the archive into the directory your static host serves. Extracting the ZIP gives you raw identify packs and cheat data.
+
+If the latest release lists the ZIP, these commands download and extract it.
 
 ```bash
-mkdir -p rom-weaver-webapp
 curl --fail --location --proto '=https' --tlsv1.2 \
-  --output rom-weaver-webapp.tar.gz \
-  https://github.com/rom-weaver/rom-weaver/releases/latest/download/rom-weaver-webapp.tar.gz
-tar --extract --gzip \
-  --file rom-weaver-webapp.tar.gz \
-  --directory rom-weaver-webapp
+  --output rom-weaver-webapp.zip \
+  https://github.com/rom-weaver/rom-weaver/releases/latest/download/rom-weaver-webapp.zip
+unzip rom-weaver-webapp.zip -d rom-weaver-webapp
 ```
 
 Serve the extracted `rom-weaver-webapp` directory from an HTTPS static host, preserve its directory structure, and configure the [host requirements](#cross-origin-isolation) below. A subdomain is simplest; for a subpath, redirect its bare path to a trailing slash, such as `/rom-weaver` to `/rom-weaver/`. `404.html` is built for the origin root, so under a subpath, including a GitHub Pages project site, re-root it once before upload or it loads unstyled and its links leave the prefix: `sed -e 's#href="/\([^/"]\)#href="/rom-weaver/\1#g' -e 's#href="/"#href="/rom-weaver/"#g' 404.html > 404.rerooted.html && mv 404.rerooted.html 404.html`.
@@ -141,7 +140,7 @@ Serve the extracted `rom-weaver-webapp` directory from an HTTPS static host, pre
 To pin a release, use its tag in the release-download URL:
 
 ```text
-https://github.com/rom-weaver/rom-weaver/releases/download/vX.Y.Z/rom-weaver-webapp.tar.gz
+https://github.com/rom-weaver/rom-weaver/releases/download/vX.Y.Z/rom-weaver-webapp.zip
 ```
 
 ### Build static files from source

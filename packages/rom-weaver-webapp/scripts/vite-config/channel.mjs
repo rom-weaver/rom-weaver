@@ -15,11 +15,8 @@ const CHANNEL_DEFAULT_ACCENTS = {
   prod: "madder",
 };
 
-// An unset channel is a plain production build: the Docker image, the
-// `rom-weaver-webapp.tar.gz` release asset, and anyone self-hosting from a
-// checkout all reach this path, and none of them is a dev build. Only the dev
-// server and preview mark themselves, which they do by setting the variable
-// (see scripts/dev-server.mjs); the deploy job passes its channel explicitly.
+// Checkout builds use production when ROM_WEAVER_CHANNEL is unset.
+// Release and deploy jobs, the dev server, and previews set their channels explicitly.
 //
 // A *typo* still degrades to "dev" rather than silently impersonating a
 // channel it is not - an explicit-but-unrecognized value means the caller

@@ -3,8 +3,8 @@ name: Build npm CLI
 # Everything the npm publish needs that writes nothing to a registry: the platform builds, their
 # dry-runs on each target's oldest OS, the identify data, and the CLI documentation. release.yml
 # starts this beside the semver check and gates only publish-npm on the check, so a patch release
-# no longer builds after it. Nothing here publishes to npm or flips the draft; the identify data and
-# documentation archives are attached to the still-draft release, as static-webapp's tarball is.
+# no longer builds after it. This workflow attaches identify data and documentation to the draft.
+# Separate jobs publish npm packages and the release.
 
 on:
   workflow_call:
