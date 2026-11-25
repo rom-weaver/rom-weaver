@@ -646,7 +646,7 @@ jobs:
         run: node scripts/wasm/verify-wasm-artifact.mjs packages/rom-weaver-webapp/src/wasm
 
       # An unset channel builds as prod, which is right for a bare vX.Y.Z. A
-      # prerelease has to be marked, though: its image and tarball would
+      # prerelease has to be marked, though: its image and ZIP would
       # otherwise claim production while the deploy ladder is putting the same
       # commit on beta.rom-weaver.com. Keyed off the hyphen, like the rest of
       # the prerelease routing (the GitHub prerelease flag, the npm dist-tag,
@@ -665,8 +665,8 @@ jobs:
           ROM_WEAVER_SYSTEM_CHROME: "1"
         run: |
           npm --prefix packages/rom-weaver-webapp run build
-          node scripts/package-webapp-zip.mjs \
-            packages/rom-weaver-webapp/dist rom-weaver-webapp.zip
+          # Info-ZIP wildcards match across `/`, so this skips `.br` sidecars at every depth.
+          (cd packages/rom-weaver-webapp/dist && zip -9 -q -r "$GITHUB_WORKSPACE/rom-weaver-webapp.zip" . -x '*.br')
 
       # Consumed by the webapp image, which would otherwise install rustup, the
       # WASI SDK and binaryen and rebuild the same bundle from scratch. Sharing
@@ -679,7 +679,7 @@ jobs:
           if-no-files-found: error
           # dist has no dot-prefixed entries today, but upload-artifact drops
           # them silently by default - the day a `.well-known/` lands there the
-          # tarball would keep it and the container would not, which is exactly
+          # ZIP would keep it and the container would not, which is exactly
           # the divergence sharing this artifact exists to remove.
           include-hidden-files: true
           # See the matching upload in npm-build.yml: an artifact name cannot
