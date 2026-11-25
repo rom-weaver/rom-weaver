@@ -38,7 +38,7 @@ When the discs are in subfolders of the folder you opened, the **Beside the disc
 
 Most emulators name save files after the playlist. Saves made while playing one disc directly keep that disc's name, so rename them to match the playlist.
 
-The ZIP is stored without compression. The page builds it in the browser's own storage before the download starts, so it needs free space about the size of the discs. If storage runs out, the page reports it and removes the partial ZIP.
+The ZIP is stored without compression. The page builds it in the browser's own storage before the download starts, so it needs free space about the size of the discs. If storage runs out, the page reports it and removes the partial ZIP. The ZIP stays there so a large download can finish; making another ZIP, adding other discs, or reloading the page frees it.
 
 ## Save it into the game's folder
 

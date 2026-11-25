@@ -292,13 +292,15 @@ type RenameChoiceProps = {
   renaming: boolean;
   disabled: boolean;
   name: string;
-  /** Why the discs cannot be renamed; empty when they can. */
+  /** Why the output cannot be made; empty when it can. */
   reason: string;
+  /** Whether the plan that failed renamed the discs, which picks what the warning calls the failure. */
+  reasonFromRename: boolean;
   onChange: (rename: boolean) => void;
 };
 
-/** The checkbox to rename the discs after the game, and why that is not possible when it is not. */
-const RenameChoice = ({ renaming, disabled, name, reason, onChange }: RenameChoiceProps) => {
+/** The checkbox to rename the discs after the game, and why the ZIP or the rename cannot be made when it cannot. */
+const RenameChoice = ({ renaming, disabled, name, reason, reasonFromRename, onChange }: RenameChoiceProps) => {
   const localizer = useUiLocalizer();
   const [before, after] = localizer.message("ui.playlist.renameDiscs", { name: NAME_SLOT }).split(NAME_SLOT);
   return (
@@ -320,7 +322,7 @@ const RenameChoice = ({ renaming, disabled, name, reason, onChange }: RenameChoi
       </label>
       {reason ? (
         <Notice level="warn">
-          {localizer.message(renaming ? "ui.playlist.cannotRename" : "ui.playlist.cannotZip", { reason })}
+          {localizer.message(reasonFromRename ? "ui.playlist.cannotRename" : "ui.playlist.cannotZip", { reason })}
         </Notice>
       ) : null}
     </>
@@ -546,6 +548,8 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
   const [layout, setLayout] = useState<PlaylistLayout>("flat");
   const [outputPlan, setOutputPlan] = useState<BrowserPlaylistPlan | null>(null);
   const [outputReason, setOutputReason] = useState("");
+  // Whether the plan behind `outputReason` renamed the discs; the Rename checkbox may have changed since.
+  const [reasonFromRename, setReasonFromRename] = useState(false);
   const [planning, setPlanning] = useState(false);
   const [busy, setBusy] = useState<Busy>(null);
   const [zipPercent, setZipPercent] = useState<number | null>(null);
@@ -632,6 +636,7 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
               onOutput: ({ outputPlan: planned, reason }) => {
                 setOutputPlan(planned);
                 setOutputReason(reason);
+                setReasonFromRename(rename);
               },
               onPlan: (next) => {
                 setPlan(next);
@@ -772,6 +777,8 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
       const abort = new AbortController();
       zipAbortRef.current = abort;
       setZipPercent(null);
+      // Free the last ZIP first, so a second one needs no more free space than the first.
+      disposeZip();
       try {
         const { writeBrowserPlaylistZip } = await import("../../platform/browser/browser-playlist-api.ts");
         const output = await writeBrowserPlaylistZip({
@@ -789,7 +796,6 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
           await output.dispose();
           return;
         }
-        disposeZip();
         zipOutputRef.current = output;
         await output.saveAs({ fileName: `${name}.zip`, interactive: true });
         setDone(localizer.message("ui.playlist.doneZip", { fileName: `${name}.zip` }));
@@ -802,6 +808,8 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
     });
   };
 
+  // The playlist alone is what Save into folder writes; the ZIP's playlist lists bare file names, so the list follows the action that can run.
+  const savesPlaylistAlone = mode === "m3u" && canRename;
   const locked = !!busy;
   const actionsReady = !!plan && !planning && !locked && !nameProblem;
   // The ZIP is planned in every mode but a rename in place, so a clash that stops it holds the download.
@@ -818,7 +826,7 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
     },
     getState: () => ({
       busy,
-      entries: (mode === "m3u" ? plan : outputPlan)?.entries ?? plan?.entries ?? [],
+      entries: (savesPlaylistAlone ? plan : outputPlan)?.entries ?? plan?.entries ?? [],
       error: error || null,
       fileName: plan?.file_name ?? null,
       files: source?.files.length ?? 0,
@@ -892,11 +900,18 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
           >
             <GameSelect games={games} game={game} locked={locked} onChange={setGame} />
             <GameNameField locked={locked} name={name} onChange={setName} plan={plan} problem={nameProblem} />
-            <PlaylistEntries outputPlan={mode === "m3u" ? null : outputPlan} plan={plan} planning={planning} />
+            <PlaylistEntries outputPlan={savesPlaylistAlone ? null : outputPlan} plan={plan} planning={planning} />
             <ErrorNotice error={error} onDismiss={() => setError("")} />
           </StepSection>
           <StepSection num="0x03" title={localizer.message("ui.playlist.stepSave")} woven={!!done}>
-            <RenameChoice disabled={locked} name={name} onChange={setRename} reason={outputReason} renaming={rename} />
+            <RenameChoice
+              disabled={locked}
+              name={name}
+              onChange={setRename}
+              reason={outputReason}
+              reasonFromRename={reasonFromRename}
+              renaming={rename}
+            />
             <LayoutChoice layout={layout} locked={locked} onChange={setLayout} />
             <RenameCards renamePlan={mode === "in-place" ? outputPlan : null} />
             <BundleCards zipPlan={mode === "zip" ? outputPlan : null} />

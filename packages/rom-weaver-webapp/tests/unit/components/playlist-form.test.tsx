@@ -253,10 +253,16 @@ describe("PlaylistForm", () => {
     expect(output.dispose).toHaveBeenCalledTimes(1);
   });
 
-  it("frees the earlier ZIP once the next one is saved", async () => {
+  it("frees the earlier ZIP before the next one is written, so storage holds one", async () => {
     const first = zipOutput();
     const second = zipOutput();
-    support.writeZip.mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+    const secondWrite: { finish: (() => void) | null } = { finish: null };
+    support.writeZip.mockResolvedValueOnce(first).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          secondWrite.finish = () => resolve(second);
+        }),
+    );
     render(<PlaylistForm onSessionChange={vi.fn()} />);
     const download = await dropDiscs();
 
@@ -265,8 +271,10 @@ describe("PlaylistForm", () => {
     expect(first.dispose).not.toHaveBeenCalled();
 
     fireEvent.click(download);
+    await waitFor(() => expect(first.dispose).toHaveBeenCalledTimes(1));
+    expect(second.saveAs).not.toHaveBeenCalled();
+    secondWrite.finish?.();
     await waitFor(() => expect(second.saveAs).toHaveBeenCalled());
-    expect(first.dispose).toHaveBeenCalledTimes(1);
     expect(second.dispose).not.toHaveBeenCalled();
   });
 
@@ -310,6 +318,44 @@ describe("PlaylistForm", () => {
     await screen.findByText("Can't make the ZIP: two files would both be written as `disc.gdi`");
     expect((screen.getByRole("button", { name: "Download Game.zip" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByText(/Can't rename/)).toBeNull();
+  });
+
+  it("keeps the warning's wording with the plan that failed while the next plan runs", async () => {
+    const renamePlan: { release: (() => void) | null } = { release: null };
+    vi.mocked(planBrowserPlaylist).mockImplementation(async ({ zip }) => {
+      if (zip?.rename) {
+        await new Promise<void>((resolve) => {
+          renamePlan.release = resolve;
+        });
+        throw new Error("`Game.mds` cannot be renamed");
+      }
+      if (zip) throw new Error("two files would both be written as `disc.gdi`");
+      return PLAN;
+    });
+    render(<PlaylistForm onSessionChange={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Drop the discs of one game"), {
+      target: { files: [new File(["one"], "Game (Disc 1).cue"), new File(["two"], "Game (Disc 2).cue")] },
+    });
+    await screen.findByText("Can't make the ZIP: two files would both be written as `disc.gdi`");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /Rename the discs/ }));
+    await waitFor(() => expect(vi.mocked(planBrowserPlaylist).mock.calls.at(-1)?.[0].zip?.rename).toBe(true));
+    expect(screen.queryByText(/Can't rename/)).toBeNull();
+    expect(screen.getByText(/Can't make the ZIP: two files/)).toBeTruthy();
+
+    renamePlan.release?.();
+    await screen.findByText("Can't rename these discs: `Game.mds` cannot be renamed");
+  });
+
+  it("lists the ZIP's own lines when the browser cannot save the playlist into a folder", async () => {
+    vi.mocked(planBrowserPlaylist).mockImplementation(async ({ zip }) =>
+      zip ? PLAN : { ...PLAN, entries: ["CD1/Game (Disc 1).cue", "CD2/Game (Disc 2).cue"] },
+    );
+    render(<PlaylistForm onSessionChange={vi.fn()} />);
+    await dropDiscs();
+
+    expect(screen.getByText("Game (Disc 1).cue")).toBeTruthy();
+    expect(screen.queryByText("CD1/Game (Disc 1).cue")).toBeNull();
   });
 
   it("says why a game name cannot be used, and holds the ZIP", async () => {
