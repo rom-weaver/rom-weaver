@@ -32,7 +32,7 @@ const MAX_FOLDER_DEPTH = 3;
 const MAX_FOLDER_FILES = 2000;
 const PLAN_DELAY_MS = 250;
 
-// Stands in for the game's name while a message is split around it, so the name can be styled in place.
+// Stands in for the game's name while a message is split around it. The name can then be styled in place.
 const NAME_SLOT = "\uE000";
 
 const PLAYLIST_LAYOUTS: ReadonlyArray<{ layout: PlaylistLayout; label: MessageId }> = [
@@ -77,8 +77,8 @@ const isAllAtTop = (plan: BrowserPlaylistPlan) => plan.discs.every((disc) => !di
 /** The game's name, which names the playlist and the ZIP. */
 const getGameName = (plan: BrowserPlaylistPlan) => plan.file_name.replace(/\.m3u$/i, "");
 
-// Renaming in place changes the picked folder, so it needs a writable folder with every disc at its top
-// and the playlist beside the discs; any other rename or layout goes into a ZIP.
+// In-place renaming changes the picked folder. It needs a writable folder, every disc at the top,
+// and the playlist beside them. Any other rename or layout goes into a ZIP.
 const getOutputMode = ({ canRename, layout, plan, rename }: OutputChoices): OutputMode => {
   const fitsInPlace = canRename && layout === "flat" && !!plan && isAllAtTop(plan);
   if (rename && fitsInPlace) return "in-place";
@@ -171,7 +171,7 @@ const planChosenGame = async (request: PlanRequest, survey: BrowserPlaylistPlan,
   return planPlaylistDiscs(request, discs);
 };
 
-/** What the Save step writes: a rename in place, else the ZIP the choices ask for, also when the playlist is saved alone. */
+/** What the Save step writes: a rename in place, else a ZIP. The ZIP is planned even when only the playlist is saved. */
 const getPlannedOutput = (mode: OutputMode, plan: BrowserPlaylistPlan, zip: PlaylistZipOptions): PlannedOutput =>
   mode === "in-place" ? { renameInPlace: true } : { name: getGameName(plan), zip };
 
@@ -204,9 +204,9 @@ type PlanReport = {
   onOutput: (output: { outputPlan: BrowserPlaylistPlan | null; reason: string }) => void;
 };
 
-/** Plan every disc, then the chosen game, then what the Save step writes, reporting each as it is ready. */
+/** Plan every disc, then the chosen game, then what Save writes. Each result is reported as it is ready. */
 const planPlaylistSource = async ({ request, cachedSurvey, choices, isCurrent }: PlanJob, report: PlanReport) => {
-  // Discs named only by number give the engine no game name, so a survey that failed unnamed runs again with the typed one.
+  // Discs named only by number give no game name. A survey that failed unnamed runs again with the typed name.
   const survey = cachedSurvey ?? (await planPlaylistDiscs(request));
   if (!isCurrent()) return;
   report.onSurvey(survey);
@@ -294,12 +294,12 @@ type RenameChoiceProps = {
   name: string;
   /** Why the output cannot be made; empty when it can. */
   reason: string;
-  /** Whether the plan that failed renamed the discs, which picks what the warning calls the failure. */
+  /** Whether the plan that failed renamed the discs. It picks what the warning calls the failure. */
   reasonFromRename: boolean;
   onChange: (rename: boolean) => void;
 };
 
-/** The checkbox to rename the discs after the game, and why the ZIP or the rename cannot be made when it cannot. */
+/** The checkbox to rename the discs after the game. It also says why the ZIP or the rename cannot be made. */
 const RenameChoice = ({ renaming, disabled, name, reason, reasonFromRename, onChange }: RenameChoiceProps) => {
   const localizer = useUiLocalizer();
   const [before, after] = localizer.message("ui.playlist.renameDiscs", { name: NAME_SLOT }).split(NAME_SLOT);
@@ -331,7 +331,7 @@ const RenameChoice = ({ renaming, disabled, name, reason, reasonFromRename, onCh
 
 type LayoutChoiceProps = { layout: PlaylistLayout; locked: boolean; onChange: (layout: PlaylistLayout) => void };
 
-/** Choose where a ZIP puts the playlist and discs, for the frontend that will read them. */
+/** Choose where a ZIP puts the playlist and discs for the frontend. */
 const LayoutChoice = ({ layout, locked, onChange }: LayoutChoiceProps) => {
   const localizer = useUiLocalizer();
   return (
@@ -463,7 +463,7 @@ const getZipLabel = (localizer: Localizer, busy: Busy, plan: BrowserPlaylistPlan
   return localizer.message("ui.playlist.zipCreatingPercent", { fileName, percent: Math.round(zipPercent) });
 };
 
-/** The buttons that finish the playlist: rename the discs in place, download the ZIP, or save the playlist into the folder. */
+/** The buttons that finish the playlist. They rename in place, download the ZIP, or save into the folder. */
 const SaveActions = ({
   busy,
   mode,
@@ -763,7 +763,7 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
       const abort = new AbortController();
       zipAbortRef.current = abort;
       setZipPercent(null);
-      // Free the last ZIP first, so a second one needs no more free space than the first.
+      // Free the last ZIP first. A second one then needs no more free space than the first.
       disposeZip();
       try {
         const { writeBrowserPlaylistZip } = await import("../../platform/browser/browser-playlist-api.ts");
@@ -789,11 +789,11 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
     });
   };
 
-  // The playlist alone is what Save into folder writes; the ZIP's playlist lists bare file names, so the list follows the action that can run.
+  // Save into folder writes the playlist alone. The ZIP's playlist lists bare file names, so the list follows the action that runs.
   const savesPlaylistAlone = mode === "m3u" && canRename;
   const locked = !!busy;
   const actionsReady = !!plan && !planning && !locked && !nameProblem;
-  // The ZIP is planned in every mode but a rename in place, so a clash that stops it holds the download.
+  // The ZIP is planned in every mode but a rename in place. A clash that stops it holds the download.
   const zipReady = actionsReady && (mode === "in-place" || !!outputPlan);
 
   useAgentWorkflow(PLAYLIST_ACTIVITY_KEY, {

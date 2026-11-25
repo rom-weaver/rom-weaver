@@ -9,7 +9,7 @@ const textEncoder = new TextEncoder();
 
 type GameNameProblem = "characters" | "dot" | "length" | "windows";
 
-/** Why a game name cannot name its playlist and renamed discs, or null when it can. */
+/** Why a game name cannot name its playlist and renamed discs; null when it can. */
 const checkGameName = (name: string): GameNameProblem | null => {
   const trimmed = name.trim();
   if (!trimmed) return null;

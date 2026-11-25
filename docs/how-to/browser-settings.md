@@ -29,7 +29,7 @@ Navigation’s separate **Theme** (light, dark, or system) and **Accent** (highl
 3. Select **Save**.
 4. Open the required tool from the app's navigation.
 
-Only Save Editor requires this setting; Trim, PPF Undo, Make playlist, and cheats in Apply, Create, and Identify do not.
+Only Save Editor needs this setting. Trim, PPF Undo, Make playlist, and cheats in Apply, Create, and Identify do not.
 
 ## Prepare for offline use
 

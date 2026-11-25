@@ -200,7 +200,7 @@ describe("writeBrowserPlaylistZip", () => {
       expect(text).toContain("Final Fantasy VII (Disc 1).cue\nFinal Fantasy VII (Disc 2).cue\n");
       expect(text).toContain('FILE "Final Fantasy VII (Disc 2).bin" BINARY');
       expect(text).not.toContain("ff7.disc01");
-      // A ZIP holds the playlist, the discs, and the track files their sheets name; other files beside them stay out.
+      // A ZIP holds the playlist, the discs, and the track files their sheets name. Other files beside them stay out.
       expect(text).not.toContain(".sbi");
       expect(text).not.toContain("notes.txt");
     } finally {

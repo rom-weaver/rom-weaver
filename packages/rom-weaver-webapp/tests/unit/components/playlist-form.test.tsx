@@ -247,7 +247,7 @@ describe("PlaylistForm", () => {
       }),
     );
     expect(output.saveAs).toHaveBeenCalledWith({ fileName: "Game.zip", interactive: true });
-    // The browser reads the saved file while it downloads, so the ZIP stays until the page lets go of it.
+    // The browser reads the saved file while it downloads. The ZIP stays until the page lets go of it.
     expect(output.dispose).not.toHaveBeenCalled();
     unmount();
     expect(output.dispose).toHaveBeenCalledTimes(1);
@@ -420,7 +420,7 @@ describe("PlaylistForm", () => {
       ({ signal: given }: { signal: AbortSignal }) =>
         new Promise((resolve) => {
           signal = given;
-          // A runtime may finish after the abort, so the page must still free what it made.
+          // A runtime may finish after the abort. The page MUST still free what it made.
           given.addEventListener("abort", () => resolve(output));
         }),
     );

@@ -1375,7 +1375,7 @@ impl CliApp {
         ))
     }
 
-    /// Reject a `--codec` the `.zip` handler would reject, so a dry run fails where the real run does.
+    /// Reject a `--codec` the `.zip` handler would reject. A dry run then fails where the real run does.
     pub(super) fn validate_playlist_zip_codec(&self, job: &PlaylistJob, codec: &str) -> Result<()> {
         let handler = self.containers.find_creatable_by_name("zip")?;
         let input = job

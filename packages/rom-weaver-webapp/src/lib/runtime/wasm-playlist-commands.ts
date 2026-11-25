@@ -65,7 +65,7 @@ const parsePlaylistPlan = (value: unknown): PlaylistDryRunPlan => {
   return plan as unknown as PlaylistDryRunPlan;
 };
 
-/** Run the engine's `playlist` command, as a dry run that plans or a run that writes. */
+/** Run the engine's `playlist` command: a dry run plans, a run writes. */
 const runRomWeaverPlaylist = async (input: RuntimePlaylistInput, dryRun: boolean) => {
   const command = createRomWeaverCommand("playlist", {
     input: input.inputs,
@@ -92,7 +92,10 @@ const runRomWeaverPlaylist = async (input: RuntimePlaylistInput, dryRun: boolean
   return result;
 };
 
-/** Plan a playlist with the engine's dry run, which reads only the disc sheets and writes nothing. */
+/**
+ * Plan a playlist with the engine's dry run. It reads the disc sheets, opens each file it would
+ * copy, and writes nothing.
+ */
 const invokeRomWeaverPlaylistPlan = async (input: RuntimePlaylistInput): Promise<PlaylistDryRunPlan> => {
   const result = await runRomWeaverPlaylist(input, true);
   const terminal = getTerminalEvent(result);

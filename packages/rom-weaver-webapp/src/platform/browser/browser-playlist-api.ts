@@ -119,8 +119,8 @@ const selectPlanFiles = (
   discs: readonly string[] | undefined,
   renameInPlace: boolean | undefined,
 ) => {
-  // An existing playlist or ZIP would block the engine from writing a new one beside it, and a download
-  // never lands there. Renaming keeps them, so the plan refuses a name that is already taken.
+  // An existing playlist or ZIP would block a new one beside it. A download never lands there.
+  // Renaming keeps them, so the plan refuses a name that is already taken.
   const mounted = renameInPlace ? sources : sources.filter((source) => !PLAYLIST_OUTPUT_FILE.test(source.path));
   const wanted = discs ? new Set(discs) : null;
   const inputs = mounted.filter((source) => (wanted ? wanted.has(source.path) : isPlaylistDisc(source.path)));
@@ -183,7 +183,7 @@ const rewordPlanError = (error: unknown, root: string) => {
   }
 };
 
-/** Mount the picked files at their exact names, run `use` on them, and release the mounts. */
+/** Mount the picked files at their exact names, run `use`, then release the mounts. */
 const withMountedPlaylist = async <Result>(
   request: BrowserPlaylistPlanRequest,
   use: (files: MountedPlaylistFiles) => Promise<Result>,
@@ -211,15 +211,15 @@ const withMountedPlaylist = async <Result>(
 };
 
 /**
- * Plan a playlist from picked files with the engine's dry run. The files are mounted at their
- * exact names and relative paths, so the plan's lines and renamed sheets match the real folder.
+ * Plan a playlist from picked files with the engine's dry run. Files mount at their exact names
+ * and paths. The plan's lines and renamed sheets then match the real folder.
  */
 const planBrowserPlaylist = (request: BrowserPlaylistPlanRequest): Promise<BrowserPlaylistPlan> =>
   withMountedPlaylist(request, (files) => planMountedPlaylist(files, request));
 
 /**
- * Write the `.zip` that {@link planBrowserPlaylist} plans for the same request, into the browser's
- * private storage. The caller saves the returned output and disposes it.
+ * Write the `.zip` that {@link planBrowserPlaylist} plans, into the browser's private storage.
+ * The caller saves the returned output and disposes it.
  */
 const writeBrowserPlaylistZip = (request: BrowserPlaylistZipRequest): Promise<PublicOutput> =>
   withMountedPlaylist(request, async ({ root, mounted, inputs }) => {

@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef } from "react";
 import type { PublicOutput } from "../types/workflow-runtime-types.ts";
 
 /**
- * Holds the last ZIP a form wrote. `saveAs` returns once the browser starts reading the file, so
- * the ZIP MUST stay in storage until it is replaced; disposing it at once cancels a large download
+ * Holds the last ZIP a form wrote. `saveAs` returns once the browser starts reading the file.
+ * The ZIP MUST stay in storage until it is replaced. Disposing it early cancels a large download
  * mid-transfer. Unmounting aborts the write in `zipAbortRef` and frees the kept ZIP.
  */
 export function useKeptZip() {
@@ -16,7 +16,7 @@ export function useKeptZip() {
     void old?.dispose();
   }, []);
 
-  /** Keeps a finished ZIP, or frees it when a cancel or an unmount aborted the write first. Returns whether it was kept. */
+  /** Keeps a finished ZIP. Frees it instead when a cancel or an unmount aborted the write first. Returns whether it was kept. */
   const keepZip = useCallback((output: PublicOutput, signal: AbortSignal) => {
     if (signal.aborted) {
       void output.dispose();
