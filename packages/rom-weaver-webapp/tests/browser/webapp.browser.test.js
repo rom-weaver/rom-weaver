@@ -844,6 +844,24 @@ test("the workflow heading sheds labels only when they would cover the step titl
   await page.viewport(1280, 900);
 });
 
+test("the hero help links wrap instead of overflowing in a long locale", async () => {
+  mountWebappRoot({ settings: { ...getDefaultSettings(), language: "es", threads: 16 } });
+  await expect.poll(() => document.querySelector(".simple-hero .hero-help-links .hero-guide")).toBeTruthy();
+  for (const width of [320, 360, 390]) {
+    await page.viewport(width, 844);
+    await expect
+      .poll(() => {
+        const row = document.querySelector(".simple-hero .hero-help-links");
+        const overflow = [...row.children].map(
+          (child) => child.getBoundingClientRect().right - row.getBoundingClientRect().right,
+        );
+        return Math.max(...overflow);
+      })
+      .toBeLessThanOrEqual(1);
+  }
+  await page.viewport(1280, 900);
+});
+
 test("the wordmark keeps its version while persistent status sits beside navigation", async () => {
   await page.viewport(1280, 900);
   mountWebappRoot({ settings: { ...getDefaultSettings(), threads: 10 } });
