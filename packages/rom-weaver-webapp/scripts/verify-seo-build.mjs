@@ -973,8 +973,6 @@ for (const [, revision, url] of precacheManifest.matchAll(
     .digest("hex");
   if (actual !== revision) throw new Error(`precache revision for ${url} does not match the file on disk`);
 }
-const identifyPrecacheEntry = (system) =>
-  `"revision":"${system.sha256}","url":"assets/identify-${system.file}?sha256=${system.sha256}"`;
 assertIncludes(precacheManifest, '"404.html"', "404 precache entry");
 // The index is precached because pack selection needs it before any pack. No
 // pack itself belongs there: the default set is downloaded by the background
@@ -983,18 +981,18 @@ assertIncludes(precacheManifest, '"404.html"', "404 precache entry");
 if (!/"assets\/identify-index-[0-9a-f]{16}\.json"/u.test(precacheManifest)) {
   throw new Error("precache manifest is missing the hashed identify index entry");
 }
-for (const system of identifyDataIndex.systems) {
-  if (precacheManifest.includes(identifyPrecacheEntry(system))) {
-    throw new Error(`${system.file} must not enter the precache; packs are warmed in the background`);
+for (const entry of [...identifyDataIndex.systems, ...identifyDataIndex.cheats]) {
+  const asset = `assets/identify-${entry.file}`;
+  assertExcludes(precacheManifest, `"url":"${asset}`, "identify data precache entry");
+  if (!entry.brotliFile) throw new Error(`${entry.file} has no Brotli asset in the identify index`);
+  if (!fs.existsSync(path.join(distDir, "assets", `identify-${entry.brotliFile}`))) {
+    throw new Error(`${entry.brotliFile} was not staged`);
   }
-}
-for (const system of identifyDataIndex.systems) {
-  if (!system.brotliFile) throw new Error(`${system.file} has no Brotli asset in the identify index`);
-  if (!fs.existsSync(path.join(distDir, "assets", `identify-${system.brotliFile}`))) {
-    throw new Error(`${system.brotliFile} was not staged`);
-  }
-  if (fs.existsSync(path.join(distDir, "assets", `identify-${system.file}`))) {
-    throw new Error(`${system.file} exceeds the deployment limit and must not be staged`);
+  const digest = createHash("sha256")
+    .update(fs.readFileSync(path.join(distDir, asset)))
+    .digest("hex");
+  if (digest !== entry.sha256) {
+    throw new Error(`${asset} does not match the identify index SHA-256`);
   }
 }
 for (const slug of [

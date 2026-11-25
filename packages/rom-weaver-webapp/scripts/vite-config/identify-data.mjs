@@ -6,8 +6,7 @@ import { repoRoot } from "./paths.mjs";
 
 const identifyDataDir = path.join(repoRoot, "crates", "rom-weaver-cli", "data", "identify", "v1");
 const identifyDataIndex = JSON.parse(fs.readFileSync(path.join(identifyDataDir, "index.json"), "utf8"));
-// Packs and cheat shards ship only as `.br` sidecars; the license text is
-// inlined into the attribution bundle instead of served as an asset.
+// The attribution bundle already contains the license text.
 // The two manifests carry the content hash every pack, shard, router, and title
 // index is fetched with, so a stale manifest would hide a newer data set. They are
 // content-addressed like every emitted bundle: the hash goes in the file name, the
@@ -27,11 +26,7 @@ export const identifyManifestFiles = {
 export const identifyDataSources = Object.fromEntries(
   fs
     .readdirSync(identifyDataDir)
-    .filter((name) => {
-      if (name.endsWith(".pack")) return false;
-      if (name.startsWith("cheats-") && name.endsWith(".json")) return false;
-      return name !== identifyDataIndex.sources?.libretro?.licenseFile;
-    })
+    .filter((name) => name !== identifyDataIndex.sources?.libretro?.licenseFile)
     .map((name) => {
       const assetName = { "catalog.json": identifyManifestFiles.catalog, "index.json": identifyManifestFiles.index }[
         name

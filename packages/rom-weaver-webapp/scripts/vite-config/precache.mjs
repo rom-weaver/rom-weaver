@@ -48,6 +48,7 @@ export const injectPrecacheManifest = async ({ distDir, swDest, swSrc }) => {
       "assets/identify-*.pack.br",
       "assets/identify-*.bin",
       "assets/identify-*.bin.br",
+      "assets/identify-cheats-*.json",
       "assets/identify-cheats-*.json.br",
       "assets/identify-title-index.json",
       "assets/identify-title-index.json.br",
