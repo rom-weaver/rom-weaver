@@ -2,7 +2,7 @@
 # project toolchains, so self-hosters only need Docker.
 #
 # `--build-arg DIST=prebuilt` serves `prebuilt/` out of the build context
-# instead, skipping the whole source build below - the toolchain, rustup, the
+# instead, skipping the webapp source build below - the toolchain, rustup, the
 # WASI SDK, binaryen and a cold wasm compile included. The release fan-out fills it with
 # the same bundle it publishes as `rom-weaver-webapp.tar.gz`, then fills in
 # compression siblings for files Vite deliberately leaves raw. A plain
@@ -212,12 +212,10 @@ RUN node /usr/local/bin/compress-static-assets.mjs /dist
 
 FROM rust:1.97.1-alpine AS web-server-build
 WORKDIR /usr/src/static-web-server
-# Backport zero-quality filtering to Static Web Server 2.44.3.
+# Backport zero-quality filtering and a case-insensitive `Q=` to Static Web Server 2.44.3.
 # https://github.com/static-web-server/static-web-server/pull/778
-# This pin gets no upstream security releases. Drop this stage once a 2.x
-# release includes that pull request.
-# The quality parameter name MUST be case-insensitive.
 # https://www.rfc-editor.org/rfc/rfc9110.html#section-12.4.2
+# Drop this stage once a 2.x release has the fix; the pin gets no security releases.
 ADD --checksum=sha256:1de0dac30443ba60182167ab38827b5eba6bdee8a9c859e1d6bee2fe760e1c49 https://codeload.github.com/static-web-server/static-web-server/tar.gz/501cb7fcb6a01a4e73e6d5f541559e3334c39976 /tmp/static-web-server.tar.gz
 RUN tar -xzf /tmp/static-web-server.tar.gz --strip-components=1 \
     && sed -i \

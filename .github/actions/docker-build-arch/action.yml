@@ -48,8 +48,8 @@ inputs:
   cache-from:
     description: >-
       Import the image's per-arch buildcache ref. Off for `DIST=prebuilt`, which
-      skips the webapp builder stages and would pull it unauthenticated on a
-      pull request, where nothing has logged in.
+      skips the webapp builder stages. A pull request has not logged in to pull
+      the cache.
     default: "true"
   cache-to:
     description: Export the layer cache to the image's per-arch buildcache ref.
