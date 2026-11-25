@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { APP_BUILD_VERSION } from "../../src/webapp/build-version.ts";
 
 type PrecacheManifestEntry = string | { revision?: string | null; url: string; install?: boolean; sizeBytes?: number };
 
@@ -220,6 +221,7 @@ const createScope = ({
     performance: globalThis.performance,
     registration: {
       active: hasActiveWorker ? { scriptURL: href } : null,
+      navigationPreload: undefined as { enable: () => Promise<void> } | undefined,
       scope,
       update: vi.fn(async () => undefined),
       waiting: null as { scriptURL: string } | null,
@@ -380,7 +382,13 @@ const loadWorker = async (
   };
 };
 
-type RoutedEvent = { clientId?: string; resultingClientId?: string; type: string };
+type RoutedEvent = {
+  clientId?: string;
+  preloadResponse?: Promise<Response | undefined>;
+  resultingClientId?: string;
+  type: string;
+  waitUntil?: (promise: Promise<unknown>) => void;
+};
 
 const routed = (harness: Harness, route: CapturedRoute, request: Request, event?: RoutedEvent) => {
   const url = new URL(request.url);
@@ -739,6 +747,7 @@ describe("service worker bootstrap", () => {
     expect(replies).toEqual([
       {
         action: "service-worker-cache-version",
+        buildVersion: APP_BUILD_VERSION,
         precacheId: "rom-weaver",
         precacheName: PRECACHE_NAME,
         precacheVersion: BUILD_TOKEN,
@@ -1000,6 +1009,7 @@ describe("navigation requests", () => {
   // A worker whose core precache and deferred entries are all stored.
   const loadCompleteWorker = (options: {
     hasActiveWorker?: boolean;
+    missingCore?: boolean;
     missingDeferred?: boolean;
     omitRedirectList?: boolean;
     redirectSourcePaths?: string[];
@@ -1017,7 +1027,7 @@ describe("navigation requests", () => {
         const base = options.scope ?? APP_SCOPE;
         const core = await cacheStorage.open(PRECACHE_NAME);
         await core.put(`${base}index.html?__WB_REVISION__=r1`, new Response("x"));
-        await core.put(`${base}assets/app.js`, new Response("x"));
+        if (!options.missingCore) await core.put(`${base}assets/app.js`, new Response("x"));
         if (!options.missingDeferred) {
           await (await cacheStorage.open(DEFERRED_CACHE_NAME)).put(`${base}assets/deferred.js`, new Response("x"));
         }
@@ -1032,40 +1042,341 @@ describe("navigation requests", () => {
       "index.html": () => new Response("root", { status: 200 }),
     });
 
-  it("loads a page from the network while online, even with a complete offline copy", async () => {
-    const harness = await loadCompleteWorker({ redirectSourcePaths: [] });
-    precachedDocs();
-    harness.fetchStub.handlers.set(`${APP_ORIGIN}/docs/guide`, () => new Response("deployed guide", { status: 200 }));
-    harness.fetchStub.handlers.set(`${APP_ORIGIN}/`, () => new Response("deployed root", { status: 200 }));
+  const GUIDE_URL = `${APP_ORIGIN}/docs/guide`;
+  const flushMicrotasks = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+  const deferredNetwork = () => {
+    let resolve: (response: Response) => void = () => undefined;
+    let reject: (error: Error) => void = () => undefined;
+    const promise = new Promise<Response>((resolveResponse, rejectResponse) => {
+      resolve = resolveResponse;
+      reject = rejectResponse;
+    });
+    return { promise, reject, resolve };
+  };
+  // Holds the precached documents until release, so a test decides which side finishes first.
+  const holdPrecacheUntilReleased = (entries: Record<string, () => Response>) => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    hoisted.matchPrecache.mockImplementation(async (request: string | Request) => {
+      await gate;
+      return entries[typeof request === "string" ? request : request.url]?.();
+    });
+    return release;
+  };
+  const guideEntries = (buildInfo = "precached") => ({
+    "build-info.js": () => new Response(buildInfo, { status: 200 }),
+    "docs/guide/index.html": () => new Response("guide", { status: 200 }),
+  });
+  const fetchEvent = (init: Partial<RoutedEvent> = {}): RoutedEvent => ({
+    resultingClientId: "page",
+    type: "fetch",
+    waitUntil: () => undefined,
+    ...init,
+  });
+  const navigateToGuide = (harness: Harness, event: RoutedEvent = fetchEvent()) =>
+    routed(harness, harness.networkFirstRoute, asNavigationRequest(GUIDE_URL), event);
+  const requestBuildInfo = (harness: Harness) =>
+    routed(harness, requireRoute(5), new Request(`${APP_ORIGIN}/build-info.js`), { clientId: "page", type: "fetch" });
+  const fetchedUrls = (harness: Harness) =>
+    harness.fetchStub.stub.mock.calls.map(([input]: [Request | string]) =>
+      typeof input === "string" ? input : input.url,
+    );
 
-    const response = await routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/docs/guide`));
-    const root = await routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/`));
+  it("serves the network page and its build-info.js when the network finishes before the offline copy answers", async () => {
+    const harness = await loadCompleteWorker({ redirectSourcePaths: [] });
+    const release = holdPrecacheUntilReleased(guideEntries());
+    harness.fetchStub.handlers.set(GUIDE_URL, () => new Response("deployed guide", { status: 200 }));
+    harness.fetchStub.handlers.set(`${APP_ORIGIN}/build-info.js`, () => new Response("deployed", { status: 200 }));
+
+    const pending = navigateToGuide(harness);
+    await flushMicrotasks();
+    release();
+    const response = await pending;
 
     await expect(response.text()).resolves.toBe("deployed guide");
     expect(response.headers.get("Cross-Origin-Opener-Policy")).toBe("same-origin");
     expect(response.headers.get("Cross-Origin-Embedder-Policy")).toBe("credentialless");
-    await expect(root.text()).resolves.toBe("deployed root");
+    const runtime = await harness.cacheStorage.open(RUNTIME_CACHE_NAME);
+    await expect((await runtime.match(GUIDE_URL))?.text()).resolves.toBe("deployed guide");
+    await expect((await requestBuildInfo(harness)).text()).resolves.toBe("deployed");
   });
 
-  it("serves the deployed build-info.js to a page that came from the network", async () => {
+  it("serves the precached page and build-info.js when the network body is identical", async () => {
     const harness = await loadCompleteWorker({ redirectSourcePaths: [] });
-    setPrecache({
-      "build-info.js": () => new Response("precached", { status: 200 }),
-      "docs/guide/index.html": () => new Response("guide", { status: 200 }),
-    });
-    harness.fetchStub.handlers.set(`${APP_ORIGIN}/docs/guide`, () => new Response("fresh", { status: 200 }));
+    const release = holdPrecacheUntilReleased(guideEntries());
+    harness.fetchStub.handlers.set(
+      GUIDE_URL,
+      () => new Response("guide", { headers: { "x-source": "network" }, status: 200 }),
+    );
+
+    const pending = navigateToGuide(harness);
+    await flushMicrotasks();
+    release();
+    const response = await pending;
+
+    await expect(response.text()).resolves.toBe("guide");
+    expect(response.headers.get("x-source")).toBeNull();
+    expect(response.headers.get("Cross-Origin-Embedder-Policy")).toBe("credentialless");
+    await expect((await requestBuildInfo(harness)).text()).resolves.toBe("precached");
+    expect(fetchedUrls(harness)).toEqual([GUIDE_URL]);
+  });
+
+  it("serves a newer network page whose body arrived while its runtime cache write is unfinished", async () => {
+    const harness = await loadCompleteWorker({ redirectSourcePaths: [] });
+    const release = holdPrecacheUntilReleased(guideEntries());
+    harness.fetchStub.handlers.set(GUIDE_URL, () => new Response("deployed guide", { status: 200 }));
     harness.fetchStub.handlers.set(`${APP_ORIGIN}/build-info.js`, () => new Response("deployed", { status: 200 }));
-    await routed(harness, harness.networkFirstRoute, asNavigationRequest(`${APP_ORIGIN}/docs/guide`), {
-      resultingClientId: "page",
-      type: "fetch",
+    const runtime = await harness.cacheStorage.open(RUNTIME_CACHE_NAME);
+    const put = runtime.put.bind(runtime);
+    let finishWrite: () => void = () => undefined;
+    const writeHeld = new Promise<void>((resolve) => {
+      finishWrite = resolve;
+    });
+    vi.spyOn(runtime, "put").mockImplementation(async (request, response) => {
+      await writeHeld;
+      await put(request, response);
     });
 
-    const buildInfo = await routed(harness, requireRoute(5), new Request(`${APP_ORIGIN}/build-info.js`), {
-      clientId: "page",
-      type: "fetch",
-    });
+    const pending = navigateToGuide(harness);
+    await flushMicrotasks();
+    release();
+    await flushMicrotasks();
+    finishWrite();
+    const response = await pending;
 
-    await expect(buildInfo.text()).resolves.toBe("deployed");
+    await expect(response.text()).resolves.toBe("deployed guide");
+    await expect((await requestBuildInfo(harness)).text()).resolves.toBe("deployed");
+  });
+
+  it("serves the re-rooted precached page under a sub-path scope when the network sends the page as built", async () => {
+    const scope = `${APP_ORIGIN}/rom-weaver/`;
+    const builtGuide = '<base href="../../" /><a href="/docs">Docs</a>';
+    const harness = await loadCompleteWorker({ redirectSourcePaths: [], scope });
+    const release = holdPrecacheUntilReleased({
+      ...guideEntries(),
+      "docs/guide/index.html": () => new Response(builtGuide, { status: 200 }),
+    });
+    harness.fetchStub.handlers.set(
+      `${scope}docs/guide`,
+      () => new Response(builtGuide, { headers: { "x-source": "network" }, status: 200 }),
+    );
+
+    const pending = routed(harness, harness.networkFirstRoute, asNavigationRequest(`${scope}docs/guide`), fetchEvent());
+    await flushMicrotasks();
+    release();
+    const response = await pending;
+
+    await expect(response.text()).resolves.toBe('<base href="/rom-weaver/" /><a href="/rom-weaver/docs">Docs</a>');
+    expect(response.headers.get("x-source")).toBeNull();
+  });
+
+  it("serves the precached page at once while the network is pending, then refreshes the runtime cache", async () => {
+    const harness = await loadCompleteWorker({ redirectSourcePaths: [] });
+    setPrecache(guideEntries());
+    const network = deferredNetwork();
+    harness.fetchStub.stub.mockImplementation(() => network.promise);
+    const pending: Array<Promise<unknown>> = [];
+
+    const response = await navigateToGuide(harness, fetchEvent({ waitUntil: (promise) => void pending.push(promise) }));
+
+    await expect(response.text()).resolves.toBe("guide");
+    await expect((await requestBuildInfo(harness)).text()).resolves.toBe("precached");
+    network.resolve(new Response("newer guide", { status: 200 }));
+    await Promise.all(pending);
+    const runtime = await harness.cacheStorage.open(RUNTIME_CACHE_NAME);
+    await expect((await runtime.match(GUIDE_URL))?.text()).resolves.toBe("newer guide");
+  });
+
+  it("handles a network failure that arrives after the precached page was served", async () => {
+    const harness = await loadCompleteWorker({ redirectSourcePaths: [] });
+    setPrecache(guideEntries());
+    const network = deferredNetwork();
+    harness.fetchStub.stub.mockImplementation(() => network.promise);
+    const pending: Array<Promise<unknown>> = [];
+
+    await navigateToGuide(harness, fetchEvent({ waitUntil: (promise) => void pending.push(promise) }));
+    network.reject(new TypeError("offline"));
+
+    await expect(Promise.all(pending)).resolves.toBeDefined();
+    expect(console.info).toHaveBeenCalledWith("[rom-weaver-sw]", "navigation network response unavailable", {
+      error: "TypeError: offline",
+    });
+  });
+
+  it("serves the precached page when the network fails at once", async () => {
+    const harness = await loadCompleteWorker({ redirectSourcePaths: [] });
+    const release = holdPrecacheUntilReleased(guideEntries());
+    harness.fetchStub.stub.mockImplementation(() => Promise.reject(new TypeError("offline")));
+
+    const pending = navigateToGuide(harness);
+    await flushMicrotasks();
+    release();
+    const response = await pending;
+
+    await expect(response.text()).resolves.toBe("guide");
+    await expect((await requestBuildInfo(harness)).text()).resolves.toBe("precached");
+  });
+
+  const redirectedResponse = () => {
+    const response = new Response("elsewhere", { status: 200 });
+    Object.defineProperty(response, "redirected", { value: true });
+    return response;
+  };
+  it.each([
+    ["404", () => new Response("not found page", { status: 404 })],
+    ["500", () => new Response("server error page", { status: 500 })],
+    ["a redirected response", redirectedResponse],
+  ])("keeps a valid precached page over a network answer that is %s", async (_label, answer) => {
+    const harness = await loadCompleteWorker({ redirectSourcePaths: [] });
+    const release = holdPrecacheUntilReleased(guideEntries());
+    harness.fetchStub.handlers.set(GUIDE_URL, answer);
+
+    const pending = navigateToGuide(harness);
+    await flushMicrotasks();
+    release();
+    const response = await pending;
+
+    await expect(response.text()).resolves.toBe("guide");
+    await expect((await requestBuildInfo(harness)).text()).resolves.toBe("precached");
+  });
+
+  it("waits for the network while the offline copy is incomplete, with one request", async () => {
+    const harness = await loadCompleteWorker({ missingDeferred: true, redirectSourcePaths: [] });
+    setPrecache(guideEntries());
+    const network = deferredNetwork();
+    harness.fetchStub.stub.mockImplementation(() => network.promise);
+    let settled = false;
+
+    const pending = navigateToGuide(harness).finally(() => {
+      settled = true;
+    });
+    await flushMicrotasks();
+    expect(settled).toBe(false);
+    network.resolve(new Response("deployed guide", { status: 200 }));
+
+    await expect((await pending).text()).resolves.toBe("deployed guide");
+    expect(fetchedUrls(harness)).toEqual([GUIDE_URL]);
+  });
+
+  it("falls back to the precached page after the stall timeout while the offline copy is incomplete", async () => {
+    vi.useFakeTimers();
+    const harness = await loadCompleteWorker({ missingDeferred: true, redirectSourcePaths: [] });
+    setPrecache(guideEntries());
+    harness.fetchStub.stub.mockImplementation(() => new Promise<Response>(() => undefined));
+
+    const pending = navigateToGuide(harness);
+    await vi.advanceTimersByTimeAsync(4000);
+
+    await expect((await pending).text()).resolves.toBe("guide");
+    expect(fetchedUrls(harness)).toEqual([GUIDE_URL]);
+  });
+
+  describe.each([
+    {
+      label: "the offline copy is disabled",
+      path: "/docs/guide",
+      prepare: async () => {
+        const harness = await loadCompleteWorker({ hasActiveWorker: true, redirectSourcePaths: [] });
+        await dispatch(harness.scope, "message", {
+          data: { action: "set-offline-copy-enabled", enabled: false },
+          ports: [],
+        });
+        // Disabling clears the caches; refill them so only the disabled flag can send the navigation to the network.
+        const core = await harness.cacheStorage.open(PRECACHE_NAME);
+        await core.put(`${APP_ORIGIN}/index.html?__WB_REVISION__=r1`, new Response("x"));
+        await core.put(`${APP_ORIGIN}/assets/app.js`, new Response("x"));
+        await (await harness.cacheStorage.open(DEFERRED_CACHE_NAME)).put(DEFERRED_URL, new Response("x"));
+        return harness;
+      },
+    },
+    {
+      label: "the path is a redirect alias",
+      path: "/apply/",
+      prepare: () => loadCompleteWorker({ redirectSourcePaths: ["/apply", "/apply/"] }),
+    },
+    {
+      label: "the client prefers Markdown",
+      accept: "text/markdown, text/html;q=0.5",
+      path: "/docs/guide",
+      prepare: () => loadCompleteWorker({ redirectSourcePaths: [] }),
+    },
+  ])("when $label", ({ accept, path, prepare }) => {
+    it("answers from the network, never from a race with the precached page", async () => {
+      const harness = await prepare();
+      setPrecache({ ...guideEntries(), "apply/index.html": () => new Response("legacy", { status: 200 }) });
+      const network = deferredNetwork();
+      harness.fetchStub.stub.mockImplementation(() => network.promise);
+      let settled = false;
+
+      const pending = routed(
+        harness,
+        harness.networkFirstRoute,
+        asNavigationRequest(`${APP_ORIGIN}${path}`, accept ? { accept } : undefined),
+        fetchEvent(),
+      ).finally(() => {
+        settled = true;
+      });
+      await flushMicrotasks();
+      expect(settled).toBe(false);
+      network.resolve(new Response("from the network", { status: 200 }));
+
+      await expect((await pending).text()).resolves.toBe("from the network");
+      expect(fetchedUrls(harness)).toHaveLength(1);
+    });
+  });
+
+  it.each([
+    ["undefined", undefined],
+    ["a promise of undefined", Promise.resolve(undefined)],
+  ])("fetches once when preloadResponse is %s", async (_label, preloadResponse) => {
+    const harness = await loadCompleteWorker({ redirectSourcePaths: [] });
+    harness.fetchStub.handlers.set(`${APP_ORIGIN}/newer`, () => new Response("from fetch", { status: 200 }));
+
+    const response = await routed(
+      harness,
+      harness.networkFirstRoute,
+      asNavigationRequest(`${APP_ORIGIN}/newer`),
+      fetchEvent({ preloadResponse }),
+    );
+
+    await expect(response.text()).resolves.toBe("from fetch");
+    expect(harness.fetchStub.calls).toHaveLength(1);
+  });
+
+  it("uses the preload response as the network answer without fetching, and still caches it", async () => {
+    const harness = await loadCompleteWorker({ redirectSourcePaths: [] });
+    const newer = `${APP_ORIGIN}/newer`;
+
+    const response = await routed(
+      harness,
+      harness.networkFirstRoute,
+      asNavigationRequest(newer),
+      fetchEvent({ preloadResponse: Promise.resolve(new Response("preloaded", { status: 200 })) }),
+    );
+
+    await expect(response.text()).resolves.toBe("preloaded");
+    expect(response.headers.get("Cross-Origin-Embedder-Policy")).toBe("credentialless");
+    expect(harness.fetchStub.calls).toHaveLength(0);
+    const runtime = await harness.cacheStorage.open(RUNTIME_CACHE_NAME);
+    await expect((await runtime.match(newer))?.text()).resolves.toBe("preloaded");
+  });
+
+  it("treats a failed preload as the network failing, without a second request", async () => {
+    const harness = await loadCompleteWorker({ redirectSourcePaths: [] });
+    const preloadResponse = Promise.reject<Response | undefined>(new TypeError("offline"));
+    preloadResponse.catch(() => undefined);
+
+    const response = await routed(
+      harness,
+      harness.networkFirstRoute,
+      asNavigationRequest(`${APP_ORIGIN}/newer`),
+      fetchEvent({ preloadResponse }),
+    );
+
+    expect(response.type).toBe("error");
+    expect(harness.fetchStub.calls).toHaveLength(0);
   });
 
   it("serves the precached build-info.js after a network redirect lands on a precached page", async () => {
@@ -1365,6 +1676,194 @@ describe("navigation requests", () => {
     release(new Response("late", { status: 200 }));
 
     await expect((await pending).text()).resolves.toBe("late");
+  });
+  describe("offline copy completeness memo", () => {
+    const send = (harness: Harness, data: unknown) => dispatch(harness.scope, "message", { data, ports: [] });
+    // True when a navigation is answered from the offline copy while the network never answers.
+    const isServedFromOfflineCopy = async (harness: Harness) => {
+      const network = deferredNetwork();
+      const original = harness.fetchStub.stub.getMockImplementation();
+      harness.fetchStub.stub.mockImplementation((input: Request | string, init?: RequestInit) =>
+        (typeof input === "string" ? input : input.url) === GUIDE_URL ? network.promise : original?.(input, init),
+      );
+      const pending = navigateToGuide(harness);
+      const outcome = await Promise.race([pending.then(() => "served"), flushMicrotasks().then(() => "waiting")]);
+      network.resolve(new Response("deployed guide", { status: 200 }));
+      await pending;
+      harness.fetchStub.stub.mockImplementation(original);
+      return outcome === "served";
+    };
+    const holdOnce = (isHeld: (key: string) => boolean) => {
+      let release: () => void = () => undefined;
+      let markReached: () => void = () => undefined;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const reached = new Promise<void>((resolve) => {
+        markReached = resolve;
+      });
+      let held = false;
+      const hold = async (key: string) => {
+        if (held || !isHeld(key)) return;
+        held = true;
+        markReached();
+        await gate;
+      };
+      return { hold, reached, release };
+    };
+    const asFakeCache = async (harness: Harness, name: string) =>
+      (await harness.cacheStorage.open(name)) as unknown as FakeCache;
+    const holdCacheCall = async (harness: Harness, name: string, method: "delete" | "put") => {
+      const cache = await asFakeCache(harness, name);
+      const original = cache[method].bind(cache);
+      const hold = holdOnce(() => true);
+      vi.spyOn(cache, method).mockImplementation(async (request: RequestInfo | URL, response?: Response) => {
+        await hold.hold(urlOf(request));
+        return method === "put" && response ? original(request, response) : (original(request) as Promise<never>);
+      });
+      return hold;
+    };
+    const POLICY_CACHE_NAME = "precache-rom-weaver-offline-policy";
+
+    it("serves from the offline copy once a pump stores the last missing deferred entry", async () => {
+      const harness = await loadCompleteWorker({ missingDeferred: true, redirectSourcePaths: [] });
+      setPrecache(guideEntries());
+      expect(await isServedFromOfflineCopy(harness)).toBe(false);
+      harness.fetchStub.handlers.set(DEFERRED_URL, () => new Response("js", { status: 200 }));
+
+      await dispatch(harness.scope, "message", {
+        data: { action: "offline-warmup-pump" },
+        ports: [{ postMessage: () => undefined }],
+      });
+
+      expect(await harness.cacheStorage.caches.get(DEFERRED_CACHE_NAME)?.match(DEFERRED_URL)).toBeDefined();
+      expect(await isServedFromOfflineCopy(harness)).toBe(true);
+    });
+
+    it("serves from the offline copy once an on-demand download stores the missing deferred entry", async () => {
+      const harness = await loadCompleteWorker({ missingDeferred: true, redirectSourcePaths: [] });
+      setPrecache(guideEntries());
+      expect(await isServedFromOfflineCopy(harness)).toBe(false);
+      harness.fetchStub.handlers.set(DEFERRED_URL, () => new Response("js", { status: 200 }));
+
+      await routed(harness, requireRoute(2), new Request(DEFERRED_URL));
+
+      expect(await isServedFromOfflineCopy(harness)).toBe(true);
+    });
+
+    it("keeps the completeness answer across a deferred cache hit", async () => {
+      const harness = await loadCompleteWorker({ redirectSourcePaths: [] });
+      setPrecache(guideEntries());
+      expect(await isServedFromOfflineCopy(harness)).toBe(true);
+      const open = vi.spyOn(harness.cacheStorage, "open");
+
+      await routed(harness, requireRoute(2), new Request(DEFERRED_URL));
+      expect(await isServedFromOfflineCopy(harness)).toBe(true);
+
+      expect(open.mock.calls.filter(([name]) => name === PRECACHE_NAME)).toHaveLength(0);
+    });
+
+    it("waits for the network while the core precache is incomplete", async () => {
+      const harness = await loadCompleteWorker({ missingCore: true, redirectSourcePaths: [] });
+      setPrecache(guideEntries());
+
+      expect(await isServedFromOfflineCopy(harness)).toBe(false);
+    });
+
+    it("waits for the network while a deferred entry is not cached yet, even for a precached document", async () => {
+      const harness = await loadCompleteWorker({ missingDeferred: true, redirectSourcePaths: [] });
+      setPrecache(guideEntries());
+
+      expect(await isServedFromOfflineCopy(harness)).toBe(false);
+    });
+
+    it("checks the offline copy again on activation", async () => {
+      const harness = await loadCompleteWorker({ hasActiveWorker: true, redirectSourcePaths: [] });
+      setPrecache(guideEntries());
+      expect(await isServedFromOfflineCopy(harness)).toBe(true);
+      await (await asFakeCache(harness, DEFERRED_CACHE_NAME)).delete(DEFERRED_URL);
+
+      await dispatch(harness.scope, "activate");
+
+      expect(await isServedFromOfflineCopy(harness)).toBe(false);
+    });
+
+    it("checks the offline copy again when it is switched off and on while its files are being removed", async () => {
+      const harness = await loadCompleteWorker({ hasActiveWorker: true, redirectSourcePaths: [] });
+      setPrecache(guideEntries());
+      expect(await isServedFromOfflineCopy(harness)).toBe(true);
+      // Hold the removal after the core precache is gone, with the copy already switched back on.
+      const reached = holdOnce(() => true);
+      const originalDelete = harness.cacheStorage.delete.bind(harness.cacheStorage);
+      vi.spyOn(harness.cacheStorage, "delete").mockImplementation(async (name: string) => {
+        const deleted = await originalDelete(name);
+        await reached.hold(name);
+        return deleted;
+      });
+      const switchedOff = send(harness, { action: "set-offline-copy-enabled", enabled: false });
+      const switchedOn = send(harness, { action: "set-offline-copy-enabled", enabled: true });
+      await reached.reached;
+
+      expect(await isServedFromOfflineCopy(harness)).toBe(false);
+      reached.release();
+      await Promise.all([switchedOff, switchedOn]);
+    });
+
+    it("checks the offline copy again once its files have been removed", async () => {
+      const harness = await loadCompleteWorker({ hasActiveWorker: true, redirectSourcePaths: [] });
+      setPrecache(guideEntries());
+      // Hold the removal before it starts, with the copy already switched back on and its files intact.
+      const held = await holdCacheCall(harness, POLICY_CACHE_NAME, "put");
+      const switchedOff = send(harness, { action: "set-offline-copy-enabled", enabled: false });
+      const switchedOn = send(harness, { action: "set-offline-copy-enabled", enabled: true });
+      await held.reached;
+      expect(await isServedFromOfflineCopy(harness)).toBe(true);
+
+      held.release();
+      await Promise.all([switchedOff, switchedOn]);
+
+      expect(await isServedFromOfflineCopy(harness)).toBe(false);
+    });
+
+    it("checks the offline copy again when the documentation image format changes", async () => {
+      const harness = await loadWorker({
+        hasActiveWorker: true,
+        manifest: [
+          { revision: "r1", url: "index.html" },
+          "assets/app.js",
+          { install: false, url: "docs/screenshots/a.avif" },
+          { install: false, url: "docs/screenshots/a.webp" },
+        ],
+        redirectSourcePaths: [],
+        seedCaches: async (cacheStorage) => {
+          const core = await cacheStorage.open(PRECACHE_NAME);
+          await core.put(`${APP_SCOPE}index.html?__WB_REVISION__=r1`, new Response("x"));
+          await core.put(`${APP_SCOPE}assets/app.js`, new Response("x"));
+          await (
+            await cacheStorage.open(DEFERRED_CACHE_NAME)
+          ).put(`${APP_SCOPE}docs/screenshots/a.webp`, new Response("x"));
+          await (
+            await cacheStorage.open(POLICY_CACHE_NAME)
+          ).put(`${APP_SCOPE}__rom-weaver-docs-image-format__`, new Response("webp"));
+        },
+      });
+      setPrecache(guideEntries());
+      // Queue the format change behind a held transition, so the memo is set first. Then hold the
+      // cleanup that the new format triggers.
+      const queued = await holdCacheCall(harness, POLICY_CACHE_NAME, "put");
+      const cleanup = await holdCacheCall(harness, DEFERRED_CACHE_NAME, "delete");
+      const first = send(harness, { action: "set-offline-copy-enabled", enabled: true });
+      const second = send(harness, { action: "set-offline-copy-enabled", docImageFormat: "avif", enabled: true });
+      await queued.reached;
+      expect(await isServedFromOfflineCopy(harness)).toBe(true);
+
+      queued.release();
+      await cleanup.reached;
+
+      expect(await isServedFromOfflineCopy(harness)).toBe(false);
+      cleanup.release();
+      await Promise.all([first, second]);
+    });
   });
 });
 
@@ -1714,6 +2213,41 @@ describe("install and activate", () => {
       "precache-rom-weaver-runtime-older",
     ]);
     expect(harness.scope.clients.claim).toHaveBeenCalledTimes(1);
+  });
+
+  it("enables navigation preload when it activates", async () => {
+    const harness = await loadWorker();
+    const enable = vi.fn(async () => undefined);
+    harness.scope.registration.navigationPreload = { enable };
+
+    await dispatch(harness.scope, "activate");
+
+    expect(enable).toHaveBeenCalledTimes(1);
+    expect(harness.scope.clients.claim).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["is missing", undefined],
+    [
+      "refuses to enable",
+      {
+        enable: async () => {
+          throw new Error("preload refused");
+        },
+      },
+    ],
+  ])("still activates when the navigation preload API %s", async (_label, navigationPreload) => {
+    const harness = await loadWorker();
+    harness.scope.registration.navigationPreload = navigationPreload;
+
+    await dispatch(harness.scope, "activate");
+
+    expect(harness.scope.clients.claim).toHaveBeenCalledTimes(1);
+    expect(console.info).toHaveBeenCalledWith(
+      "[rom-weaver-sw]",
+      expect.stringContaining("navigation preload"),
+      ...(navigationPreload ? [{ error: "Error: preload refused" }] : []),
+    );
   });
 });
 

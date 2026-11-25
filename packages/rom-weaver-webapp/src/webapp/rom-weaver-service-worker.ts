@@ -16,6 +16,7 @@ import {
   precacheAndRoute,
 } from "workbox-precaching";
 import { registerRoute } from "workbox-routing";
+import { bytesEqual } from "../lib/bytes-equal.ts";
 import { APP_BUILD_VERSION } from "./build-version.ts";
 import { createOfflineWarmup } from "./offline-warmup.ts";
 import { createOfflineProgressReporter } from "./pwa/offline-progress-reporter.ts";
@@ -511,15 +512,19 @@ const toCredentiallessNoCorsRequest = (request: Request, credentialless = coepCr
 };
 
 // `onHeaders` fires once the response headers arrive, before the body is buffered for the cache.
-const fetchAndUpdateCache = async (request: Request, onHeaders?: () => void): Promise<Response> => {
+// A navigation's `preload` is the browser's own request for it; fetch only when it produced no response.
+const fetchAndUpdateCache = async (
+  request: Request,
+  { onHeaders, preload }: { onHeaders?: (response: Response) => void; preload?: Promise<Response | undefined> } = {},
+): Promise<Response> => {
   const credentialless = await ensureCoepModeHydrated();
   const generation = offlineCopyPolicy.token();
-  const fetchedResponse = await fetchWithDownloadLog(
-    toCredentiallessNoCorsRequest(request, credentialless),
-    undefined,
-    logServiceWorker,
-  );
-  onHeaders?.();
+  const preloaded = await preload;
+  if (preloaded) logServiceWorker("navigation preload answered", { status: preloaded.status, url: request.url });
+  const fetchedResponse =
+    preloaded ??
+    (await fetchWithDownloadLog(toCredentiallessNoCorsRequest(request, credentialless), undefined, logServiceWorker));
+  onHeaders?.(fetchedResponse);
   // Cache the network response without its isolation headers: the stored entry then carries the
   // server's true headers, so a later COEP-mode flip re-stamps it correctly at serve time instead
   // of replaying a stale injected mode. The download size is the one header added, and it says
@@ -569,13 +574,16 @@ const rerootDocument = async (response: Response | undefined, status = response?
   return new Response(rerooted, { headers, status, statusText });
 };
 
-const matchRouteDocument = async (url: URL) => {
+// A route's page as the build wrote it, which is also what the host sends for the path.
+const matchBuiltRouteDocument = async (url: URL) => {
   for (const candidate of routeDocumentCandidates(scopePath(url.pathname))) {
     const response = (await matchPrecache(candidate)) ?? (await deferredPrecache.match(candidate));
-    if (response) return await rerootDocument(response);
+    if (response) return response;
   }
   return undefined;
 };
+
+const matchRouteDocument = async (url: URL) => await rerootDocument(await matchBuiltRouteDocument(url));
 
 // The offline answer for a path this build lacks: the 404 page at the same URL. It is precached from a 200.
 const notFoundDocument = async () => await rerootDocument(await matchPrecache("404.html"), 404);
@@ -615,12 +623,18 @@ const redirectSourcePaths = new Set(typeof __REDIRECT_SOURCE_PATHS__ === "undefi
 const isRedirectSourcePath = (pathname: string) =>
   typeof __REDIRECT_SOURCE_PATHS__ === "undefined" || redirectSourcePaths.has(pathname);
 
-const matchPrecachedNavigation = async (url: URL) => {
+const matchBuiltNavigation = async (url: URL) => {
   const pathname = scopePath(url.pathname);
   if (!offlineCopyRequestedEnabled || isRedirectSourcePath(pathname)) return undefined;
   if (pathname === "/") return await matchPrecache("index.html");
-  return await matchRouteDocument(url);
+  return await matchBuiltRouteDocument(url);
 };
+
+// The scope root's page is served as built; a route's page is re-rooted under a sub-path scope.
+const rerootNavigation = async (url: URL, built: Response | undefined) =>
+  scopePath(url.pathname) === "/" ? built : await rerootDocument(built);
+
+const matchPrecachedNavigation = async (url: URL) => await rerootNavigation(url, await matchBuiltNavigation(url));
 
 const waitUntilEvent = (event: unknown, promise: Promise<unknown>) => {
   const waitUntil = (event as { waitUntil?: (promise: Promise<unknown>) => void } | undefined)?.waitUntil;
@@ -661,16 +675,52 @@ const awaitNetworkDocument = async (fetching: Promise<Response>, event: unknown)
 
 const NETWORK_TIMED_OUT = Symbol("network-timed-out");
 
-// The timeout covers the time to the response headers only. Once they arrive the network has
-// answered, so the body download and cache write are awaited however long they take.
-const fetchWithNavigationTimeout = async (request: Request, url: URL, event: unknown) => {
-  if (!isTopLevelNavigation(request, url) || requestPrefersMarkdown(request)) return await fetchAndUpdateCache(request);
-  let timer: ReturnType<typeof setTimeout> | undefined;
+type NavigationFetch = {
+  // The whole body of a 2xx answer that was not redirected, once it has arrived. Undefined for any other outcome.
+  body: Promise<ArrayBuffer | undefined>;
+  fetching: Promise<Response>;
+  // Settles once the request and its runtime cache write are over. A failure is logged, never thrown.
+  finished: Promise<void>;
+  headers: Promise<void>;
+};
+
+const preloadResponseOf = (event: unknown) =>
+  (event as { preloadResponse?: Promise<Response | undefined> } | undefined)?.preloadResponse;
+
+// The one network request for a navigation: the browser's preload when it has one, else a fetch.
+const startNavigationFetch = (request: Request, event: unknown): NavigationFetch => {
   let headersArrived: () => void = () => undefined;
+  let bodyStarted: (body: Promise<ArrayBuffer> | undefined) => void = () => undefined;
   const headers = new Promise<void>((resolve) => {
     headersArrived = resolve;
   });
-  const fetching = fetchAndUpdateCache(request, () => headersArrived());
+  const body = new Promise<ArrayBuffer | undefined>((resolve) => {
+    bodyStarted = resolve;
+  });
+  const fetching = fetchAndUpdateCache(request, {
+    // The raw response keeps `redirected`, which re-wrapping with isolation headers loses. Reading the
+    // body here means the race does not wait for the cache write.
+    onHeaders: (response) => {
+      bodyStarted(response.ok && !response.redirected ? response.clone().arrayBuffer() : undefined);
+      headersArrived();
+    },
+    preload: preloadResponseOf(event),
+  });
+  const finished = fetching.then(
+    () => undefined,
+    (err: unknown) => {
+      logServiceWorker("navigation network response unavailable", { error: formatError(err) });
+      bodyStarted(undefined);
+    },
+  );
+  return { body: body.catch(() => undefined), fetching, finished, headers };
+};
+
+// The timeout covers the time to the response headers only. Once they arrive, the body download and
+// cache write are awaited without a limit.
+const fetchWithNavigationTimeout = async (network: NavigationFetch, request: Request, url: URL, event: unknown) => {
+  const { fetching, headers } = network;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<typeof NETWORK_TIMED_OUT>((resolve) => {
     timer = setTimeout(() => resolve(NETWORK_TIMED_OUT), NAVIGATION_NETWORK_TIMEOUT_MS);
   });
@@ -694,14 +744,52 @@ const fetchWithNavigationTimeout = async (request: Request, url: URL, event: unk
   }
 };
 
+// A precached page needs every file it names cached, because the host drops old files.
+// `built` is the page as the host sends it, and `served` is this worker's answer.
+const matchCompleteOfflineNavigation = async (url: URL) => {
+  const built = await matchBuiltNavigation(url);
+  if (!built) return undefined;
+  if (!(await isOfflineCopyComplete())) return undefined;
+  const credentialless = await ensureCoepModeHydrated();
+  const page = await rerootNavigation(url, built.clone());
+  if (!page) return undefined;
+  return { built, served: withCrossOriginIsolationHeaders(page, credentialless) || page };
+};
+
+// Races the network against a complete precached page without waiting once the cache is ready.
+// Production documents have no ETag and an unstable Last-Modified, so bodies are compared.
+const respondToTopLevelNavigation = async (request: Request, url: URL, event: unknown) => {
+  const network = startNavigationFetch(request, event);
+  const race: { body?: ArrayBuffer; isNetworkSettled: boolean } = { isNetworkSettled: false };
+  void network.body.then((body) => {
+    race.body = body;
+    race.isNetworkSettled = true;
+  });
+  const precached = await matchCompleteOfflineNavigation(url);
+  if (!precached) return await fetchWithNavigationTimeout(network, request, url, event);
+  const isNewerDeploy =
+    race.body && !bytesEqual(new Uint8Array(race.body), new Uint8Array(await precached.built.arrayBuffer()));
+  if (isNewerDeploy) return await awaitNetworkDocument(network.fetching, event);
+  if (!race.isNetworkSettled) {
+    logServiceWorker("navigation served from the offline copy before the network answered", { url: url.href });
+  }
+  waitUntilEvent(event, network.finished);
+  recordDocumentSource(event, { network: false });
+  return precached.served;
+};
+
 registerRoute(
   ({ request, url }) => shouldUseNetworkFirst(request, url),
   async ({ event, request, url }) => {
-    if (isTopLevelNavigation(request, url)) {
+    const isNavigation = isTopLevelNavigation(request, url);
+    if (isNavigation) {
       waitUntilEvent(event, removeOutgoingBuildFilesWithoutTabs(getResultingClientId(event)));
     }
     try {
-      return await fetchWithNavigationTimeout(request, url, event);
+      if (!isNavigation || requestPrefersMarkdown(request)) {
+        return await fetchAndUpdateCache(request, { preload: isNavigation ? preloadResponseOf(event) : undefined });
+      }
+      return await respondToTopLevelNavigation(request, url, event);
     } catch (err) {
       const cachedResponse = await matchCachedResponse(request, url);
       recordDocumentSource(event, { network: false });
@@ -798,11 +886,42 @@ const corePrecache = createDeferredPrecache({
   log: logServiceWorker,
 });
 
+// Whether this worker's whole offline copy is cached: the core precache and every deferred entry.
+// The memo spares a navigation the cache listing and clears whenever the answer can change.
+let offlineCopyCompleteness: Promise<boolean> | undefined;
+// Set only by a probe that resolved true and is still the current memo. A probe in flight across an
+// invalidation cannot revive a stale answer.
+let offlineCopyKnownComplete = false;
+const invalidateOfflineCopyCompleteness = () => {
+  offlineCopyCompleteness = undefined;
+  offlineCopyKnownComplete = false;
+};
+const isOfflineCopyComplete = () => {
+  if (!offlineCopyRequestedEnabled) return Promise.resolve(false);
+  if (offlineCopyCompleteness) return offlineCopyCompleteness;
+  const probe: Promise<boolean> = Promise.all([corePrecache.isComplete(), deferredPrecache.isComplete()]).then(
+    ([core, deferred]) => {
+      const complete = core && deferred;
+      if (complete && offlineCopyCompleteness === probe) offlineCopyKnownComplete = true;
+      return complete;
+    },
+    (err: unknown) => {
+      logServiceWorker("offline copy completeness check failed", { error: formatError(err) });
+      return false;
+    },
+  );
+  offlineCopyCompleteness = probe;
+  return probe;
+};
+
 registerRoute(
   ({ request, url }) => request.method === "GET" && deferredPrecache.has(url.href),
   async ({ url }) => {
     const credentialless = await ensureCoepModeHydrated();
-    const response = await deferredPrecache.serve(url.href);
+    // A serve only adds files, so a copy known complete stays complete.
+    const response = await deferredPrecache.serve(url.href).finally(() => {
+      if (!offlineCopyKnownComplete) invalidateOfflineCopyCompleteness();
+    });
     return withCrossOriginIsolationHeaders(response, credentialless) || response;
   },
 );
@@ -991,7 +1110,9 @@ const pumpOfflineFiles = (onInterim: (progress: unknown) => void, identifyGroupI
     const progress = await process();
     return self.registration.waiting ? UPDATE_WAITING_REPLY : progress;
   };
-  const pump = appPumpChain.then(processUnlessUpdateWaiting, processUnlessUpdateWaiting);
+  const pump = appPumpChain
+    .then(processUnlessUpdateWaiting, processUnlessUpdateWaiting)
+    .finally(invalidateOfflineCopyCompleteness);
   appPumpChain = pump.catch(() => undefined);
   return pump;
 };
@@ -1015,6 +1136,7 @@ const removeOfflineCopyFiles = async () => {
       await caches.delete(name);
     }
   }
+  invalidateOfflineCopyCompleteness();
   deferredPrecache.reset();
   corePrecache.reset();
   coreRefillNeeded = true;
@@ -1027,12 +1149,16 @@ let offlineCopyTransition: Promise<unknown> = Promise.resolve();
 const setOfflineCopyEnabled = (enabled: boolean, docImageFormat?: "avif" | "webp") => {
   if (!enabled) appPumpGeneration += 1;
   offlineCopyRequestedEnabled = enabled;
+  invalidateOfflineCopyCompleteness();
   const transition = offlineCopyTransition.then(async () => {
     if (enabled && docImageFormat && (await docsImagePolicy.setFormat(docImageFormat))) {
       logServiceWorker("offline documentation image format selected", { format: docImageFormat });
       appPumpGeneration += 1;
+      // Entries change with the format, so drop the memo now and again after the cleanup.
+      invalidateOfflineCopyCompleteness();
       await appPumpChain;
       await deferredPrecache.cleanup();
+      invalidateOfflineCopyCompleteness();
     }
     const wasEnabled = await offlineCopyPolicy.isEnabled();
     await offlineCopyPolicy.setEnabled(enabled);
@@ -1157,6 +1283,21 @@ self.addEventListener("install", (event) => {
   void self.skipWaiting();
 });
 
+// Lets the browser start a navigation's request while this worker wakes up. Without it, or after a
+// refusal, the worker fetches the page itself.
+const enableNavigationPreload = async () => {
+  const preload = self.registration.navigationPreload;
+  if (!preload) {
+    logServiceWorker("navigation preload unavailable");
+    return;
+  }
+  try {
+    await preload.enable();
+  } catch (err) {
+    logServiceWorker("navigation preload could not be enabled", { error: formatError(err) });
+  }
+};
+
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     runServiceWorkerPhase("activate", async () => {
@@ -1172,11 +1313,13 @@ self.addEventListener("activate", (event) => {
         Promise.all(cachesToDelete.map((cacheName) => caches.delete(cacheName))),
       );
       offlineCopyRequestedEnabled = await offlineCopyPolicy.isEnabled();
+      invalidateOfflineCopyCompleteness();
       if (offlineCopyRequestedEnabled) {
         await runServiceWorkerPhase("clean deferred cache", () => deferredPrecache.cleanup());
       } else {
         await runServiceWorkerPhase("clear disabled offline copy", removeOfflineCopyFiles);
       }
+      await runServiceWorkerPhase("enable navigation preload", enableNavigationPreload);
       await runServiceWorkerPhase("claim clients", () => self.clients.claim());
       firstInstallInProgress = false;
       precacheIncomingBytes.clear();
@@ -1332,6 +1475,7 @@ self.addEventListener("message", (event) => {
 
   const response = {
     action: "service-worker-cache-version",
+    buildVersion: APP_BUILD_VERSION,
     precacheId: PRECACHE_ID,
     precacheName: PRECACHE_NAME,
     precacheVersion: PRECACHE_VERSION,

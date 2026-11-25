@@ -210,13 +210,23 @@ Production builds register `rom-weaver-service-worker.js` using the app's relati
 
 The service worker precaches the build and checks for updates. It can also add the cross-origin isolation headers to responses inside its scope when the host cannot configure them. It cannot alter the first document response before it controls the page, so server or proxy headers remain the preferred setup.
 
-Same-origin page loads and manifest requests go to the network first. They fall back to the cache when the network fails. A page load with a cached copy also falls back after a 3.5 s stall.
+Once the offline copy is complete, a page load races the network against it. Neither side waits for the other. The offline copy answers the load as soon as it is ready. The network request then finishes in the background and refreshes the runtime cache. If the network answers first with a successful page, the worker compares the two pages. An identical page is the same build, and the offline copy serves it. A different page is a newer deploy, and the worker serves that one. The worker compares page bodies, so the host needs no `ETag` or `Last-Modified` header. The worker asks the browser to start page requests while it wakes (navigation preload). The browser sends the `Service-Worker-Navigation-Preload` request header with them, which a static host can ignore. An incomplete offline copy, or one with no page for the path, skips the race. The page load then goes to the network. If the network fails or stalls for 3.5 seconds, a cached copy answers. Without a cached copy, the load waits for the network or fails with it. Manifest requests go to the network and fall back to the cache when it fails.
 
 On first install, the worker claims the app and the client may reload once to gain control and establish isolation. The boot gate retries a stalled controlled-but-unisolated page only within a bounded budget, then releases the page instead of reloading forever. If `crossOriginIsolated` is still false, the threaded WASM runtime will not be available; fix the response headers, HTTPS trust, service-worker scope, or browser support rather than treating the fallback as equivalent to a correctly configured deployment.
 
-A new build's worker installs in the background and takes over at once. Open tabs keep running the build they loaded. A reload or a new tab gets the new build.
+A new build's worker installs in the background and takes over at once. Open tabs keep running the build they loaded. A reload or a new tab gets the new build. The exception is a load the offline copy answers before the worker has updated. It starts on the previous build.
 
 The worker keeps the old build's changed files so those tabs still load them. It deletes them once a page load leaves no other tab open. After a takeover, a tab offers a reload when it cannot load a file of its build, such as a script chunk, a worker script, or a WebAssembly file. A tab the browser restores from its back/forward cache offers one too.
+
+A hidden tab reloads itself once onto the new build when all of these hold:
+
+- Nothing is staged.
+- No game is loaded in the emulator.
+- No job is running, and no finished result is still on the page.
+- No file picker or dialog is open.
+- The browser is online.
+
+A tab reloads this way at most three times per tab session. A visible tab never reloads.
 
 ## Host integration
 

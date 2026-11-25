@@ -2320,13 +2320,15 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.tools.project": msg({ id: "ui.tools.project", message: "Project" }),
   "ui.tools.theme": msg({ id: "ui.tools.theme", message: "Theme" }),
   "ui.tools.tools": msg({ id: "ui.tools.tools", message: "Menu" }),
+  "ui.update.newSinceLastVisit": msg({
+    id: "ui.update.newSinceLastVisit",
+    message: "{name}, updated since your last visit",
+  }),
   "ui.update.ready": msg({ id: "ui.update.ready", message: "Update ready" }),
   "ui.update.readyVersion": msg({ id: "ui.update.readyVersion", message: "v{version} is ready" }),
   "ui.update.reload": msg({ id: "ui.update.reload", message: "Reload" }),
   "ui.update.reloadNow": msg({ id: "ui.update.reloadNow", message: "Reload now" }),
   "ui.update.seeWhatsNew": msg({ id: "ui.update.seeWhatsNew", message: "See what’s new" }),
-  "ui.update.updatedFrom": msg({ id: "ui.update.updatedFrom", message: "Updated from v{from} to v{to}" }),
-  "ui.update.updatedTo": msg({ id: "ui.update.updatedTo", message: "Updated to v{version}" }),
   "ui.update.whatsNew": msg({ id: "ui.update.whatsNew", message: "What’s new" }),
   "ui.urlSession.corsHint": msg({
     id: "ui.urlSession.corsHint",

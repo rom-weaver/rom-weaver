@@ -357,9 +357,14 @@ const CHANNEL_MESSAGES: Record<string, MessageId> = {
 // Hydration happens once per page, so the hydration check needs no subscription.
 const subscribeNever = () => () => undefined;
 
+/** Marks a control that leads to What's new while there is unread news. The control's name carries the words. */
+const NewsDot = () => <span aria-hidden="true" className="news-dot" />;
+
 type BuildTagLinks = {
   confirmExternalNavigation?: (href: string) => Promise<boolean>;
   githubBaseHref?: string;
+  /** Unread news: marks the controls that open What's new and says so in their names. */
+  hasNews?: boolean;
   localizer: Localizer;
   onOpenWhatsNew: () => void;
 };
@@ -400,6 +405,7 @@ const PrBuildTag = ({
 
 const ChannelBuildTag = ({
   channelBadge,
+  hasNews,
   localizer,
   onOpenWhatsNew,
   versionText,
@@ -407,12 +413,13 @@ const ChannelBuildTag = ({
   const key = channelBadge.toLowerCase();
   const nameId = CHANNEL_MESSAGES[key];
   const name = nameId ? localizer.message(nameId) : channelBadge;
+  const label = versionText ? `${name}, ${versionText}` : name;
   // Channels with a suffix letter show it in the version, so skip the leading letter.
   const hasSuffix = Boolean(channelSuffix(channelBadge));
   return (
     <span className="build-tag">
       <button
-        aria-label={versionText ? `${name}, ${versionText}` : name}
+        aria-label={hasNews ? localizer.message("ui.update.newSinceLastVisit", { name: label }) : label}
         className="sub-chip channel-badge"
         data-channel={key}
         onClick={onOpenWhatsNew}
@@ -427,6 +434,7 @@ const ChannelBuildTag = ({
           </>
         )}
         <span className="tag-version">{versionText}</span>
+        {hasNews ? <NewsDot /> : null}
       </button>
     </span>
   );
@@ -458,12 +466,16 @@ const BuildTag = ({
   return (
     <span className="build-tag">
       <button
+        aria-label={
+          links.hasNews ? links.localizer.message("ui.update.newSinceLastVisit", { name: versionText }) : undefined
+        }
         className="sub-chip sub-link"
         onClick={links.onOpenWhatsNew}
         title={hydrated ? versionTitle : undefined}
         type="button"
       >
         {versionText}
+        {links.hasNews ? <NewsDot /> : null}
       </button>
     </span>
   );
@@ -472,6 +484,7 @@ const BuildTag = ({
 export type { OfflineWarmupDisplayProgress, RuntimeState };
 export {
   BuildTag,
+  NewsDot,
   HEADER_RUNTIME_MESSAGES,
   RUNTIME_MESSAGES,
   RUNTIME_STATES,

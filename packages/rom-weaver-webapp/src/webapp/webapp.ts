@@ -3,8 +3,10 @@
 import { createElement, useLayoutEffect } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, hydrateRoot, type Root } from "react-dom/client";
+import { getWorkbenchActivity } from "../lib/activity-store.ts";
 import { collectBrowserInfo } from "../lib/browser-info.ts";
 import { configureLogger, createLogger } from "../lib/logging.ts";
+import { getEmulatorSessionState } from "../public/react/emulator-session-store.ts";
 import {
   GUIDED_SAMPLE_VIEWS,
   ONBOARDING_DISMISS_EVENT,
@@ -30,6 +32,7 @@ import { readDocsSlugFromPathname } from "./docs-routing.mjs";
 import { recordFirstVisit } from "./last-seen-version.ts";
 import { installLogStore } from "./log-store.ts";
 import { createEmptyVitePageUpdateState, createVitePageUpdateState, getPageUpdateState } from "./page-update-state.ts";
+import { isFilePickerOpen } from "./file-picker-state.ts";
 import { createPwaServiceWorkerClient } from "./pwa/pwa-service-worker-client.ts";
 import { setOfflineWarmupEnabled } from "./pwa/offline-warmup-client.ts";
 import { createServiceWorkerBootGate } from "./pwa/service-worker-boot-gate.ts";
@@ -201,10 +204,12 @@ function logApplicationStatus(message: string, force = false) {
   logger.info(message, status);
 }
 const serviceWorkerClient = createPwaServiceWorkerClient({
+  buildVersion: APP_BUILD_VERSION,
   cachePrefix: SERVICE_WORKER_CACHE_PREFIX,
   cacheVersionTimeoutMs: SERVICE_WORKER_CACHE_VERSION_TIMEOUT_MS,
   document: typeof document === "undefined" ? undefined : document,
   enabled: SERVICE_WORKER_ENABLED,
+  isPageIdle: () => isPageIdle(),
   navigator: typeof navigator === "undefined" ? undefined : navigator,
   onStateChange: () => {
     if (applicationStatusReady) logApplicationStatus("Application status changed");
@@ -413,6 +418,20 @@ const getNavigationGuardState = () => {
     },
     webappState: state,
   };
+};
+
+// The settings and log console is a native <dialog>. The confirmation and agent approval dialogs and
+// every Modal carry aria-modal.
+const OPEN_MODAL_SELECTOR = 'dialog[open], [role="dialog"][aria-modal="true"]';
+
+// Checks more than the unload guard does. The extra checks stay out of the guard so closing a tab
+// does not warn.
+const isPageIdle = () => {
+  if (shouldWarnBeforeUnload(getNavigationGuardState())) return false;
+  if (getEmulatorSessionState().entries.length > 0) return false;
+  if (getWorkbenchActivity().state !== "idle") return false;
+  if (isFilePickerOpen()) return false;
+  return !document.querySelector(OPEN_MODAL_SELECTOR);
 };
 
 const isLikelyViteReloadTimer = (handler: TimerHandler, timeout?: number) => {

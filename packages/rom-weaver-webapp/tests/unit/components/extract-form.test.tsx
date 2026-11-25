@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { getWorkbenchActivity } from "../../../src/lib/activity-store.ts";
 import {
   addEntry,
   dismissClosedGameNotice,
@@ -215,6 +216,20 @@ describe("ExtractForm", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Download 1 file" }));
     await waitFor(() => expect(outputs[0]?.saveAs).toHaveBeenCalledWith({ fileName: "game.sfc", interactive: true }));
     expect(runtime.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports a staged file as ready from the moment it is added until the form is removed", async () => {
+    runtime.extract.mockResolvedValue({ outputs: [output("game.sfc"), output("docs/readme.txt")] });
+    const view = render(<ExtractForm />);
+    expect(getWorkbenchActivity().state).toBe("idle");
+
+    addFile(new File(["zip"], "game.zip"));
+    expect(getWorkbenchActivity().state).toBe("ready");
+    expect(await screen.findByText("docs › readme.txt")).toBeTruthy();
+    expect(getWorkbenchActivity().state).toBe("ready");
+
+    view.unmount();
+    expect(getWorkbenchActivity().state).toBe("idle");
   });
 
   it("shows ZIP progress with a readable label and the runtime percent", async () => {

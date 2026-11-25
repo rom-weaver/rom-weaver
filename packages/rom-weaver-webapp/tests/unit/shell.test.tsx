@@ -76,6 +76,19 @@ describe("the navigation both layouts share", () => {
     expect(rowNamed(navigation.side, "Docs").id).toBe("tab-docs");
   });
 
+  it("marks the dock's Menu slot for unread news until the slot reads Close", () => {
+    const { container } = render(withSettings(<Masthead {...mastheadProps} hasNews />));
+    const menu = container.querySelector(".dock-menu") as HTMLButtonElement;
+
+    expect(menu.querySelector(".news-dot[aria-hidden='true']")).not.toBeNull();
+    expect(menu.getAttribute("aria-label")).toBe("Menu, updated since your last visit");
+
+    fireEvent.click(menu);
+
+    expect(menu.querySelector(".news-dot")).toBeNull();
+    expect(menu.getAttribute("aria-label")).toBe("Close");
+  });
+
   it("uses dedicated Docs navigation in the sidebar and leaves the phone to the docs bar", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} currentTab="docs" />));
 

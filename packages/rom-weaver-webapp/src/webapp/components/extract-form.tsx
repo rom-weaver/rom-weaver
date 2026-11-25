@@ -11,11 +11,14 @@ import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-z
 import { EXTRACT_FORMAT_GUIDES, WORKFLOW_GUIDES } from "../../public/react/workflow-guides.ts";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
 import type { ProgressEvent, PublicOutput } from "../../types/workflow-runtime-types.ts";
+import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import { getEngineError } from "../../lib/errors.ts";
 import { describeAgentSource, useAgentWorkflow } from "../agent/workflow-registry.ts";
 
 type ExtractFormProps = { pageDrop?: PageFileDrop | null };
 type ProgressState = { label: string; percent: number | null };
+
+const EXTRACT_ACTIVITY_KEY = "extract";
 
 // Extract opens one archive per run, so extra files are named instead of silently dropped.
 const skippedNotice = (used: File, skipped: string[]): string =>
@@ -117,7 +120,7 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
       abortRef.current = abort;
       clearOutputs();
       setSplitPrompt(null);
-      // Extract publishes no workbench activity, so it closes a paused disc-sized Test game itself.
+      // Extract publishes no running state, so it closes a paused disc-sized Test game itself.
       releaseLargeEntries({ announce: true });
       setBusy(true);
       setError("");
@@ -243,6 +246,13 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
     stageFiles(pageDrop.files);
     pageDrop.onConsumed?.();
   }, [pageDrop, stageFiles]);
+
+  // A staged source reports as ready, so a hidden tab does not reload over it. Runs and outputs follow
+  // the source, which stays until the form is removed.
+  useEffect(() => {
+    setWorkbenchActivity(EXTRACT_ACTIVITY_KEY, { state: source ? "ready" : "idle" });
+    return () => setWorkbenchActivity(EXTRACT_ACTIVITY_KEY, { state: "idle" });
+  }, [source]);
 
   useEffect(
     () => () => {

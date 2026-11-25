@@ -75,6 +75,7 @@ const createController = ({
 });
 
 type HarnessOptions = {
+  buildVersion?: string;
   controller?: ReturnType<typeof createController> | null;
   crossOriginIsolated?: boolean;
   enabled?: boolean;
@@ -84,6 +85,8 @@ type HarnessOptions = {
   hasLocationReload?: boolean;
   hasServiceWorker?: boolean;
   hasWindow?: boolean;
+  isPageIdle?: () => boolean;
+  onLine?: boolean;
   ready?: Promise<FakeRegistration> | "missing" | "never";
   registrations?: FakeRegistration[];
   sessionStorageFailOn?: StorageFailure[];
@@ -92,6 +95,7 @@ type HarnessOptions = {
 };
 
 const createHarness = ({
+  buildVersion = "",
   controller = null,
   crossOriginIsolated = true,
   enabled = true,
@@ -101,6 +105,8 @@ const createHarness = ({
   hasLocationReload = true,
   hasServiceWorker = true,
   hasWindow = true,
+  isPageIdle = () => true,
+  onLine = true,
   ready = "missing",
   registrations = [],
   sessionStorageFailOn = [],
@@ -142,12 +148,15 @@ const createHarness = ({
   const states: Array<ReturnType<typeof createServiceWorkerCacheState>> = [];
   let registerOptions: RegisterOptions | undefined;
   let registerCount = 0;
+  const browserDocument = { addEventListener: addTo(documentListeners), visibilityState };
   const options = {
+    buildVersion,
     cachePrefix: CACHE_PREFIX,
     cacheVersionTimeoutMs: CACHE_VERSION_TIMEOUT_MS,
-    document: hasDocument ? { addEventListener: addTo(documentListeners), visibilityState } : undefined,
+    document: hasDocument ? browserDocument : undefined,
     enabled,
-    navigator: hasServiceWorker ? { serviceWorker } : {},
+    isPageIdle,
+    navigator: hasServiceWorker ? { onLine, serviceWorker } : { onLine },
     onStateChange: (state: ReturnType<typeof createServiceWorkerCacheState>) => {
       states.push(state);
     },
@@ -165,6 +174,7 @@ const createHarness = ({
   return {
     client,
     controller,
+    document: browserDocument,
     documentListeners,
     fireDocument: (type: string) => {
       for (const listener of documentListeners.get(type) ?? []) listener();
@@ -482,6 +492,189 @@ describe("update takeover", () => {
     harness.fireDocument("controllerchange");
 
     expect(harness.reload).toHaveBeenCalledTimes(1);
+    expect(harness.client.hasUpdateTakenOver()).toBe(false);
+  });
+});
+
+describe("hidden tab reload after a takeover", () => {
+  const RELOAD_COUNT_KEY = "rom-weaver-sw-hidden-reloads";
+  const startControlled = async (options: HarnessOptions = {}) => {
+    const harness = createHarness({ controller: createController(), ...options });
+    harness.client.initialize();
+    await flush();
+    return harness;
+  };
+  const hide = (harness: Awaited<ReturnType<typeof startControlled>>) => {
+    harness.document.visibilityState = "hidden";
+    harness.fireDocument("visibilitychange");
+  };
+
+  it("reloads a hidden idle tab once, counting it in the session", async () => {
+    const harness = await startControlled();
+    harness.fireDocument("controllerchange");
+
+    hide(harness);
+
+    expect(harness.reload).toHaveBeenCalledTimes(1);
+    expect(harness.sessionStorage.state.get(RELOAD_COUNT_KEY)).toBe("1");
+  });
+
+  it("reloads at the takeover when the tab is already hidden", async () => {
+    const harness = await startControlled({ visibilityState: "hidden" });
+
+    harness.fireDocument("controllerchange");
+
+    expect(harness.reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("never reloads a visible tab, at the takeover or when it becomes visible", async () => {
+    const harness = await startControlled();
+
+    harness.fireDocument("controllerchange");
+    harness.fireDocument("visibilitychange");
+
+    expect(harness.reload).not.toHaveBeenCalled();
+    expect(harness.sessionStorage.state.has(RELOAD_COUNT_KEY)).toBe(false);
+  });
+
+  it("does not reload a hidden tab that no update took over", async () => {
+    const harness = await startControlled();
+
+    hide(harness);
+
+    expect(harness.reload).not.toHaveBeenCalled();
+  });
+
+  it("does not reload while work is in progress, and reloads once the page is idle", async () => {
+    let idle = false;
+    const harness = await startControlled({ isPageIdle: () => idle });
+    harness.fireDocument("controllerchange");
+
+    hide(harness);
+    expect(harness.reload).not.toHaveBeenCalled();
+    idle = true;
+    hide(harness);
+
+    expect(harness.reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not reload while offline, because the new build may not be fully cached", async () => {
+    const harness = await startControlled({ onLine: false });
+    harness.fireDocument("controllerchange");
+
+    hide(harness);
+
+    expect(harness.reload).not.toHaveBeenCalled();
+  });
+
+  it("does not count a reload when the page turns hidden because the visitor leaves it", async () => {
+    const harness = await startControlled();
+    harness.fireDocument("controllerchange");
+
+    harness.fireWindow("pagehide");
+    hide(harness);
+
+    expect(harness.reload).not.toHaveBeenCalled();
+    expect(harness.sessionStorage.state.has(RELOAD_COUNT_KEY)).toBe(false);
+  });
+
+  it("reloads a hidden tab that was left and then restored from the back-forward cache", async () => {
+    const harness = await startControlled();
+    harness.fireDocument("controllerchange");
+    harness.fireWindow("pagehide");
+    harness.fireWindow("pageshow");
+
+    hide(harness);
+
+    expect(harness.reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops after three reloads in a tab session", async () => {
+    const harness = await startControlled({ sessionStorageSeed: { [RELOAD_COUNT_KEY]: "2" } });
+    harness.fireDocument("controllerchange");
+
+    hide(harness);
+    hide(harness);
+
+    expect(harness.reload).toHaveBeenCalledTimes(1);
+    expect(harness.sessionStorage.state.get(RELOAD_COUNT_KEY)).toBe("3");
+  });
+
+  // A page on build 1.0.0 whose worker took over during boot got no controllerchange.
+  const WORKER = { scriptURL: "https://example.com/rom-weaver-service-worker.js", state: "installed" };
+  const createBehindWorker = ({
+    reply = { buildVersion: "2.0.0" },
+    ...options
+  }: HarnessOptions & { reply?: Record<string, unknown> } = {}) =>
+    createHarness({
+      buildVersion: "1.0.0",
+      controller: createController({ reply: { ...DEFAULT_CACHE_VERSION_REPLY, ...reply } }),
+      ...options,
+    });
+
+  it("reloads a hidden idle tab that booted on an older build once its update check ends", async () => {
+    let endUpdateCheck: () => void = () => undefined;
+    const update = () =>
+      new Promise<void>((resolve) => {
+        endUpdateCheck = resolve;
+      });
+    const harness = createBehindWorker({ visibilityState: "hidden" });
+    harness.client.initialize();
+    registered(harness, createRegistration({ update }));
+    await flush();
+    expect(harness.reload).not.toHaveBeenCalled();
+
+    endUpdateCheck();
+    await flush();
+
+    expect(harness.reload).toHaveBeenCalledTimes(1);
+    expect(harness.client.hasUpdateTakenOver()).toBe(true);
+  });
+
+  it("reloads a hidden idle tab that booted on an older build once its worker reports its build", async () => {
+    const harness = createBehindWorker({ visibilityState: "hidden" });
+    harness.client.initialize();
+
+    registered(harness);
+    await flush();
+
+    expect(harness.reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits until a visible tab on an older build is hidden", async () => {
+    const harness = createBehindWorker();
+    harness.client.initialize();
+    registered(harness);
+    await flush();
+    expect(harness.reload).not.toHaveBeenCalled();
+
+    hide(harness);
+
+    expect(harness.reload).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { label: "runs the same build as its worker", options: { reply: { buildVersion: "1.0.0" } } },
+    { label: "has a worker that reports no build", options: { reply: {} } },
+    { label: "carries no build of its own", options: { buildVersion: "" } },
+    { label: "has a newer worker installing", registration: { installing: WORKER } },
+    { label: "has a newer worker waiting", registration: { waiting: WORKER } },
+    {
+      label: "could not finish its update check",
+      registration: {
+        update: async () => {
+          throw new Error("the network is down");
+        },
+      },
+    },
+  ])("does not reload a hidden tab that $label", async ({ options, registration }) => {
+    const harness = createBehindWorker({ visibilityState: "hidden", ...options });
+    harness.client.initialize();
+
+    registered(harness, createRegistration(registration));
+    await flush();
+
+    expect(harness.reload).not.toHaveBeenCalled();
     expect(harness.client.hasUpdateTakenOver()).toBe(false);
   });
 });

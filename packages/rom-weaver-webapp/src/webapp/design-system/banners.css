@@ -130,11 +130,10 @@
   height: 18px;
 }
 /* ── the update banner ──
-   One banner for both ends of an update: a deploy waiting to load and the first
-   load of a newer release. A selvedge - the woven edge new cloth comes off the
-   loom with - runs down its leading side, dyed in the care colour while a reload
-   waits. The same edge marks the releases an update brought on What's new, so
-   the banner and the page read as one piece. */
+   The prompt for a deploy waiting to load. A selvedge - the woven edge new cloth
+   comes off the loom with - runs down its leading side, dyed in the care colour
+   while a reload waits. The same edge marks the releases an update brought on
+   What's new, so the banner and the page read as one piece. */
 .rw-app .update-banner {
   position: relative;
   display: grid;

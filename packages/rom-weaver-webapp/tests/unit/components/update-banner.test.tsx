@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
 import { APP_VERSION } from "../../../src/webapp/build-version.ts";
-import { UpdateBanner, type UpdateBannerKind } from "../../../src/webapp/components/update-banner.tsx";
+import { UpdateBanner } from "../../../src/webapp/components/update-banner.tsx";
 
 const REPOSITORY_URL = "https://github.com/rom-weaver/rom-weaver";
 const LAST_SEEN_KEY = "rom-weaver-last-seen-version";
@@ -42,18 +42,18 @@ const mockReleaseNotes = (notes: unknown[], version = APP_VERSION) =>
     }),
   );
 
-const renderBanner = (kind: UpdateBannerKind | null, since: { from?: string } | null = null) => {
+const renderBanner = (open = true, hasUnreadUpdate = false) => {
   const handlers = { onDismiss: vi.fn(), onOpenWhatsNew: vi.fn(), onReload: vi.fn() };
   const view = render(
     <RomWeaverSettingsProvider settings={{}}>
-      <UpdateBanner kind={kind} since={since} {...handlers} />
+      <UpdateBanner hasUnreadUpdate={hasUnreadUpdate} open={open} {...handlers} />
     </RomWeaverSettingsProvider>,
   );
   const openBanner = () => view.container.querySelector(".reveal.is-open .update-banner");
-  const rerender = (next: UpdateBannerKind | null, nextSince = since) =>
+  const rerender = (next: boolean) =>
     view.rerender(
       <RomWeaverSettingsProvider settings={{}}>
-        <UpdateBanner kind={next} since={nextSince} {...handlers} />
+        <UpdateBanner hasUnreadUpdate={hasUnreadUpdate} open={next} {...handlers} />
       </RomWeaverSettingsProvider>,
     );
   return { ...handlers, container: view.container, openBanner, rerender, unmount: view.unmount };
@@ -62,78 +62,13 @@ const renderBanner = (kind: UpdateBannerKind | null, since: { from?: string } | 
 beforeEach(() => window.localStorage.clear());
 afterEach(() => vi.unstubAllGlobals());
 
-describe("UpdateBanner after an update", () => {
-  it("names both versions and leads with the newest highlight", async () => {
-    mockReleaseNotes([
-      highlights(APP_VERSION, ["Running release highlight", "Second highlight"]),
-      highlights("0.0.2", ["Skipped release highlight"]),
-    ]);
-    const { container, openBanner } = renderBanner("updated", { from: "0.0.1" });
-
-    await waitFor(() => expect(openBanner()).not.toBeNull());
-
-    expect(screen.getByText(`Updated from v0.0.1 to v${APP_VERSION}`)).toBeTruthy();
-    expect(screen.getByText("Running release highlight")).toBeTruthy();
-    expect(screen.queryByText("Second highlight")).toBeNull();
-    expect(screen.queryByText("Skipped release highlight")).toBeNull();
-    expect(container.querySelector(".update-ready")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Reload" })).toBeNull();
-  });
-
-  it("passes over a new release without highlights, but never an old one", async () => {
-    mockReleaseNotes([
-      { groups: [{ entries: [{ summary: "a fix" }], title: "Bug Fixes" }], version: APP_VERSION },
-      highlights("0.0.2", ["Skipped release highlight"]),
-      highlights("0.0.1", ["Already seen highlight"]),
-    ]);
-    const { openBanner } = renderBanner("updated", { from: "0.0.1" });
-
-    await waitFor(() => expect(openBanner()).not.toBeNull());
-
-    expect(screen.getByText("Skipped release highlight")).toBeTruthy();
-    expect(screen.queryByText("Already seen highlight")).toBeNull();
-  });
-
-  it("names only the running version when the earlier one is unknown", async () => {
-    mockReleaseNotes([highlights(APP_VERSION, ["Running release highlight"])]);
-    const { openBanner } = renderBanner("updated", {});
-
-    await waitFor(() => expect(openBanner()).not.toBeNull());
-
-    expect(screen.getByText(`Updated to v${APP_VERSION}`)).toBeTruthy();
-  });
-
-  it("opens What's new and dismisses from its own controls", async () => {
-    mockReleaseNotes([highlights(APP_VERSION, ["Running release highlight"])]);
-    const { onDismiss, onOpenWhatsNew, openBanner } = renderBanner("updated", { from: "0.0.1" });
-    await waitFor(() => expect(openBanner()).not.toBeNull());
-
-    fireEvent.click(screen.getByRole("button", { name: "See what’s new" }));
-    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
-
-    expect(onOpenWhatsNew).toHaveBeenCalledTimes(1);
-    expect(onDismiss).toHaveBeenCalledTimes(1);
-  });
-
-  it("keeps its words while it closes", async () => {
-    mockReleaseNotes([highlights(APP_VERSION, ["Running release highlight"])]);
-    const { openBanner, rerender } = renderBanner("updated", { from: "0.0.1" });
-    await waitFor(() => expect(openBanner()).not.toBeNull());
-
-    rerender(null, null);
-
-    expect(openBanner()).toBeNull();
-    expect(screen.getByText(`Updated from v0.0.1 to v${APP_VERSION}`)).toBeTruthy();
-  });
-});
-
 describe("UpdateBanner with a deploy waiting", () => {
   it("names the incoming release and leads with its highlight", async () => {
     mockReleaseNotes(
       [highlights(INCOMING, ["Incoming highlight"]), highlights(APP_VERSION, ["Running release highlight"])],
       INCOMING,
     );
-    const { container, openBanner } = renderBanner("ready");
+    const { container, openBanner } = renderBanner();
 
     await waitFor(() => expect(openBanner()).not.toBeNull());
 
@@ -145,7 +80,7 @@ describe("UpdateBanner with a deploy waiting", () => {
 
   it("says only that an update is ready when the version did not change", async () => {
     mockReleaseNotes([highlights(APP_VERSION, ["Running release highlight"])]);
-    const { container, openBanner } = renderBanner("ready");
+    const { container, openBanner } = renderBanner();
 
     await waitFor(() => expect(openBanner()).not.toBeNull());
 
@@ -155,7 +90,7 @@ describe("UpdateBanner with a deploy waiting", () => {
 
   it("records the incoming release on reload, for the next load to confirm", async () => {
     mockReleaseNotes([highlights(INCOMING, ["Incoming highlight"])], INCOMING);
-    const { onReload, openBanner } = renderBanner("ready");
+    const { onReload, openBanner } = renderBanner();
     await waitFor(() => expect(openBanner()).not.toBeNull());
 
     fireEvent.click(screen.getByRole("button", { name: "Reload" }));
@@ -168,7 +103,7 @@ describe("UpdateBanner with a deploy waiting", () => {
   it("leaves an unacknowledged update to announce itself after the reload", async () => {
     window.localStorage.setItem(LAST_SEEN_KEY, "0.0.1");
     mockReleaseNotes([highlights(INCOMING, ["Incoming highlight"])], INCOMING);
-    const { onReload, openBanner } = renderBanner("ready", { from: "0.0.1" });
+    const { onReload, openBanner } = renderBanner(true, true);
     await waitFor(() => expect(openBanner()).not.toBeNull());
 
     fireEvent.click(screen.getByRole("button", { name: "Reload" }));
@@ -177,22 +112,44 @@ describe("UpdateBanner with a deploy waiting", () => {
     expect(window.localStorage.getItem(LAST_SEEN_KEY)).toBe("0.0.1");
   });
 
-  it("refetches the changelog when a deploy becomes ready", async () => {
-    mockReleaseNotes([highlights(APP_VERSION, ["Running release highlight"])]);
-    const { openBanner, rerender } = renderBanner("updated", {});
-    await waitFor(() => expect(openBanner()).not.toBeNull());
+  it("stays closed without fetching until a deploy is waiting", async () => {
     mockReleaseNotes([highlights(INCOMING, ["Incoming highlight"])], INCOMING);
+    const { openBanner, rerender } = renderBanner(false);
+    expect(fetch).not.toHaveBeenCalled();
 
-    rerender("ready");
+    rerender(true);
 
     await waitFor(() => expect(screen.queryByText(`v${INCOMING} is ready`)).not.toBeNull());
     expect(openBanner()).not.toBeNull();
   });
 
+  it("opens What's new and dismisses from its own controls", async () => {
+    mockReleaseNotes([highlights(INCOMING, ["Incoming highlight"])], INCOMING);
+    const { onDismiss, onOpenWhatsNew, openBanner } = renderBanner();
+    await waitFor(() => expect(openBanner()).not.toBeNull());
+
+    fireEvent.click(screen.getByRole("button", { name: "See what’s new" }));
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+
+    expect(onOpenWhatsNew).toHaveBeenCalledTimes(1);
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps its words while it closes", async () => {
+    mockReleaseNotes([highlights(INCOMING, ["Incoming highlight"])], INCOMING);
+    const { openBanner, rerender } = renderBanner();
+    await waitFor(() => expect(openBanner()).not.toBeNull());
+
+    rerender(false);
+
+    expect(openBanner()).toBeNull();
+    expect(screen.getByText(`v${INCOMING} is ready`)).toBeTruthy();
+  });
+
   it("refreshes the incoming version when another deploy arrives while one waits", async () => {
     vi.useFakeTimers();
     mockReleaseNotes([highlights(INCOMING, ["First incoming highlight"])], INCOMING);
-    const { onReload, openBanner, unmount } = renderBanner("ready");
+    const { onReload, openBanner, unmount } = renderBanner();
 
     try {
       await act(async () => {
@@ -254,7 +211,7 @@ describe("UpdateBanner slow ready refreshes", () => {
       "fetch",
       vi.fn(() => new Promise<Response>((resolve) => pending.push(resolve))),
     );
-    const { openBanner, unmount } = renderBanner("ready");
+    const { openBanner, unmount } = renderBanner();
 
     try {
       await act(() => vi.advanceTimersByTimeAsync(60_000));
@@ -278,7 +235,7 @@ describe("UpdateBanner slow ready refreshes", () => {
       "fetch",
       vi.fn(() => new Promise<Response>((resolve) => pending.push(resolve))),
     );
-    const { openBanner, unmount } = renderBanner("ready");
+    const { openBanner, unmount } = renderBanner();
 
     try {
       await act(() => vi.advanceTimersByTimeAsync(60_000));
@@ -300,7 +257,7 @@ describe("UpdateBanner slow ready refreshes", () => {
 describe("UpdateBanner loading", () => {
   it("still opens, without a highlight, when the changelog is unavailable", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
-    const { container, openBanner } = renderBanner("ready");
+    const { container, openBanner } = renderBanner();
 
     await waitFor(() => expect(openBanner()).not.toBeNull());
 
@@ -312,12 +269,12 @@ describe("UpdateBanner loading", () => {
     mockReleaseNotes([highlights(APP_VERSION, ["Running release highlight"])]);
     window.history.pushState({}, "", "/docs/about");
     try {
-      const { openBanner } = renderBanner("updated", { from: "0.0.1" });
+      const { openBanner } = renderBanner();
       await waitFor(() => expect(openBanner()).not.toBeNull());
 
       const [request] = vi.mocked(fetch).mock.calls[0] ?? [];
       expect(new URL(String(request), document.baseURI).pathname).toBe("/changelog.json");
-      expect(screen.getByText("Running release highlight")).toBeTruthy();
+      expect(screen.getByText("Update ready")).toBeTruthy();
     } finally {
       window.history.pushState({}, "", "/");
     }
@@ -328,7 +285,7 @@ describe("UpdateBanner loading", () => {
       "fetch",
       vi.fn(() => new Promise(() => undefined)),
     );
-    const { openBanner } = renderBanner("updated", { from: "0.0.1" });
+    const { openBanner } = renderBanner();
 
     expect(openBanner()).toBeNull();
   });

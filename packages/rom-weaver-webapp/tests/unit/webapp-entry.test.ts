@@ -15,6 +15,7 @@ import {
 import type { WebappRootProps } from "../../src/webapp/webapp-root-types.ts";
 
 type ServiceWorkerClientOptions = {
+  isPageIdle: () => boolean;
   onStateChange: () => void;
 };
 
@@ -543,6 +544,98 @@ describe("service worker bridge", () => {
     latest().actions.onConfirmConfirmation();
     await flush();
     expect(reload).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("hidden tab reload readiness", () => {
+  const isPageIdle = () => {
+    if (!mocks.serviceWorkerOptions) throw new Error("the entry never created the service worker client");
+    return mocks.serviceWorkerOptions.isPageIdle();
+  };
+
+  it("is idle when nothing is staged, loaded, running or open", async () => {
+    await loadWebapp();
+
+    expect(isPageIdle()).toBe(true);
+  });
+
+  it("is not idle while a ROM is staged", async () => {
+    await loadWebapp();
+
+    latest().actions.onPatcherInputsChange([{ name: "rom.sfc" }]);
+    await flush();
+
+    expect(isPageIdle()).toBe(false);
+  });
+
+  it("is not idle while a game is loaded in the emulator, and is again once it is closed", async () => {
+    await loadWebapp();
+    const { addEntry, disposeEntry } = await import("../../src/public/react/emulator-session-store.ts");
+
+    addEntry({ fileName: "game.sfc", id: "game", sizeBytes: 1024, source: "local" });
+    expect(isPageIdle()).toBe(false);
+    disposeEntry("game");
+
+    expect(isPageIdle()).toBe(true);
+  });
+
+  it.each(["staging", "ready", "running", "done", "failed"] as const)(
+    "is not idle while a workflow reports %s, and is again once it reports idle",
+    async (state) => {
+      await loadWebapp();
+      const { setWorkbenchActivity } = await import("../../src/lib/activity-store.ts");
+
+      setWorkbenchActivity("identify", { state });
+      try {
+        expect(isPageIdle()).toBe(false);
+      } finally {
+        setWorkbenchActivity("identify", { state: "idle" });
+      }
+      expect(isPageIdle()).toBe(true);
+    },
+  );
+
+  it.each(["change", "cancel"])(
+    "is not idle while a file input's picker is open, and is again after its %s event",
+    async (closing) => {
+      await loadWebapp();
+      const input = document.createElement("input");
+      input.type = "file";
+      document.body.append(input);
+
+      input.click();
+      expect(isPageIdle()).toBe(false);
+      input.dispatchEvent(new Event(closing, { bubbles: true }));
+
+      expect(isPageIdle()).toBe(true);
+    },
+  );
+
+  it("stays idle after a click on an input that opens no picker", async () => {
+    await loadWebapp();
+    const input = document.createElement("input");
+    document.body.append(input);
+
+    input.click();
+
+    expect(isPageIdle()).toBe(true);
+  });
+
+  it.each([
+    ["a native dialog, as the settings and log console is", "<dialog open></dialog>", false],
+    [
+      "a modal, as the confirmation and agent approval dialogs are",
+      '<div role="dialog" aria-modal="true"></div>',
+      false,
+    ],
+    ["a dialog that is not modal", '<div role="dialog" aria-modal="false"></div>', true],
+    ["a closed native dialog", "<dialog></dialog>", true],
+  ])("reports a page with %s as idle: %s", async (_label, markup, expected) => {
+    await loadWebapp();
+
+    document.body.insertAdjacentHTML("beforeend", markup);
+
+    expect(isPageIdle()).toBe(expected);
   });
 });
 

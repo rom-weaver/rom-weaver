@@ -17,6 +17,7 @@ import { DocsNavigation } from "../docs-navigation.tsx";
 import { BrandMark } from "./brand-mark.tsx";
 import { FIND_SHORTCUT_HINT, FindPalette } from "./find-palette.tsx";
 import type { FindAction } from "../find-index.ts";
+import type { Localizer } from "../../presentation/localization/index.ts";
 import type { RomLookupSelection } from "../../public/react/use-rom-lookup.ts";
 import { useRomWeaverSettings, useUiLocalizer } from "../../public/react/settings-context.tsx";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
@@ -27,6 +28,7 @@ import { AccentTile, ProjectTiles, SettingsTile, ThemeTile } from "./menu-tools.
 import type { OfflineWarmupDisplayProgress, RuntimeState } from "./runtime-status.tsx";
 import {
   BuildTag,
+  NewsDot,
   HEADER_RUNTIME_MESSAGES,
   RUNTIME_MESSAGES,
   RuntimeGlyph,
@@ -40,6 +42,10 @@ import {
   useHydratedServiceWorkerStatus,
 } from "./runtime-status.tsx";
 
+/** The extra name and dot a control labelled `name` carries while unread news waits. */
+const newsMark = (hasNews: boolean, localizer: Localizer, name: string) =>
+  hasNews ? { mark: <NewsDot />, title: localizer.message("ui.update.newSinceLastVisit", { name }) } : undefined;
+
 const Masthead = ({
   channelBadge,
   commitsSinceVersion,
@@ -48,6 +54,7 @@ const Masthead = ({
   currentTab,
   docsSlug = "docs",
   dirty,
+  hasNews = false,
   homeHref,
   onSelectTab,
   onOpenWhatsNew,
@@ -79,6 +86,8 @@ const Masthead = ({
   currentTab: string;
   docsSlug?: string;
   dirty?: boolean;
+  /** Unread news: marks the version chip and the What's new entry. */
+  hasNews?: boolean;
   /** Base URL of the app's Home route. */
   homeHref: string;
   onSelectTab: (id: string) => void;
@@ -407,13 +416,17 @@ const Masthead = ({
       label: localizer.message("ui.nav.homeShort"),
       onSelect: () => onSelectTab("home"),
     });
+    const whatsNewLabel = localizer.message("ui.update.whatsNew");
+    const whatsNewNews = newsMark(hasNews, localizer, whatsNewLabel);
     project.entries.push({
       current: currentTab === "whats-new",
       href: appPathHref("whats-new", homeHref),
       icon: <Newspaper aria-hidden="true" />,
       id: "whats-new",
-      label: localizer.message("ui.update.whatsNew"),
+      label: whatsNewLabel,
       onSelect: () => onSelectTab("whats-new"),
+      title: whatsNewNews?.title,
+      trailing: whatsNewNews?.mark,
     });
     if (githubHref) {
       project.entries.push({
@@ -445,6 +458,7 @@ const Masthead = ({
     donateHref,
     docsSlug,
     githubHref,
+    hasNews,
     homeHref,
     localizer,
     onOpenAbout,
@@ -509,6 +523,7 @@ const Masthead = ({
   ];
   // No beta workflow claims a dock slot, so the dock needs no reveal pass.
   const dockTabs = tabs.filter((tab) => tab.dock && !tab.beta);
+  const menuLabel = localizer.message("ui.tools.menu");
   const buildTag = version ? (
     <BuildTag
       channelBadge={channelBadge}
@@ -516,6 +531,7 @@ const Masthead = ({
       confirmExternalNavigation={confirmExternalNavigation}
       dirty={dirty}
       githubBaseHref={githubBaseHref}
+      hasNews={hasNews}
       localizer={localizer}
       onOpenWhatsNew={onOpenWhatsNew}
       version={version}
@@ -710,7 +726,8 @@ const Masthead = ({
         closeLabel={localizer.message("ui.common.close")}
         current={currentTab}
         menuControls="menu-sheet"
-        menuLabel={localizer.message("ui.tools.menu")}
+        menuLabel={menuLabel}
+        menuNews={newsMark(hasNews, localizer, menuLabel)}
         menuOpen={menuOpen}
         navLabel={navLabel}
         onSelect={onSelectTab}

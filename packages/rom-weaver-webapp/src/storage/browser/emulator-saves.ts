@@ -1,3 +1,4 @@
+import { bytesEqual } from "../../lib/bytes-equal.ts";
 import { createLogger } from "../../lib/logging.ts";
 
 /**
@@ -466,9 +467,6 @@ const deleteEmulatorSave = async (gameId: string): Promise<void> => {
 const saveEmulatorState = (update: EmulatorSaveUpdate) => updatePart("state", update);
 const saveEmulatorSram = (update: EmulatorSaveUpdate) => updatePart("sram", update);
 
-const bytesEqual = (left: Uint8Array | undefined, right: Uint8Array): boolean =>
-  !!left && left.byteLength === right.byteLength && left.every((value, index) => value === right[index]);
-
 const replaceEmulatorSaveSram = async (
   gameId: string,
   data: Uint8Array,
@@ -493,7 +491,7 @@ const replaceEmulatorSaveSram = async (
         transaction.abort();
         return;
       }
-      if (expected && !bytesEqual(previous.sram, expected)) {
+      if (expected && !(previous.sram && bytesEqual(previous.sram, expected))) {
         failure = new Error("The stored SRAM changed. Open it again before you replace it.");
         transaction.abort();
         return;

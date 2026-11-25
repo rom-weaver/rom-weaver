@@ -19,6 +19,7 @@ import type { PageFileDrop } from "../../public/react/public-types.ts";
 import { useRomWeaverAssetBaseUrl } from "../../public/react/settings-context.tsx";
 import { WORKFLOW_GUIDES } from "../../public/react/workflow-guides.ts";
 import { useAgentWorkflow } from "../agent/workflow-registry.ts";
+import { trackFilePicker } from "../file-picker-state.ts";
 
 const PLAYLIST_ACTIVITY_KEY = "playlist";
 const CLI_RENAME_GUIDE = "docs/cli-playlist#rename-the-discs";
@@ -523,7 +524,7 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
       return;
     }
     void runAction("open", async () => {
-      const directory = await picker.call(window, { id: "rom-weaver-playlist", mode: "read" });
+      const directory = await trackFilePicker(() => picker.call(window, { id: "rom-weaver-playlist", mode: "read" }));
       replaceSource({ directory, files: await readFolder(directory), folderName: directory.name });
     });
   };
