@@ -214,6 +214,8 @@ FROM rust:1.97.1-alpine AS web-server-build
 WORKDIR /usr/src/static-web-server
 # Backport zero-quality filtering to Static Web Server 2.44.3.
 # https://github.com/static-web-server/static-web-server/pull/778
+# This pin gets no upstream security releases. Drop this stage once a 2.x
+# release includes that pull request.
 # The quality parameter name MUST be case-insensitive.
 # https://www.rfc-editor.org/rfc/rfc9110.html#section-12.4.2
 ADD --checksum=sha256:1de0dac30443ba60182167ab38827b5eba6bdee8a9c859e1d6bee2fe760e1c49 https://codeload.github.com/static-web-server/static-web-server/tar.gz/501cb7fcb6a01a4e73e6d5f541559e3334c39976 /tmp/static-web-server.tar.gz
@@ -223,7 +225,7 @@ RUN tar -xzf /tmp/static-web-server.tar.gz --strip-components=1 \
         -e '/\.filter_map(|v| QualityMeta::try_from(v).ok())/a\            .filter(|meta| meta.quality > 0)' \
         src/headers_ext/quality_value.rs \
     && grep -Fx '            .filter(|meta| meta.quality > 0)' src/headers_ext/quality_value.rs \
-    && RUSTFLAGS="--cfg tokio_unstable" cargo build --locked --release --features all --bin static-web-server
+    && cargo build --locked --release --features all --bin static-web-server
 
 # Static Web Server runs as a non-root user. It can terminate HTTPS directly.
 FROM ghcr.io/static-web-server/static-web-server:2-alpine AS runtime
