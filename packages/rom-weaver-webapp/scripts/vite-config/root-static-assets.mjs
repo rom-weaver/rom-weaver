@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import zlib from "node:zlib";
 import { MARKDOWN_ROUTES } from "../../functions/markdown-routes.js";
 import { LEGACY_WORKFLOW_ROUTES, WORKFLOW_SEO_ROUTES } from "../../src/webapp/workflow-seo.mjs";
 import { DOCS_SCREENSHOT_NAMES } from "../docs-screenshot-manifest.mjs";
@@ -146,10 +145,7 @@ const applyRootStaticAssetMiddleware = (middlewares, channel, channelLabel, site
     }
     const generatedSampleAsset = getGeneratedSampleAsset(requestPath);
     const sourcePath = rootStaticAssetSources[requestPath] ?? generatedLicenseAssetSources[requestPath];
-    // Pages serves the .br sidecars with Content-Encoding: br for browser decoding.
-    // Dev decodes them here to answer the same logical identify-asset URLs.
-    const sidecarSourcePath = sourcePath ? undefined : rootStaticAssetSources[`${requestPath}.br`];
-    if (!(generatedSampleAsset || sourcePath || sidecarSourcePath)) {
+    if (!(generatedSampleAsset || sourcePath)) {
       next();
       return;
     }
@@ -174,23 +170,15 @@ const applyRootStaticAssetMiddleware = (middlewares, channel, channelLabel, site
       res.end(createLlmsSource(sourcePath, siteOrigin));
       return;
     }
-    fs.readFile(sourcePath ?? sidecarSourcePath, (err, source) => {
+    fs.readFile(sourcePath, (err, source) => {
       if (err) {
         next(err);
         return;
       }
-      const finish = (decodeError, body) => {
-        if (decodeError) {
-          next(decodeError);
-          return;
-        }
-        res.statusCode = 200;
-        setRootStaticAssetContentType(requestPath, res);
-        res.setHeader("Cache-Control", "no-cache");
-        res.end(body);
-      };
-      if (sidecarSourcePath) zlib.brotliDecompress(source, finish);
-      else finish(null, source);
+      res.statusCode = 200;
+      setRootStaticAssetContentType(requestPath, res);
+      res.setHeader("Cache-Control", "no-cache");
+      res.end(source);
     });
   });
 };

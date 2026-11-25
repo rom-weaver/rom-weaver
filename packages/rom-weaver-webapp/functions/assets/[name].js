@@ -22,10 +22,20 @@ const sidecarEncodedSize = (response) => {
   return Number.isSafeInteger(size) ? value : null;
 };
 
+// Pages sends the raw asset without `Vary: Accept-Encoding`, so the zone cache MUST NOT
+// store it: a cached raw copy would also answer later Brotli clients.
+// https://developers.cloudflare.com/cache/concepts/cdn-cache-control/
+const withoutEdgeCache = async (next) => {
+  const response = await next();
+  const headers = new Headers(response.headers);
+  headers.set("Cloudflare-CDN-Cache-Control", "no-store");
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+};
+
 export const onRequestGet = async ({ request, env, next }) => {
   // Cloudflare can replace the incoming header before the function runs.
   const acceptEncoding = request.cf?.clientAcceptEncoding ?? request.headers.get("Accept-Encoding") ?? "";
-  if (!acceptsBrotli(acceptEncoding)) return next();
+  if (!acceptsBrotli(acceptEncoding)) return withoutEdgeCache(next);
   const url = new URL(request.url);
   // The build-checked type table avoids a separate request for the raw asset.
   // Unknown types fall through to Pages' static response.
