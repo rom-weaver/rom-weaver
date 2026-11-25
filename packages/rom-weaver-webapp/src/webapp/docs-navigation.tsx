@@ -228,15 +228,21 @@ const DocsNav = ({
           </li>
         ))}
       </ul>
-      <p className="guide-group" id="docs-rail-task-label">
-        Task guides
-      </p>
-      <AudienceSwitch audience={audience} labelId="docs-rail-task-label" onChange={onAudienceChange} />
-      {TASK_SHELVES.map(renderShelf)}
-      <p className="guide-group">Look things up</p>
-      {LOOKUP_SHELVES.map(renderShelf)}
-      <p className="guide-group">About the project</p>
-      {PROJECT_SHELVES.map(renderShelf)}
+      <fieldset className="guide-group">
+        <legend className="guide-group-label" id="docs-rail-task-label">
+          Task guides
+        </legend>
+        <AudienceSwitch audience={audience} labelId="docs-rail-task-label" onChange={onAudienceChange} />
+        {TASK_SHELVES.map(renderShelf)}
+      </fieldset>
+      <fieldset className="guide-group">
+        <legend className="guide-group-label">Look things up</legend>
+        {LOOKUP_SHELVES.map(renderShelf)}
+      </fieldset>
+      <fieldset className="guide-group">
+        <legend className="guide-group-label">About the project</legend>
+        {PROJECT_SHELVES.map(renderShelf)}
+      </fieldset>
     </nav>
   );
 };

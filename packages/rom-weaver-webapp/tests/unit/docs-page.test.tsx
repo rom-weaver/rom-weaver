@@ -529,7 +529,7 @@ Fixture description.
     render(<DocsNavigation currentSlug="docs" />);
 
     const shelves = [...document.querySelectorAll<HTMLDetailsElement>(".guide-shelf")];
-    expect(document.querySelectorAll(".guide-nav > .guide-shelf")).toHaveLength(navShelfTitles.length);
+    expect(document.querySelectorAll(".guide-nav .guide-shelf")).toHaveLength(navShelfTitles.length);
     expect(shelves.every((shelf) => !shelf.open)).toBe(true);
     for (const shelf of shelves) {
       const summary = shelf.querySelector("summary") as HTMLElement;
@@ -607,7 +607,7 @@ Fixture description.
     const nav = document.querySelector(".guide-nav");
     expect(defaultShelfTitle).toBe("Start here");
     expect(
-      [...(nav?.querySelectorAll(":scope > .guide-shelf > summary > .guide-shelf-title") ?? [])].map(
+      [...(nav?.querySelectorAll(".guide-shelf > summary > .guide-shelf-title") ?? [])].map(
         (shelf) => shelf.textContent,
       ),
     ).toEqual(navShelfTitles);

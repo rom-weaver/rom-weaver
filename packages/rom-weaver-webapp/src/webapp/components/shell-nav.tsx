@@ -182,8 +182,8 @@ const SideNav = ({
 }) => (
   <nav aria-label={navLabel} className="side-nav">
     {sections.map((section) => (
-      <div className="nav-group" key={section.id}>
-        {section.title ? <p className="nav-group-label">{section.title}</p> : null}
+      <fieldset className="nav-group" key={section.id}>
+        {section.title ? <legend className="nav-group-label">{section.title}</legend> : null}
         {section.entries.map((entry) => (
           <div key={entry.id}>
             <NavRow className="nav-row" entry={entry} idPrefix={idPrefix} localizer={localizer} />
@@ -191,7 +191,7 @@ const SideNav = ({
         ))}
         {section.content}
         {section.id === "device" ? appearance : null}
-      </div>
+      </fieldset>
     ))}
   </nav>
 );
@@ -304,8 +304,8 @@ const MenuSheet = ({
       <div className="menu-sheet-body">
         {opened
           ? sections.map((section) => (
-              <div className="nav-group" key={section.id}>
-                {section.title ? <p className="nav-group-label">{section.title}</p> : null}
+              <fieldset className="nav-group" key={section.id}>
+                {section.title ? <legend className="nav-group-label">{section.title}</legend> : null}
                 {/* Tool rows pair up on phones. */}
                 <div className="nav-group-grid">
                   {section.entries.map((entry) => (
@@ -316,7 +316,7 @@ const MenuSheet = ({
                   {section.id === "device" ? appearance : null}
                 </div>
                 {section.content}
-              </div>
+              </fieldset>
             ))
           : null}
       </div>

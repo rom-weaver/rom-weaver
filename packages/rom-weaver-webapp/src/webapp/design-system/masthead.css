@@ -352,6 +352,9 @@
 .rw-app .nav-group {
   display: block;
   min-inline-size: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
 }
 .rw-app .nav-group + .nav-group {
   margin-block-start: var(--sp-m);
@@ -394,6 +397,13 @@
    group stay one level deep, with the audience switch standing in for the old
    Browser guides / CLI guides branches. */
 .rw-app .guide-group {
+  min-inline-size: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+.rw-app .guide-group-label {
+  padding: 0;
   margin: var(--sp-l) 8px var(--sp-xs);
   font-size: 0.75rem;
   font-weight: 700;
