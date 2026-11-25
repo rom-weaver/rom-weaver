@@ -190,6 +190,11 @@ export const WORKFLOW_ROUTE_LASTMOD_SOURCES = Object.freeze({
     "src/public/react/workflow-guides.ts",
     "src/webapp/components/workflow-about.tsx",
   ],
+  "create-m3u-playlist": [
+    "src/webapp/components/playlist-form.tsx",
+    "src/public/react/workflow-guides.ts",
+    "src/webapp/components/workflow-about.tsx",
+  ],
   "trim-rom": [
     "src/public/react/trim-form.tsx",
     "src/public/react/trim-form-view.tsx",
