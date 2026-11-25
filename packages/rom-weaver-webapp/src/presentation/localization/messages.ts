@@ -2027,6 +2027,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.playlist.renameDiscs": msg({ id: "ui.playlist.renameDiscs", message: "Rename the discs to {name}" }),
   "ui.playlist.cannotRename": msg({ id: "ui.playlist.cannotRename", message: "Can't rename these discs: {reason}" }),
+  "ui.playlist.cannotZip": msg({ id: "ui.playlist.cannotZip", message: "Can't make the ZIP: {reason}" }),
   "ui.playlist.openingFolder": msg({ id: "ui.playlist.openingFolder", message: "Opening folder…" }),
   "ui.playlist.openFolder": msg({ id: "ui.playlist.openFolder", message: "Open game folder" }),
   "ui.playlist.readingSheets": msg({ id: "ui.playlist.readingSheets", message: "Reading the disc sheets…" }),

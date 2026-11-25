@@ -154,6 +154,16 @@ const readOutput = async (output) => {
 };
 
 describe("planBrowserPlaylist ZIP", () => {
+  test("plans a ZIP for a folder that already holds one with the same name", async () => {
+    const request = ff7Request({ layout: "flat", rename: true });
+    const plan = await planBrowserPlaylist({
+      ...request,
+      files: [...request.files, at("Final Fantasy VII.zip", ["an earlier download"])],
+    });
+    expect(plan.bundle[0]).toEqual({ path: "Final Fantasy VII.m3u" });
+    expect(plan.bundle.some((file) => file.path.endsWith(".zip"))).toBe(false);
+  });
+
   test("lists each file of a renamed ZIP with its source from the picked folder", async () => {
     const plan = await planBrowserPlaylist(ff7Request({ layout: "flat", rename: true }));
     expect(plan.bundle[0]).toEqual({ path: "Final Fantasy VII.m3u" });

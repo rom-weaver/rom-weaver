@@ -32,6 +32,18 @@ type RuntimePlaylistInput = {
 const isStringArray = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((entry) => typeof entry === "string");
 
+type PlanRecord = ReturnType<typeof asRecord>;
+
+const isOptionalString = (value: unknown) => value === undefined || value === null || typeof value === "string";
+
+const isPlannedDisc = (disc: PlanRecord) => typeof disc?.path === "string" && typeof disc.game === "string";
+
+const isPlannedRename = (rename: PlanRecord) =>
+  typeof rename?.from === "string" && typeof rename.to === "string" && isOptionalString(rename.text);
+
+const isPlannedBundleFile = (file: PlanRecord) =>
+  typeof file?.path === "string" && isOptionalString(file.source) && isOptionalString(file.text);
+
 const parsePlaylistPlan = (value: unknown): PlaylistDryRunPlan => {
   const plan = asRecord(value);
   const discs = Array.isArray(plan?.discs) ? plan.discs.map(asRecord) : null;
@@ -43,19 +55,9 @@ const parsePlaylistPlan = (value: unknown): PlaylistDryRunPlan => {
       isStringArray(plan.entries) &&
       typeof plan.file_name === "string" &&
       typeof plan.text === "string" &&
-      discs?.every((disc) => typeof disc?.path === "string" && typeof disc.game === "string") &&
-      renames?.every(
-        (rename) =>
-          typeof rename?.from === "string" &&
-          typeof rename.to === "string" &&
-          (rename.text === undefined || rename.text === null || typeof rename.text === "string"),
-      ) &&
-      bundle?.every(
-        (file) =>
-          typeof file?.path === "string" &&
-          (file.source === undefined || file.source === null || typeof file.source === "string") &&
-          (file.text === undefined || file.text === null || typeof file.text === "string"),
-      )
+      discs?.every(isPlannedDisc) &&
+      renames?.every(isPlannedRename) &&
+      bundle?.every(isPlannedBundleFile)
     )
   ) {
     throw new Error("The playlist plan is missing or malformed.");
@@ -63,7 +65,7 @@ const parsePlaylistPlan = (value: unknown): PlaylistDryRunPlan => {
   return plan as unknown as PlaylistDryRunPlan;
 };
 
-/** Run the engine's `playlist` command; the plan and the real run differ only in `dryRun`. */
+/** Run the engine's `playlist` command, as a dry run that plans or a run that writes. */
 const runRomWeaverPlaylist = async (input: RuntimePlaylistInput, dryRun: boolean) => {
   const command = createRomWeaverCommand("playlist", {
     input: input.inputs,

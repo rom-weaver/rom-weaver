@@ -74,7 +74,7 @@ const SYSTEM_FILE_NAMES: ReadonlySet<string> = new Set([".ds_store", "thumbs.db"
 const PLAYLIST_ZIP_CODEC = "store";
 
 const CONTROL_CHARACTERS = /\p{Cc}/u;
-const PLAYLIST_FILE = /\.m3u8?$/i;
+const PLAYLIST_OUTPUT_FILE = /\.(?:m3u8?|zip)$/i;
 
 const isSystemFile = (path: string) => {
   const name = getBaseName(path);
@@ -119,9 +119,9 @@ const selectPlanFiles = (
   discs: readonly string[] | undefined,
   renameInPlace: boolean | undefined,
 ) => {
-  // An existing playlist would block the engine from writing a new one beside it, and a download
-  // never lands there. Renaming keeps it, so the plan refuses a name that is already taken.
-  const mounted = renameInPlace ? sources : sources.filter((source) => !PLAYLIST_FILE.test(source.path));
+  // An existing playlist or ZIP would block the engine from writing a new one beside it, and a download
+  // never lands there. Renaming keeps them, so the plan refuses a name that is already taken.
+  const mounted = renameInPlace ? sources : sources.filter((source) => !PLAYLIST_OUTPUT_FILE.test(source.path));
   const wanted = discs ? new Set(discs) : null;
   const inputs = mounted.filter((source) => (wanted ? wanted.has(source.path) : isPlaylistDisc(source.path)));
   if (!inputs.length) throw new Error("Add the game's disc files, such as .cue, .chd, or .iso files.");

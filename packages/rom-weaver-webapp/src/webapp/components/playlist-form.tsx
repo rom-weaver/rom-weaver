@@ -11,6 +11,7 @@ import type {
   planBrowserPlaylist,
 } from "../../platform/browser/browser-playlist-api.ts";
 import { checkGameName, type GameNameProblem } from "../../storage/browser/playlist-game-name.ts";
+import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
 import { getBaseName } from "../../storage/shared/path-utils.ts";
 import { canWritePlaylistFolders } from "../../storage/browser/playlist-folder-support.ts";
 import { Notice, RunButton } from "../../public/react/components/ds/feedback.tsx";
@@ -79,7 +80,8 @@ const getGameName = (plan: BrowserPlaylistPlan) => plan.file_name.replace(/\.m3u
 // Renaming in place changes the picked folder, so it needs a writable folder with every disc at its top
 // and the playlist beside the discs; any other rename or layout goes into a ZIP.
 const getOutputMode = ({ canRename, layout, plan, rename }: OutputChoices): OutputMode => {
-  if (rename && canRename && layout === "flat" && plan && isAllAtTop(plan)) return "in-place";
+  const fitsInPlace = canRename && layout === "flat" && !!plan && isAllAtTop(plan);
+  if (rename && fitsInPlace) return "in-place";
   return rename || layout !== "flat" ? "zip" : "m3u";
 };
 
@@ -169,15 +171,13 @@ const planChosenGame = async (request: PlanRequest, survey: BrowserPlaylistPlan,
   return planPlaylistDiscs(request, discs);
 };
 
-/** Plan the rename in place or the ZIP the choices ask for, or say why it cannot; an abort is rethrown. */
-const planOutput = async (
-  request: PlanRequest,
-  plan: BrowserPlaylistPlan,
-  mode: Exclude<OutputMode, "m3u">,
-  zip: PlaylistZipOptions,
-) => {
+/** What the Save step writes: a rename in place, else the ZIP the choices ask for, also when the playlist is saved alone. */
+const getPlannedOutput = (mode: OutputMode, plan: BrowserPlaylistPlan, zip: PlaylistZipOptions): PlannedOutput =>
+  mode === "in-place" ? { renameInPlace: true } : { name: getGameName(plan), zip };
+
+/** Plan the output, or say why it cannot be made; an abort is rethrown. */
+const planOutput = async (request: PlanRequest, plan: BrowserPlaylistPlan, output: PlannedOutput) => {
   try {
-    const output: PlannedOutput = mode === "in-place" ? { renameInPlace: true } : { name: getGameName(plan), zip };
     const outputPlan = await planPlaylistDiscs(
       request,
       plan.discs.map((disc) => disc.path),
@@ -188,6 +188,35 @@ const planOutput = async (
     if (isAbort(cause)) throw cause;
     return { outputPlan: null, reason: getErrorMessage(cause) };
   }
+};
+
+type PlanJob = {
+  request: PlanRequest;
+  cachedSurvey: BrowserPlaylistPlan | null;
+  choices: Omit<OutputChoices, "plan">;
+  /** False once a newer run has taken over. */
+  isCurrent: () => boolean;
+};
+
+type PlanReport = {
+  onSurvey: (survey: BrowserPlaylistPlan) => void;
+  onPlan: (plan: BrowserPlaylistPlan) => void;
+  onOutput: (output: { outputPlan: BrowserPlaylistPlan | null; reason: string }) => void;
+};
+
+/** Plan every disc, then the chosen game, then what the Save step writes, reporting each as it is ready. */
+const planPlaylistSource = async ({ request, cachedSurvey, choices, isCurrent }: PlanJob, report: PlanReport) => {
+  // Discs named only by number give the engine no game name, so a survey that failed unnamed runs again with the typed one.
+  const survey = cachedSurvey ?? (await planPlaylistDiscs(request));
+  if (!isCurrent()) return;
+  report.onSurvey(survey);
+  const plan = await planChosenGame(request, survey, !!cachedSurvey);
+  if (!isCurrent()) return;
+  report.onPlan(plan);
+  const mode = getOutputMode({ ...choices, plan });
+  const zip = { layout: choices.layout, rename: choices.rename };
+  const output = await planOutput(request, plan, getPlannedOutput(mode, plan, zip));
+  if (isCurrent()) report.onOutput(output);
 };
 
 /** The hint under the save options; empty when there is nothing to say. */
@@ -289,7 +318,11 @@ const RenameChoice = ({ renaming, disabled, name, reason, onChange }: RenameChoi
           {after}
         </span>
       </label>
-      {reason ? <Notice level="warn">{localizer.message("ui.playlist.cannotRename", { reason })}</Notice> : null}
+      {reason ? (
+        <Notice level="warn">
+          {localizer.message(renaming ? "ui.playlist.cannotRename" : "ui.playlist.cannotZip", { reason })}
+        </Notice>
+      ) : null}
     </>
   );
 };
@@ -525,6 +558,9 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
   const plannedSourceRef = useRef<PlaylistSource | null>(null);
   const busyRef = useRef(false);
   const zipAbortRef = useRef<AbortController | null>(null);
+  // `saveAs` returns once the browser starts reading the file, so the last ZIP MUST stay in storage
+  // until it is replaced; disposing it at once cancels a large download mid-transfer.
+  const zipOutputRef = useRef<PublicOutput | null>(null);
   const nameProblem = checkGameName(name);
 
   useEffect(() => {
@@ -541,7 +577,18 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
     );
   }, [busy, done, error, localizer, planning, source]);
   useEffect(() => () => setWorkbenchActivity(PLAYLIST_ACTIVITY_KEY, { state: "idle" }), []);
-  useEffect(() => () => zipAbortRef.current?.abort(), []);
+  const disposeZip = useCallback(() => {
+    const old = zipOutputRef.current;
+    zipOutputRef.current = null;
+    void old?.dispose();
+  }, []);
+  useEffect(
+    () => () => {
+      zipAbortRef.current?.abort();
+      disposeZip();
+    },
+    [disposeZip],
+  );
 
   const games = useMemo(() => [...new Set((survey?.discs ?? []).map((disc) => disc.game))], [survey]);
   const allAtTop = !!plan && isAllAtTop(plan);
@@ -574,26 +621,28 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
           typedName: nameProblem ? "" : name.trim(),
         };
         try {
-          // Discs named only by number give the engine no game name, so a survey that failed unnamed runs again with the typed one.
-          const cachedSurvey = surveyRef.current;
-          const all = cachedSurvey ?? (await planPlaylistDiscs(request));
-          if (planRunRef.current !== run) return;
-          if (!request.typedName) surveyRef.current = all;
-          setSurvey(all);
-          const next = await planChosenGame(request, all, !!cachedSurvey);
-          if (planRunRef.current !== run) return;
-          setPlan(next);
-          setError("");
-          const outputMode = getOutputMode({ canRename, layout, plan: next, rename });
-          if (outputMode === "m3u") {
-            setOutputPlan(null);
-            setOutputReason("");
-            return;
-          }
-          const planned = await planOutput(request, next, outputMode, { layout, rename });
-          if (planRunRef.current !== run) return;
-          setOutputPlan(planned.outputPlan);
-          setOutputReason(planned.reason);
+          await planPlaylistSource(
+            {
+              cachedSurvey: surveyRef.current,
+              choices: { canRename, layout, rename },
+              isCurrent: () => planRunRef.current === run,
+              request,
+            },
+            {
+              onOutput: ({ outputPlan: planned, reason }) => {
+                setOutputPlan(planned);
+                setOutputReason(reason);
+              },
+              onPlan: (next) => {
+                setPlan(next);
+                setError("");
+              },
+              onSurvey: (all) => {
+                if (!request.typedName) surveyRef.current = all;
+                setSurvey(all);
+              },
+            },
+          );
         } catch (cause) {
           if (planRunRef.current !== run || isAbort(cause)) return;
           setPlan(null);
@@ -610,21 +659,25 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
     };
   }, [canRename, game, layout, name, nameProblem, rename, source]);
 
-  const replaceSource = useCallback((next: PlaylistSource | null) => {
-    planRunRef.current += 1;
-    surveyRef.current = null;
-    setSource(next);
-    setSurvey(null);
-    setPlan(null);
-    setOutputPlan(null);
-    setOutputReason("");
-    // Renaming moves files, so a new folder starts without the last folder's choice.
-    setRename(false);
-    setGame("");
-    setError("");
-    setDone("");
-    setPlanning(false);
-  }, []);
+  const replaceSource = useCallback(
+    (next: PlaylistSource | null) => {
+      planRunRef.current += 1;
+      surveyRef.current = null;
+      disposeZip();
+      setSource(next);
+      setSurvey(null);
+      setPlan(null);
+      setOutputPlan(null);
+      setOutputReason("");
+      // Renaming moves files, so a new folder starts without the last folder's choice.
+      setRename(false);
+      setGame("");
+      setError("");
+      setDone("");
+      setPlanning(false);
+    },
+    [disposeZip],
+  );
 
   const addFiles = useCallback(
     (files: File[]) => {
@@ -731,14 +784,15 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
           signal: abort.signal,
           zip: { layout, rename },
         });
-        try {
-          // The write can finish after a cancel or an unmount aborted the signal.
-          if (abort.signal.aborted) return;
-          await output.saveAs({ fileName: `${name}.zip`, interactive: true });
-          setDone(localizer.message("ui.playlist.doneZip", { fileName: `${name}.zip` }));
-        } finally {
+        // The write can finish after a cancel or an unmount aborted the signal.
+        if (abort.signal.aborted) {
           await output.dispose();
+          return;
         }
+        disposeZip();
+        zipOutputRef.current = output;
+        await output.saveAs({ fileName: `${name}.zip`, interactive: true });
+        setDone(localizer.message("ui.playlist.doneZip", { fileName: `${name}.zip` }));
       } catch (cause) {
         if (!abort.signal.aborted) throw cause;
       } finally {
@@ -748,12 +802,17 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
     });
   };
 
+  const locked = !!busy;
+  const actionsReady = !!plan && !planning && !locked && !nameProblem;
+  // The ZIP is planned in every mode but a rename in place, so a clash that stops it holds the download.
+  const zipReady = actionsReady && (mode === "in-place" || !!outputPlan);
+
   useAgentWorkflow(PLAYLIST_ACTIVITY_KEY, {
     actions: {
       downloadZip: {
         description:
           "Download a ZIP of the playlist and the discs, renamed and arranged as the page's Rename and Layout choices say.",
-        enabled: !!plan && !busy && !planning && !nameProblem && (mode !== "zip" || !!outputPlan),
+        enabled: zipReady,
         execute: () => downloadZip(),
       },
     },
@@ -769,10 +828,7 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
     }),
   });
 
-  const locked = !!busy;
-  const actionsReady = !!plan && !planning && !locked && !nameProblem;
   const folderHint = getFolderHint(localizer, { allAtTop, hasFolder: !!source?.directory, plan });
-  const renameNote = mode === "m3u" ? "" : outputReason;
 
   return (
     <section className="panel" id="playlist-container">
@@ -840,7 +896,7 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
             <ErrorNotice error={error} onDismiss={() => setError("")} />
           </StepSection>
           <StepSection num="0x03" title={localizer.message("ui.playlist.stepSave")} woven={!!done}>
-            <RenameChoice disabled={locked} name={name} onChange={setRename} reason={renameNote} renaming={rename} />
+            <RenameChoice disabled={locked} name={name} onChange={setRename} reason={outputReason} renaming={rename} />
             <LayoutChoice layout={layout} locked={locked} onChange={setLayout} />
             <RenameCards renamePlan={mode === "in-place" ? outputPlan : null} />
             <BundleCards zipPlan={mode === "zip" ? outputPlan : null} />
@@ -855,7 +911,7 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
                 onDownloadZip={downloadZip}
                 onRename={renameDiscs}
                 onSaveToFolder={saveToFolder}
-                outputReady={mode === "m3u" || !!outputPlan}
+                outputReady={!!outputPlan}
                 plan={plan}
                 zipPercent={zipPercent}
               />

@@ -34,7 +34,7 @@ The ZIP works in every browser. It holds the playlist, copies of the discs, and 
 
 When the folder holds discs of more than one game, choose the game in the **Game** list.
 
-When the discs are in subfolders of the folder you opened, each line of the playlist includes the subfolder.
+When the discs are in subfolders of the folder you opened, the **Beside the discs** layout puts every disc at the top of the ZIP, so its playlist lists bare file names. A playlist saved with **Save into folder** keeps the subfolders, so each of its lines includes the subfolder.
 
 Most emulators name save files after the playlist. Saves made while playing one disc directly keep that disc's name, so rename them to match the playlist.
 

@@ -593,11 +593,12 @@ test("WebappRoot keeps the beta workflows out of the nav while the setting is of
     .toEqual(["Apply", "Create", "Identify", "Test", "Menu"]);
   expect(navRow("PPF undo")).toBeTruthy();
   expect(navRow("PPF undo").querySelector(".nav-beta")).toBeNull();
-  // Trim is a regular workflow: always listed, no beta chip. Save Editor and Make playlist stay gated.
+  // Trim and Make playlist are regular workflows: always listed, no beta chip. Save Editor stays gated.
   expect(navRow("Trim")).toBeTruthy();
   expect(navRow("Trim").querySelector(".nav-beta")).toBeNull();
   expect(navRow("Save Editor")).toBeFalsy();
-  expect(navRow("Playlist")).toBeFalsy();
+  expect(navRow("Playlist")).toBeTruthy();
+  expect(navRow("Playlist").querySelector(".nav-beta")).toBeNull();
   expect(navRow("Identify")).toBeTruthy();
   navRow("Identify").click();
   await expect.poll(() => document.querySelector("#identify-input-picker") !== null).toBe(true);

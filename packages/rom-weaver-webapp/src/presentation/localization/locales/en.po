@@ -2300,6 +2300,11 @@ msgstr "Can't rename these discs: {reason}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.playlist.cannotZip"
+msgstr "Can't make the ZIP: {reason}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.playlist.openingFolder"
 msgstr "Opening folder…"
 

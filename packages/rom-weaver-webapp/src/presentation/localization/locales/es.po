@@ -2300,6 +2300,11 @@ msgstr "No se pueden renombrar estos discos: {reason}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.playlist.cannotZip"
+msgstr "No se puede crear el ZIP: {reason}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.playlist.openingFolder"
 msgstr "Abriendo carpeta…"
 
