@@ -1375,6 +1375,32 @@ impl CliApp {
         ))
     }
 
+    /// Reject a `--codec` the `.zip` handler would reject, so a dry run fails where the real run does.
+    pub(super) fn validate_playlist_zip_codec(&self, job: &PlaylistJob, codec: &str) -> Result<()> {
+        let handler = self.containers.find_creatable_by_name("zip")?;
+        let input = job
+            .entries
+            .iter()
+            .find_map(|entry| match &entry.source {
+                BundleSource::File(path) => Some(path.clone()),
+                BundleSource::Text(_) | BundleSource::Sheet { .. } => None,
+            })
+            .ok_or_else(|| {
+                RomWeaverError::Validation("the .zip output holds no disc file".to_string())
+            })?;
+        let request = ContainerCreateRequest {
+            inputs: vec![input],
+            archive_names: Some(vec![job.playlist_name.clone()]),
+            output: job.output.clone(),
+            format: handler.descriptor().name.to_string(),
+            codec: Some(codec.to_string()),
+            level: None,
+            rvz_block_size: None,
+            parent: None,
+        };
+        handler.validate_create(&request, &self.context(ThreadBudget::default()))
+    }
+
     fn write_playlist_zip(&self, job: &PlaylistJob, codec: Option<String>) -> Result<()> {
         let context = self.context(ThreadBudget::default());
         let mut staged = Vec::new();

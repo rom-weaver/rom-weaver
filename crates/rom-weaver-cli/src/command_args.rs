@@ -3642,7 +3642,7 @@ pub struct PlaylistCommand {
         arg(
             long,
             value_name = "CODEC",
-            help = "Compression of a .zip output: store or deflate. Defaults to deflate"
+            help = "Compression of a .zip output: store, deflate, or zstd. Defaults to deflate"
         )
     )]
     #[serde(default)]

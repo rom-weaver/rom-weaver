@@ -156,7 +156,13 @@ impl CliApp {
                 return outcome;
             }
         }
-        match super::playlist::plan_job(args) {
+        let planned = super::playlist::plan_job(args).and_then(|job| {
+            if let Some(codec) = args.codec.as_deref() {
+                self.validate_playlist_zip_codec(&job, codec)?;
+            }
+            Ok(job)
+        });
+        match planned {
             Ok(job) => {
                 let plan = json!(job.dry_run_plan());
                 self.plan_report(

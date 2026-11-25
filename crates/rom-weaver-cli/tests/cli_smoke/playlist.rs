@@ -190,6 +190,27 @@ fn playlist_zip_codec_picks_how_the_zip_is_compressed() {
     );
     assert_eq!(json["status"], "failed", "{json}");
     assert!(!unknown.path().exists());
+    let json = run_single_json_event(
+        &playlist_args(
+            &[cue],
+            unknown.path().to_str().expect("p"),
+            &["--codec", "nope", "--dry-run"],
+        ),
+        1,
+    );
+    assert_eq!(
+        json["status"], "failed",
+        "a dry run refuses the codec too: {json}"
+    );
+    let json = run_single_json_event(
+        &playlist_args(
+            &[cue],
+            unknown.path().to_str().expect("p"),
+            &["--codec", "store", "--dry-run"],
+        ),
+        0,
+    );
+    assert_eq!(json["status"], "succeeded", "{json}");
 }
 
 #[test]
