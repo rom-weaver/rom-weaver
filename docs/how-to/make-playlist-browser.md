@@ -1,53 +1,48 @@
 # Make an M3U playlist in the browser
 
-Use Make playlist to list every disc of a multi-disc game in an `.m3u` file, so an emulator such as RetroArch can change discs. In any browser, download the playlist, or a ZIP that holds the playlist and the discs, renamed and arranged for your frontend if you choose. In Chrome or Edge on a computer, you can also save the playlist into the game's folder and rename the discs where they are.
+Use Make playlist to list every disc of a multi-disc game in an `.m3u` file, so an emulator such as RetroArch can change discs. In any browser, download a ZIP that holds the playlist and the discs, renamed and arranged for your frontend if you choose. In Chrome or Edge on a computer, you can also save the playlist into the game's folder and rename the discs where they are.
 
 <!-- START doctoc -->
 ## Table of contents
 
-- [Download a playlist](#download-a-playlist)
-- [Download the discs as a ZIP](#download-the-discs-as-a-zip)
+- [Download the playlist and discs as a ZIP](#download-the-playlist-and-discs-as-a-zip)
 - [Save it into the game's folder](#save-it-into-the-games-folder)
 - [Rename the discs](#rename-the-discs)
 
 <!-- END doctoc -->
 
-## Download a playlist
+<a id="download-a-playlist"></a>
+
+<a id="download-the-discs-as-a-zip"></a>
+
+## Download the playlist and discs as a ZIP
+
+The ZIP works in every browser. It holds the playlist, copies of the discs, and the track files their `.cue` or `.gdi` sheets name. Other files in the folder, such as a LibCrypt `.sbi`, are left out. The discs you picked are not changed.
 
 1. Open [Make playlist](https://rom-weaver.com/create-m3u-playlist).
 2. Drop the discs of one game, with the track files their sheets name, or select **Open game folder** and pick the folder that holds them.
 3. Check the disc list. Discs are ordered by the number in names such as `Disc 1`, `(Disc 2)`, and `.disc02`. Track files such as `.bin` are not listed as discs of their own.
-4. Type a **Game name** to name the playlist, or keep the name taken from the first disc. Discs named only by number, such as `Disc 1.cue`, give no name, so type one.
-5. Select **Download `<game>.m3u`** (the playlist download button), then save the `.m3u` in the folder that holds the discs.
-
-When the folder holds discs of more than one game, choose the game in the **Game** list.
-
-When the discs are in subfolders of the folder you opened, each line includes the subfolder. Save the playlist in the folder you opened, not beside the discs.
-
-Most emulators name save files after the playlist. Saves made while playing one disc directly keep that disc's name, so rename them to match the playlist.
-
-## Download the discs as a ZIP
-
-The ZIP works in every browser. It holds the playlist, copies of the discs, and the track files their `.cue` or `.gdi` sheets name. Other files in the folder, such as a LibCrypt `.sbi`, are left out. The discs you picked are not changed.
-
-1. Drop the discs of one game, or select **Open game folder** and pick the folder that holds them.
-2. Type the **Game name**, or keep the name taken from the first disc.
-3. To rename the discs, turn on **Rename the discs to `<game>` (Disc N)**. Each `.cue` or `.gdi` in the ZIP is rewritten to name its renamed track files.
-4. Choose the **Layout** your frontend reads:
+4. Type a **Game name** to name the playlist and the ZIP, or keep the name taken from the first disc. Discs named only by number, such as `Disc 1.cue`, give no name, so type one.
+5. To rename the discs, turn on **Rename the discs to `<game>` (Disc N)**. Each `.cue` or `.gdi` in the ZIP is rewritten to name its renamed track files.
+6. Choose the **Layout** your frontend reads:
    - **Beside the discs** (RetroArch, Batocera, Recalbox): the playlist and discs side by side.
    - **In a game folder** (MinUI, muOS): a `<game>` folder that holds the playlist and discs.
    - **In a .m3u folder** (ES-DE, RetroDECK): a `<game>.m3u` folder that holds the playlist and discs.
    - **One folder per disc** (igir): the playlist beside one folder for each disc.
-5. Select **Download `<game>.zip`**. Select **Cancel** to stop; no ZIP is saved.
-6. Unzip it where your frontend reads games.
+7. Select **Download `<game>.zip`**. Select **Cancel** to stop; no ZIP is saved.
+8. Unzip it where your frontend reads games.
+
+When the folder holds discs of more than one game, choose the game in the **Game** list.
+
+When the discs are in subfolders of the folder you opened, each line of the playlist includes the subfolder.
+
+Most emulators name save files after the playlist. Saves made while playing one disc directly keep that disc's name, so rename them to match the playlist.
 
 The ZIP is stored without compression. The page builds it in the browser's own storage before the download starts, so it needs free space about the size of the discs. If storage runs out, the page reports it and removes the partial ZIP.
 
-When the discs are in subfolders, or the folder was not opened in Chrome or Edge, **Rename** and **Layout** always produce a ZIP.
-
 ## Save it into the game's folder
 
-Saving into a folder needs Chrome or Edge on a computer. Other browsers show **Save into folder** disabled; download the playlist or the ZIP instead.
+Saving into a folder needs Chrome or Edge on a computer. Other browsers show **Save into folder** disabled; download the ZIP instead.
 
 1. Select **Open game folder** and pick the game's folder.
 2. Select **Save into folder**, and allow the browser to change files in that folder when it asks.
@@ -56,7 +51,7 @@ The playlist is saved next to the folder's other files. It never replaces a file
 
 ## Rename the discs
 
-Renaming the files in the folder needs Chrome or Edge on a computer, the game's folder opened, every disc in that folder itself, and the **Beside the discs** layout. In every other case, turning on **Rename the discs** renames copies in the ZIP instead; see [Download the discs as a ZIP](#download-the-discs-as-a-zip).
+Renaming the files in the folder needs Chrome or Edge on a computer, the game's folder opened, every disc in that folder itself, and the **Beside the discs** layout. In every other case, turning on **Rename the discs** renames copies in the ZIP instead; see [Download the playlist and discs as a ZIP](#download-the-playlist-and-discs-as-a-zip).
 
 1. Select **Open game folder** and pick the game's folder.
 2. Type the **Game name**.

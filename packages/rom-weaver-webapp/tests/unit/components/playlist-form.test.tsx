@@ -2,12 +2,14 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { planBrowserPlaylist } from "../../../src/platform/browser/browser-playlist-api.ts";
+import { preloadCatalog } from "../../../src/presentation/localization/index.ts";
+import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
 import { PlaylistForm } from "../../../src/webapp/components/playlist-form.tsx";
 import { isFilePickerOpen } from "../../../src/webapp/file-picker-state.ts";
 
 const support = vi.hoisted(() => ({
   canWrite: false,
-  download: vi.fn(async (_blob: Blob, _name: string, _options: unknown) => undefined),
+  renameFolder: vi.fn(async () => undefined),
   writeZip: vi.fn(),
 }));
 
@@ -27,7 +29,10 @@ vi.mock("../../../src/platform/browser/browser-playlist-api.ts", () => ({
   planBrowserPlaylist: vi.fn(async () => PLAN),
   writeBrowserPlaylistZip: support.writeZip,
 }));
-vi.mock("../../../src/platform/browser/browser-download.ts", () => ({ triggerBrowserDownload: support.download }));
+vi.mock("../../../src/storage/browser/playlist-folder-write.ts", () => ({
+  renamePlaylistFolder: support.renameFolder,
+  requestPlaylistFolderAccess: vi.fn(async () => undefined),
+}));
 vi.mock("../../../src/storage/browser/playlist-folder-support.ts", () => ({
   canWritePlaylistFolders: () => support.canWrite,
 }));
@@ -38,7 +43,7 @@ const dropDiscs = async () => {
       files: [new File(["two"], "Game (Disc 2).cue"), new File(["one"], "Game (Disc 1).cue")],
     },
   });
-  const download = await screen.findByRole("button", { name: "Download Game.m3u" });
+  const download = await screen.findByRole("button", { name: "Download Game.zip" });
   await waitFor(() => expect((download as HTMLButtonElement).disabled).toBe(false));
   return download;
 };
@@ -62,14 +67,16 @@ const folderHandle = (name: string, tree: FolderTree): FileSystemDirectoryHandle
 beforeEach(() => {
   vi.mocked(planBrowserPlaylist).mockImplementation(async () => PLAN);
   support.canWrite = false;
-  support.download.mockClear();
   support.writeZip.mockReset();
+  support.renameFolder.mockClear();
 });
 
 const zipOutput = () => ({ dispose: vi.fn(async () => undefined), saveAs: vi.fn(async () => undefined) });
 
 describe("PlaylistForm", () => {
-  it("downloads the playlist in a browser that cannot change folders, and offers the ZIP for renaming", async () => {
+  it("downloads the discs as they are in a ZIP, in a browser that cannot change folders", async () => {
+    const output = zipOutput();
+    support.writeZip.mockResolvedValue(output);
     render(<PlaylistForm onSessionChange={vi.fn()} />);
     const download = await dropDiscs();
 
@@ -79,10 +86,12 @@ describe("PlaylistForm", () => {
     expect((screen.getByRole("checkbox", { name: /Rename the discs/ }) as HTMLInputElement).disabled).toBe(false);
     expect(screen.getByText(/In any browser, you can download a ZIP/)).toBeTruthy();
 
+    expect(screen.queryByRole("button", { name: /\.m3u$/ })).toBeNull();
+
     fireEvent.click(download);
-    await screen.findByText("Downloaded Game.m3u");
-    expect(support.download).toHaveBeenCalledWith(expect.any(Blob), "Game.m3u", { interactive: true });
-    expect(await support.download.mock.calls[0]?.[0].text()).toBe(PLAN.text);
+    await screen.findByText("Downloaded Game.zip");
+    expect(support.writeZip).toHaveBeenCalledWith(expect.objectContaining({ zip: { layout: "flat", rename: false } }));
+    expect(output.saveAs).toHaveBeenCalledWith({ fileName: "Game.zip", interactive: true });
   });
 
   it("asks for the game's folder before saving into it or renaming in Chrome and Edge", async () => {
@@ -95,7 +104,7 @@ describe("PlaylistForm", () => {
     expect(screen.queryByText(/In any browser, you can download a ZIP/)).toBeNull();
   });
 
-  it("waits for the new plan before offering a download after the name changes", async () => {
+  it("waits for the new plan before offering the ZIP after the name changes", async () => {
     render(<PlaylistForm onSessionChange={vi.fn()} />);
     const download = await dropDiscs();
 
@@ -104,7 +113,7 @@ describe("PlaylistForm", () => {
     await waitFor(() => expect((download as HTMLButtonElement).disabled).toBe(false));
   });
 
-  it("offers the download again when the next folder keeps its discs in subfolders", async () => {
+  it("goes back to the ZIP when the next folder keeps its discs in subfolders", async () => {
     support.canWrite = true;
     const folders = [
       folderHandle("A", { "Game (Disc 1).cue": "one", "Game (Disc 2).cue": "two" }),
@@ -126,8 +135,40 @@ describe("PlaylistForm", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "Open game folder" }));
       await screen.findByText("Disc 2/Game (Disc 2).cue");
-      expect(await screen.findByRole("button", { name: "Download Game.m3u" })).toBeTruthy();
+      await waitFor(() => expect(screen.queryByRole("button", { name: "Rename discs and save playlist" })).toBeNull());
+      expect(screen.getByRole("button", { name: "Download Game.zip" })).toBeTruthy();
       expect((screen.getByRole("checkbox", { name: /Rename the discs/ }) as HTMLInputElement).checked).toBe(false);
+    } finally {
+      Reflect.deleteProperty(window, "showDirectoryPicker");
+    }
+  });
+
+  it.each([
+    [1, "Renamed 1 file and saved Game.m3u in A"],
+    [2, "Renamed 2 files and saved Game.m3u in A"],
+  ])("renames the discs where they are and counts %i changed file(s)", async (count, message) => {
+    support.canWrite = true;
+    const folder = folderHandle("A", { "Game (Disc 1).cue": "one", "Game (Disc 2).cue": "two" });
+    Object.defineProperty(window, "showDirectoryPicker", { configurable: true, value: async () => folder });
+    const renames = [
+      { from: "Game CD1.cue", to: "Game (Disc 1).cue" },
+      { from: "Game CD2.cue", to: "Game (Disc 2).cue" },
+    ].slice(0, count);
+    vi.mocked(planBrowserPlaylist).mockImplementation(async ({ renameInPlace }) =>
+      renameInPlace ? { ...PLAN, renames } : PLAN,
+    );
+    try {
+      render(<PlaylistForm onSessionChange={vi.fn()} />);
+      fireEvent.click(screen.getByRole("button", { name: "Open game folder" }));
+      const renameDiscs = await screen.findByRole("checkbox", { name: /Rename the discs/ });
+      await waitFor(() => expect((renameDiscs as HTMLInputElement).disabled).toBe(false));
+      fireEvent.click(renameDiscs);
+      const rename = await screen.findByRole("button", { name: "Rename discs and save playlist" });
+      await waitFor(() => expect((rename as HTMLButtonElement).disabled).toBe(false));
+
+      fireEvent.click(rename);
+      await screen.findByText(message);
+      expect(support.renameFolder).toHaveBeenCalledWith(expect.objectContaining({ renames }));
     } finally {
       Reflect.deleteProperty(window, "showDirectoryPicker");
     }
@@ -191,7 +232,6 @@ describe("PlaylistForm", () => {
       expect.objectContaining({ name: "Game", zip: { layout: "m3u-folder", rename: true } }),
     );
     expect(screen.getByText("← Game CD1.cue")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Download Game.m3u" })).toBeNull();
     const download = screen.getByRole("button", { name: "Download Game.zip" });
     await waitFor(() => expect((download as HTMLButtonElement).disabled).toBe(false));
 
@@ -208,18 +248,6 @@ describe("PlaylistForm", () => {
     expect(output.dispose).toHaveBeenCalled();
   });
 
-  it("offers the ZIP of the discs as they are beside the playlist download", async () => {
-    const output = zipOutput();
-    support.writeZip.mockResolvedValue(output);
-    render(<PlaylistForm onSessionChange={vi.fn()} />);
-    await dropDiscs();
-
-    fireEvent.click(screen.getByRole("button", { name: "Download Game.zip" }));
-    await screen.findByText("Downloaded Game.zip");
-    expect(support.writeZip).toHaveBeenCalledWith(expect.objectContaining({ zip: { layout: "flat", rename: false } }));
-    expect(support.download).not.toHaveBeenCalled();
-  });
-
   it("says why the discs cannot be renamed into a ZIP, and holds the download", async () => {
     vi.mocked(planBrowserPlaylist).mockImplementation(async ({ zip }) => {
       if (zip) throw new Error("`Game.mds` cannot be renamed");
@@ -231,6 +259,15 @@ describe("PlaylistForm", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: /Rename the discs/ }));
     await screen.findByText("Can't rename these discs: `Game.mds` cannot be renamed");
     expect((screen.getByRole("button", { name: "Download Game.zip" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("says why a game name cannot be used, and holds the ZIP", async () => {
+    render(<PlaylistForm onSessionChange={vi.fn()} />);
+    const download = await dropDiscs();
+
+    fireEvent.change(screen.getByLabelText("Game name"), { target: { value: "CON" } });
+    await screen.findByText('Windows reserves the name "CON".');
+    expect((download as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("cancels a ZIP being written without an error or a saved file", async () => {
@@ -271,6 +308,26 @@ describe("PlaylistForm", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull());
     expect(screen.queryByText(/cancelled by the engine/)).toBeNull();
+  });
+
+  it("shows its labels in the chosen language", async () => {
+    await preloadCatalog("de");
+    render(
+      <RomWeaverSettingsProvider settings={{ language: "de" }}>
+        <PlaylistForm onSessionChange={vi.fn()} />
+      </RomWeaverSettingsProvider>,
+    );
+    fireEvent.change(screen.getByLabelText("Discs eines Spiels hier ablegen"), {
+      target: { files: [new File(["two"], "Game (Disc 2).cue"), new File(["one"], "Game (Disc 1).cue")] },
+    });
+
+    expect(await screen.findByRole("button", { name: "Game.zip herunterladen" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Spielordner öffnen" })).toBeTruthy();
+    expect(screen.getByLabelText("Spielname")).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Anordnung" })).toBeTruthy();
+    expect(screen.getByText("Speichern")).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: /Discs umbenennen in/ })).toBeTruthy();
+    expect(screen.getByText(/In jedem Browser kannst du eine ZIP-Datei/)).toBeTruthy();
   });
 
   it("opens the folder picker when the button is clicked before the page has checked for support", async () => {

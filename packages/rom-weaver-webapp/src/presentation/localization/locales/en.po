@@ -2211,7 +2211,202 @@ msgstr "Download requested"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.about.playlistBody3"
-msgstr "Download the playlist, or a ZIP of the playlist and the discs, renamed and arranged for your frontend. In Chrome or Edge on a computer you can also save the playlist into the game's folder and rename the discs there. Nothing is uploaded."
+msgstr "Download a ZIP of the playlist and the discs, renamed and arranged for your frontend. In Chrome or Edge on a computer you can also save the playlist into the game's folder and rename the discs there. Nothing is uploaded."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.layoutFlat"
+msgstr "Beside the discs (RetroArch, Batocera, Recalbox)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.layoutFolder"
+msgstr "In a game folder (MinUI, muOS)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.layoutM3uFolder"
+msgstr "In a .m3u folder (ES-DE, RetroDECK)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.layoutDiscFolders"
+msgstr "One folder per disc (igir)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.layout"
+msgstr "Layout"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.folderTooLarge"
+msgstr "\"{folder}\" holds more than {max} files. Pick the folder of one game."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.activityStage"
+msgstr "Make playlist"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.hintOpenFolder"
+msgstr "Open the game's folder to save the playlist into it or rename its discs."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.hintSubfolders"
+msgstr "The discs are in subfolders, so the playlist lists their paths. Save it into the folder you opened."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.game"
+msgstr "Game"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.gameName"
+msgstr "Game name"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.nameCharacters"
+msgstr "A game name cannot contain < > : \" / \\ | ? or *."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.nameWindows"
+msgstr "Windows reserves the name \"{name}\"."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.nameDot"
+msgstr "A game name cannot end with a dot."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.nameLength"
+msgstr "That game name is too long for a file name."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.renameDiscs"
+msgstr "Rename the discs to {name}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.cannotRename"
+msgstr "Can't rename these discs: {reason}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.openingFolder"
+msgstr "Opening folder…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.openFolder"
+msgstr "Open game folder"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.readingSheets"
+msgstr "Reading the disc sheets…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.discNumber"
+msgstr "Disc {n}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.supportNote"
+msgstr "Saving into a folder, or renaming discs where they are, needs Chrome or Edge on a computer. In any browser, you can download a ZIP with the playlist and the discs."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.zipDownload"
+msgstr "Download {fileName}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.zipCreating"
+msgstr "Creating {fileName}…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.zipCreatingPercent"
+msgstr "Creating {fileName}… {percent}%"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.renamingDiscs"
+msgstr "Renaming discs…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.renameAndSave"
+msgstr "Rename discs and save playlist"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.saving"
+msgstr "Saving…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.saveToFolder"
+msgstr "Save into folder"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.doneSaved"
+msgstr "Saved {fileName} in {folder}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.doneRenamed"
+msgstr "{count, plural, one {Renamed # file and saved {fileName} in {folder}} other {Renamed # files and saved {fileName} in {folder}}}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.doneZip"
+msgstr "Downloaded {fileName}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.addDiscs"
+msgstr "Replace the discs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.dropDiscs"
+msgstr "Drop the discs of one game"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.tapDiscs"
+msgstr "Tap to add the discs of one game"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.dropInfo"
+msgstr "A playlist lists each disc of a multi-disc game, so an emulator can change discs."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.discFiles"
+msgstr "Disc files"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.stepPlaylist"
+msgstr "Playlist"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.stepSave"
+msgstr "Save"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

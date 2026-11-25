@@ -1,14 +1,16 @@
-import { Archive, Download, FolderOpen, FolderPen, Save } from "lucide-react";
+import { Archive, FolderOpen, FolderPen, Save } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import { getErrorMessage } from "../../lib/errors.ts";
+import type { MessageId } from "../../presentation/localization/catalog.ts";
+import type { Localizer } from "../../presentation/localization/index.ts";
 import type {
   BrowserPlaylistPlan,
   PlaylistSourceFile,
   PlaylistZipOptions,
   planBrowserPlaylist,
 } from "../../platform/browser/browser-playlist-api.ts";
-import { checkGameName } from "../../storage/browser/playlist-game-name.ts";
+import { checkGameName, type GameNameProblem } from "../../storage/browser/playlist-game-name.ts";
 import { getBaseName } from "../../storage/shared/path-utils.ts";
 import { canWritePlaylistFolders } from "../../storage/browser/playlist-folder-support.ts";
 import { Notice, RunButton } from "../../public/react/components/ds/feedback.tsx";
@@ -17,6 +19,7 @@ import { GhostSteps } from "../../public/react/components/ds/ghost-steps.tsx";
 import { StepSection } from "../../public/react/components/ds/layout.tsx";
 import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-zone.tsx";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
+import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { WORKFLOW_GUIDES } from "../../public/react/workflow-guides.ts";
 import type { PlaylistLayout } from "../../wasm/generated/rom-weaver-rust-types.d.ts";
 import { useAgentWorkflow } from "../agent/workflow-registry.ts";
@@ -28,12 +31,22 @@ const MAX_FOLDER_DEPTH = 3;
 const MAX_FOLDER_FILES = 2000;
 const PLAN_DELAY_MS = 250;
 
-const PLAYLIST_LAYOUTS: ReadonlyArray<{ layout: PlaylistLayout; label: string }> = [
-  { label: "Beside the discs (RetroArch, Batocera, Recalbox)", layout: "flat" },
-  { label: "In a game folder (MinUI, muOS)", layout: "folder" },
-  { label: "In a .m3u folder (ES-DE, RetroDECK)", layout: "m3u-folder" },
-  { label: "One folder per disc (igir)", layout: "disc-folders" },
+// Stands in for the game's name while a message is split around it, so the name can be styled in place.
+const NAME_SLOT = "\uE000";
+
+const PLAYLIST_LAYOUTS: ReadonlyArray<{ layout: PlaylistLayout; label: MessageId }> = [
+  { label: "ui.playlist.layoutFlat", layout: "flat" },
+  { label: "ui.playlist.layoutFolder", layout: "folder" },
+  { label: "ui.playlist.layoutM3uFolder", layout: "m3u-folder" },
+  { label: "ui.playlist.layoutDiscFolders", layout: "disc-folders" },
 ];
+
+const NAME_PROBLEM_MESSAGES: Record<GameNameProblem, MessageId> = {
+  characters: "ui.playlist.nameCharacters",
+  dot: "ui.playlist.nameDot",
+  length: "ui.playlist.nameLength",
+  windows: "ui.playlist.nameWindows",
+};
 
 /** How the discs are saved: renamed where they are, as a ZIP, or as a lone playlist. */
 type OutputMode = "in-place" | "zip" | "m3u";
@@ -71,14 +84,16 @@ const getOutputMode = ({ canRename, layout, plan, rename }: OutputChoices): Outp
 };
 
 /** Every file in a picked folder, with paths from that folder. */
-const readFolder = async (directory: FileSystemDirectoryHandle) => {
+const readFolder = async (directory: FileSystemDirectoryHandle, localizer: Localizer) => {
   const files: PlaylistSourceFile[] = [];
   const walk = async (folder: FileSystemDirectoryHandle, prefix: string, depth: number) => {
     for await (const entry of (
       folder as FileSystemDirectoryHandle & { values(): AsyncIterable<FileSystemHandle> }
     ).values()) {
       if (files.length >= MAX_FOLDER_FILES) {
-        throw new Error(`"${directory.name}" holds more than ${MAX_FOLDER_FILES} files. Pick the folder of one game.`);
+        throw new Error(
+          localizer.message("ui.playlist.folderTooLarge", { folder: directory.name, max: MAX_FOLDER_FILES }),
+        );
       }
       const path = `${prefix}${entry.name}`;
       if (entry.kind === "file") files.push({ file: await (entry as FileSystemFileHandle).getFile(), path });
@@ -105,10 +120,11 @@ type PlaylistActivityInput = {
   error: string;
   done: string;
   hasSource: boolean;
+  localizer: Localizer;
 };
 
-const getPlaylistActivity = ({ busy, planning, error, done, hasSource }: PlaylistActivityInput) => {
-  if (busy || planning) return { stage: "Make playlist", state: "running" } as const;
+const getPlaylistActivity = ({ busy, planning, error, done, hasSource, localizer }: PlaylistActivityInput) => {
+  if (busy || planning) return { stage: localizer.message("ui.playlist.activityStage"), state: "running" } as const;
   if (error) return { state: "failed" } as const;
   if (done) return { stage: done, state: "done" } as const;
   if (hasSource) return { state: "ready" } as const;
@@ -175,11 +191,12 @@ const planOutput = async (
 };
 
 /** The hint under the save options; empty when there is nothing to say. */
-const getFolderHint = (hasFolder: boolean, plan: BrowserPlaylistPlan | null, allAtTop: boolean) => {
-  if (!hasFolder) return "Open the game's folder to save the playlist into it or rename its discs.";
-  if (plan && !allAtTop) {
-    return "The discs are in subfolders, so the playlist lists their paths. Save it into the folder you opened.";
-  }
+const getFolderHint = (
+  localizer: Localizer,
+  { allAtTop, hasFolder, plan }: { allAtTop: boolean; hasFolder: boolean; plan: BrowserPlaylistPlan | null },
+) => {
+  if (!hasFolder) return localizer.message("ui.playlist.hintOpenFolder");
+  if (plan && !allAtTop) return localizer.message("ui.playlist.hintSubfolders");
   return "";
 };
 
@@ -187,10 +204,11 @@ type GameSelectProps = { games: string[]; game: string; locked: boolean; onChang
 
 /** Choose which game's discs to list when the picked files hold several games. */
 const GameSelect = ({ games, game, locked, onChange }: GameSelectProps) => {
+  const localizer = useUiLocalizer();
   if (games.length < 2) return null;
   return (
     <label className="checkrow">
-      <span>Game</span>
+      <span>{localizer.message("ui.playlist.game")}</span>
       <select
         className="select mono"
         disabled={locked}
@@ -210,31 +228,36 @@ const GameSelect = ({ games, game, locked, onChange }: GameSelectProps) => {
 type GameNameFieldProps = {
   name: string;
   plan: BrowserPlaylistPlan | null;
-  problem: string;
+  problem: GameNameProblem | null;
   locked: boolean;
   onChange: (name: string) => void;
 };
 
 /** The game name input, showing the playlist's name until one is typed, and why a name cannot be used. */
-const GameNameField = ({ name, plan, problem, locked, onChange }: GameNameFieldProps) => (
-  <>
-    <label className="checkrow">
-      <span>Game name</span>
-      <input
-        aria-invalid={problem ? "true" : undefined}
-        className="input mono"
-        disabled={locked}
-        id="playlist-name"
-        onChange={(event) => onChange(event.currentTarget.value)}
-        placeholder={plan ? getGameName(plan) : ""}
-        spellCheck={false}
-        type="text"
-        value={name}
-      />
-    </label>
-    {problem ? <Notice level="error">{problem}</Notice> : null}
-  </>
-);
+const GameNameField = ({ name, plan, problem, locked, onChange }: GameNameFieldProps) => {
+  const localizer = useUiLocalizer();
+  return (
+    <>
+      <label className="checkrow">
+        <span>{localizer.message("ui.playlist.gameName")}</span>
+        <input
+          aria-invalid={problem ? "true" : undefined}
+          className="input mono"
+          disabled={locked}
+          id="playlist-name"
+          onChange={(event) => onChange(event.currentTarget.value)}
+          placeholder={plan ? getGameName(plan) : ""}
+          spellCheck={false}
+          type="text"
+          value={name}
+        />
+      </label>
+      {problem ? (
+        <Notice level="error">{localizer.message(NAME_PROBLEM_MESSAGES[problem], { name: name.trim() })}</Notice>
+      ) : null}
+    </>
+  );
+};
 
 type RenameChoiceProps = {
   renaming: boolean;
@@ -246,46 +269,55 @@ type RenameChoiceProps = {
 };
 
 /** The checkbox to rename the discs after the game, and why that is not possible when it is not. */
-const RenameChoice = ({ renaming, disabled, name, reason, onChange }: RenameChoiceProps) => (
-  <>
-    <label className="checkrow">
-      <input
-        checked={renaming}
-        disabled={disabled}
-        id="playlist-rename-discs"
-        onChange={(event) => onChange(event.currentTarget.checked)}
-        type="checkbox"
-      />
-      <FolderPen aria-hidden="true" />
-      <span>
-        Rename the discs to <span className="mono">{name.trim() || "Game"} (Disc N)</span>
-      </span>
-    </label>
-    {reason ? <Notice level="warn">Can't rename these discs: {reason}</Notice> : null}
-  </>
-);
+const RenameChoice = ({ renaming, disabled, name, reason, onChange }: RenameChoiceProps) => {
+  const localizer = useUiLocalizer();
+  const [before, after] = localizer.message("ui.playlist.renameDiscs", { name: NAME_SLOT }).split(NAME_SLOT);
+  return (
+    <>
+      <label className="checkrow">
+        <input
+          checked={renaming}
+          disabled={disabled}
+          id="playlist-rename-discs"
+          onChange={(event) => onChange(event.currentTarget.checked)}
+          type="checkbox"
+        />
+        <FolderPen aria-hidden="true" />
+        <span>
+          {before}
+          <span className="mono">{name.trim() || "Game"} (Disc N)</span>
+          {after}
+        </span>
+      </label>
+      {reason ? <Notice level="warn">{localizer.message("ui.playlist.cannotRename", { reason })}</Notice> : null}
+    </>
+  );
+};
 
 type LayoutChoiceProps = { layout: PlaylistLayout; locked: boolean; onChange: (layout: PlaylistLayout) => void };
 
 /** Choose where a ZIP puts the playlist and discs, for the frontend that will read them. */
-const LayoutChoice = ({ layout, locked, onChange }: LayoutChoiceProps) => (
-  <label className="checkrow">
-    <span>Layout</span>
-    <select
-      className="select"
-      disabled={locked}
-      id="playlist-layout"
-      onChange={(event) => onChange(event.currentTarget.value as PlaylistLayout)}
-      value={layout}
-    >
-      {PLAYLIST_LAYOUTS.map((option) => (
-        <option key={option.layout} value={option.layout}>
-          {option.label}
-        </option>
-      ))}
-    </select>
-  </label>
-);
+const LayoutChoice = ({ layout, locked, onChange }: LayoutChoiceProps) => {
+  const localizer = useUiLocalizer();
+  return (
+    <label className="checkrow">
+      <span>{localizer.message("ui.playlist.layout")}</span>
+      <select
+        className="select"
+        disabled={locked}
+        id="playlist-layout"
+        onChange={(event) => onChange(event.currentTarget.value as PlaylistLayout)}
+        value={layout}
+      >
+        {PLAYLIST_LAYOUTS.map((option) => (
+          <option key={option.layout} value={option.layout}>
+            {localizer.message(option.label)}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+};
 
 /** An error from the form, which the user can dismiss. */
 const ErrorNotice = ({ error, onDismiss }: { error: string; onDismiss: () => void }) =>
@@ -298,12 +330,15 @@ const ErrorNotice = ({ error, onDismiss }: { error: string; onDismiss: () => voi
 type OpenFolderButtonProps = { opening: boolean; locked: boolean; onClick: () => void };
 
 /** Opens the game's folder, which lets the page save the playlist into it and rename its discs. */
-const OpenFolderButton = ({ opening, locked, onClick }: OpenFolderButtonProps) => (
-  <button className="btn slim ghost" disabled={locked} onClick={onClick} type="button">
-    <FolderOpen aria-hidden="true" />
-    {opening ? "Opening folder…" : "Open game folder"}
-  </button>
-);
+const OpenFolderButton = ({ opening, locked, onClick }: OpenFolderButtonProps) => {
+  const localizer = useUiLocalizer();
+  return (
+    <button className="btn slim ghost" disabled={locked} onClick={onClick} type="button">
+      <FolderOpen aria-hidden="true" />
+      {localizer.message(opening ? "ui.playlist.openingFolder" : "ui.playlist.openFolder")}
+    </button>
+  );
+};
 
 type PlaylistEntriesProps = {
   plan: BrowserPlaylistPlan | null;
@@ -314,14 +349,15 @@ type PlaylistEntriesProps = {
 
 /** The playlist's lines, one card per disc, or a status while the first plan is read. */
 const PlaylistEntries = ({ plan, planning, outputPlan }: PlaylistEntriesProps) => {
-  if (!plan) return planning ? <p role="status">Reading the disc sheets…</p> : null;
+  const localizer = useUiLocalizer();
+  if (!plan) return planning ? <p role="status">{localizer.message("ui.playlist.readingSheets")}</p> : null;
   const lines = (outputPlan ?? plan).entries;
   return (
     <div className="cards" id="playlist-entries">
       {lines.map((line, index) => (
         <FileCard
           key={line}
-          meta={<span className="meta-fmt mono">Disc {index + 1}</span>}
+          meta={<span className="meta-fmt mono">{localizer.message("ui.playlist.discNumber", { n: index + 1 })}</span>}
           name={<span className="nm mono">{line}</span>}
         />
       ))}
@@ -363,14 +399,8 @@ const BundleCards = ({ zipPlan }: { zipPlan: BrowserPlaylistPlan | null }) => {
 
 /** The hint under the save options, or the notice that this browser cannot write folders. */
 const FolderSupportNote = ({ canWriteFolders, folderHint }: { canWriteFolders: boolean; folderHint: string }) => {
-  if (!canWriteFolders) {
-    return (
-      <Notice level="info">
-        Saving into a folder, or renaming discs where they are, needs Chrome or Edge on a computer. In any browser, you
-        can download a ZIP with the playlist and the discs.
-      </Notice>
-    );
-  }
+  const localizer = useUiLocalizer();
+  if (!canWriteFolders) return <Notice level="info">{localizer.message("ui.playlist.supportNote")}</Notice>;
   return folderHint ? <p className="hint">{folderHint}</p> : null;
 };
 
@@ -386,19 +416,19 @@ type SaveActionsProps = {
   outputReady: boolean;
   canSaveToFolder: boolean;
   onCancel: () => void;
-  onDownload: () => void;
   onDownloadZip: () => void;
   onRename: () => void;
   onSaveToFolder: () => void;
 };
 
-const getZipLabel = (busy: Busy, plan: BrowserPlaylistPlan | null, zipPercent: number | null) => {
+const getZipLabel = (localizer: Localizer, busy: Busy, plan: BrowserPlaylistPlan | null, zipPercent: number | null) => {
   const fileName = plan ? `${getGameName(plan)}.zip` : "ZIP";
-  if (busy !== "zip") return `Download ${fileName}`;
-  return `Creating ${fileName}…${typeof zipPercent === "number" ? ` ${Math.round(zipPercent)}%` : ""}`;
+  if (busy !== "zip") return localizer.message("ui.playlist.zipDownload", { fileName });
+  if (typeof zipPercent !== "number") return localizer.message("ui.playlist.zipCreating", { fileName });
+  return localizer.message("ui.playlist.zipCreatingPercent", { fileName, percent: Math.round(zipPercent) });
 };
 
-/** The buttons that finish the playlist: rename the discs in place, download or save the playlist, or download the ZIP. */
+/** The buttons that finish the playlist: rename the discs in place, download the ZIP, or save the playlist into the folder. */
 const SaveActions = ({
   busy,
   mode,
@@ -408,23 +438,15 @@ const SaveActions = ({
   outputReady,
   canSaveToFolder,
   onCancel,
-  onDownload,
   onDownloadZip,
   onRename,
   onSaveToFolder,
 }: SaveActionsProps) => {
-  const zipLabel = getZipLabel(busy, plan, zipPercent);
+  const localizer = useUiLocalizer();
+  const zipLabel = getZipLabel(localizer, busy, plan, zipPercent);
+  // Renaming in place is the main action there; the ZIP is the main action everywhere else.
   const zipButton =
-    mode === "zip" ? (
-      <RunButton
-        disabled={!(actionsReady && outputReady)}
-        icon={<Archive aria-hidden="true" />}
-        id="playlist-download-zip"
-        onClick={onDownloadZip}
-      >
-        {zipLabel}
-      </RunButton>
-    ) : (
+    mode === "in-place" ? (
       <button
         className="btn ghost"
         disabled={!actionsReady}
@@ -435,64 +457,52 @@ const SaveActions = ({
         <Archive aria-hidden="true" />
         {zipLabel}
       </button>
+    ) : (
+      <RunButton
+        disabled={!(actionsReady && outputReady)}
+        icon={<Archive aria-hidden="true" />}
+        id="playlist-download-zip"
+        onClick={onDownloadZip}
+      >
+        {zipLabel}
+      </RunButton>
     );
-  const cancelButton =
-    busy === "zip" ? (
-      <button className="btn ghost" id="playlist-cancel" onClick={onCancel} type="button">
-        Cancel
-      </button>
-    ) : null;
-  if (mode === "in-place") {
-    return (
-      <>
+  return (
+    <>
+      {mode === "in-place" ? (
         <RunButton
           disabled={!(actionsReady && outputReady)}
           icon={<FolderPen aria-hidden="true" />}
           id="playlist-rename"
           onClick={onRename}
         >
-          {busy === "rename" ? "Renaming discs…" : "Rename discs and save playlist"}
+          {localizer.message(busy === "rename" ? "ui.playlist.renamingDiscs" : "ui.playlist.renameAndSave")}
         </RunButton>
-        {zipButton}
-        {cancelButton}
-      </>
-    );
-  }
-  if (mode === "zip") {
-    return (
-      <>
-        {zipButton}
-        {cancelButton}
-      </>
-    );
-  }
-  return (
-    <>
-      <RunButton
-        disabled={!actionsReady}
-        icon={<Download aria-hidden="true" />}
-        id="playlist-download"
-        onClick={onDownload}
-      >
-        {plan ? `Download ${plan.file_name}` : "Download playlist"}
-      </RunButton>
-      <button
-        className="btn ghost"
-        disabled={!(canSaveToFolder && actionsReady)}
-        id="playlist-save-folder"
-        onClick={onSaveToFolder}
-        type="button"
-      >
-        <Save aria-hidden="true" />
-        {busy === "save" ? "Saving…" : "Save into folder"}
-      </button>
+      ) : null}
       {zipButton}
-      {cancelButton}
+      {mode === "m3u" ? (
+        <button
+          className="btn ghost"
+          disabled={!(canSaveToFolder && actionsReady)}
+          id="playlist-save-folder"
+          onClick={onSaveToFolder}
+          type="button"
+        >
+          <Save aria-hidden="true" />
+          {localizer.message(busy === "save" ? "ui.playlist.saving" : "ui.playlist.saveToFolder")}
+        </button>
+      ) : null}
+      {busy === "zip" ? (
+        <button className="btn ghost" id="playlist-cancel" onClick={onCancel} type="button">
+          {localizer.message("ui.common.cancel")}
+        </button>
+      ) : null}
     </>
   );
 };
 
 const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
+  const localizer = useUiLocalizer();
   const [canWriteFolders, setCanWriteFolders] = useState(false);
   const [source, setSource] = useState<PlaylistSource | null>(null);
   const [survey, setSurvey] = useState<BrowserPlaylistPlan | null>(null);
@@ -527,9 +537,9 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
   useEffect(() => {
     setWorkbenchActivity(
       PLAYLIST_ACTIVITY_KEY,
-      getPlaylistActivity({ busy: !!busy, done, error, hasSource: !!source, planning }),
+      getPlaylistActivity({ busy: !!busy, done, error, hasSource: !!source, localizer, planning }),
     );
-  }, [busy, done, error, planning, source]);
+  }, [busy, done, error, localizer, planning, source]);
   useEffect(() => () => setWorkbenchActivity(PLAYLIST_ACTIVITY_KEY, { state: "idle" }), []);
   useEffect(() => () => zipAbortRef.current?.abort(), []);
 
@@ -656,23 +666,13 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
     }
     void runAction("open", async () => {
       const directory = await trackFilePicker(() => picker.call(window, { id: "rom-weaver-playlist", mode: "read" }));
-      replaceSource({ directory, files: await readFolder(directory), folderName: directory.name });
+      replaceSource({ directory, files: await readFolder(directory, localizer), folderName: directory.name });
     });
   };
 
   const reloadFolder = async (directory: FileSystemDirectoryHandle) => {
-    replaceSource({ directory, files: await readFolder(directory), folderName: directory.name });
+    replaceSource({ directory, files: await readFolder(directory, localizer), folderName: directory.name });
   };
-
-  const download = () =>
-    void runAction("save", async () => {
-      if (!plan) return;
-      const { triggerBrowserDownload } = await import("../../platform/browser/browser-download.ts");
-      await triggerBrowserDownload(new Blob([plan.text], { type: "audio/x-mpegurl" }), plan.file_name, {
-        interactive: true,
-      });
-      setDone(`Downloaded ${plan.file_name}`);
-    });
 
   const saveToFolder = () => {
     const directory = source?.directory;
@@ -681,7 +681,7 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
       const folder = await import("../../storage/browser/playlist-folder-write.ts");
       await folder.requestPlaylistFolderAccess(directory);
       await folder.savePlaylistToFolder(directory, plan.file_name, plan.text);
-      setDone(`Saved ${plan.file_name} in ${directory.name}`);
+      setDone(localizer.message("ui.playlist.doneSaved", { fileName: plan.file_name, folder: directory.name }));
     });
   };
 
@@ -702,7 +702,12 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
       });
       setRename(false);
       await reloadFolder(directory);
-      setDone(`Renamed ${outputPlan.renames.length} files and saved ${outputPlan.file_name} in ${directory.name}`);
+      setDone(
+        localizer.messageCount("ui.playlist.doneRenamed", outputPlan.renames.length, {
+          fileName: outputPlan.file_name,
+          folder: directory.name,
+        }),
+      );
     });
   };
 
@@ -730,7 +735,7 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
           // The write can finish after a cancel or an unmount aborted the signal.
           if (abort.signal.aborted) return;
           await output.saveAs({ fileName: `${name}.zip`, interactive: true });
-          setDone(`Downloaded ${name}.zip`);
+          setDone(localizer.message("ui.playlist.doneZip", { fileName: `${name}.zip` }));
         } finally {
           await output.dispose();
         }
@@ -745,11 +750,6 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
 
   useAgentWorkflow(PLAYLIST_ACTIVITY_KEY, {
     actions: {
-      download: {
-        description: "Download the .m3u playlist.",
-        enabled: !!plan && !busy && !planning && !nameProblem,
-        execute: () => download(),
-      },
       downloadZip: {
         description:
           "Download a ZIP of the playlist and the discs, renamed and arranged as the page's Rename and Layout choices say.",
@@ -771,7 +771,7 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
 
   const locked = !!busy;
   const actionsReady = !!plan && !planning && !locked && !nameProblem;
-  const folderHint = getFolderHint(!!source?.directory, plan, allAtTop);
+  const folderHint = getFolderHint(localizer, { allAtTop, hasFolder: !!source?.directory, plan });
   const renameNote = mode === "m3u" ? "" : outputReason;
 
   return (
@@ -779,20 +779,23 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
       {/* Without a source the steps below are hidden, so a failed folder pick reports here. */}
       {source ? null : <ErrorNotice error={error} onDismiss={() => setError("")} />}
       <UnifiedDropZone
-        addLabel="Replace the discs"
+        addLabel={localizer.message("ui.playlist.addDiscs")}
         // Below the drop target, not in the header: on phones the whole header is the add-files button.
         afterDropZone={<OpenFolderButton locked={locked} onClick={openFolder} opening={busy === "open"} />}
         big={!source}
         disabled={locked}
         guide={WORKFLOW_GUIDES.playlist}
-        heroLabel="Drop the discs of one game"
-        heroLabelCoarse="Tap to add the discs of one game"
-        info={<p>A playlist lists each disc of a multi-disc game, so an emulator can change discs.</p>}
+        heroLabel={localizer.message("ui.playlist.dropDiscs")}
+        heroLabelCoarse={localizer.message("ui.playlist.tapDiscs")}
+        info={<p>{localizer.message("ui.playlist.dropInfo")}</p>}
         inputId="playlist-input-picker"
         lead={{ description: "ui.hero.playlistDescription", line1: "ui.hero.playlistThesis" }}
         onFiles={addFiles}
         supported={[
-          { extensions: ["cue", "gdi", "ccd", "mds", "chd", "iso", "cso", "pbp", "rvz"], label: "Disc files" },
+          {
+            extensions: ["cue", "gdi", "ccd", "mds", "chd", "iso", "cso", "pbp", "rvz"],
+            label: localizer.message("ui.playlist.discFiles"),
+          },
         ]}
       />
       <input
@@ -818,8 +821,8 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
       {source ? null : (
         <GhostSteps
           steps={[
-            { num: "0x02", title: "Playlist" },
-            { num: "0x03", title: "Save" },
+            { num: "0x02", title: localizer.message("ui.playlist.stepPlaylist") },
+            { num: "0x03", title: localizer.message("ui.playlist.stepSave") },
           ]}
         />
       )}
@@ -829,14 +832,14 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
             fault={!!error}
             meta={source.folderName ? <span className="mono">{source.folderName}</span> : undefined}
             num="0x02"
-            title="Playlist"
+            title={localizer.message("ui.playlist.stepPlaylist")}
           >
             <GameSelect games={games} game={game} locked={locked} onChange={setGame} />
             <GameNameField locked={locked} name={name} onChange={setName} plan={plan} problem={nameProblem} />
             <PlaylistEntries outputPlan={mode === "m3u" ? null : outputPlan} plan={plan} planning={planning} />
             <ErrorNotice error={error} onDismiss={() => setError("")} />
           </StepSection>
-          <StepSection num="0x03" title="Save" woven={!!done}>
+          <StepSection num="0x03" title={localizer.message("ui.playlist.stepSave")} woven={!!done}>
             <RenameChoice disabled={locked} name={name} onChange={setRename} reason={renameNote} renaming={rename} />
             <LayoutChoice layout={layout} locked={locked} onChange={setLayout} />
             <RenameCards renamePlan={mode === "in-place" ? outputPlan : null} />
@@ -849,7 +852,6 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
                 canSaveToFolder={canWriteFolders && !!source.directory}
                 mode={mode}
                 onCancel={() => zipAbortRef.current?.abort()}
-                onDownload={download}
                 onDownloadZip={downloadZip}
                 onRename={renameDiscs}
                 onSaveToFolder={saveToFolder}

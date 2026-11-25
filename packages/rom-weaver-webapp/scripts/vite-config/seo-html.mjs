@@ -290,7 +290,7 @@ const WORKFLOW_MARKDOWN_GUIDES = {
   },
   "create-m3u-playlist": {
     slug: "docs/make-playlist-browser",
-    sections: ["Download a playlist", "Download the discs as a ZIP"],
+    sections: ["Download the playlist and discs as a ZIP"],
   },
   "ppf-undo": {
     slug: "docs/undo-ppf-browser",

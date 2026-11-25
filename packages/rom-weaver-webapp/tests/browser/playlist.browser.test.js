@@ -260,9 +260,11 @@ test("renames the discs in the picked folder where the browser can move files, a
     const picker = document.querySelector("#playlist-input-picker");
     picker.files = transfer.files;
     picker.dispatchEvent(new Event("change", { bubbles: true }));
-    const download = await commands.clickAndReadDownload("#playlist-download");
-    expect(download.suggestedFilename).toBe("ff7.m3u");
-    expect(lines(atob(download.contentBase64))).toEqual(["ff7.disc01.cue", "ff7.disc02.cue"]);
+    await enabledButton("#playlist-download-zip");
+    expect(document.querySelector("#playlist-download")).toBeNull();
+    const plain = await commands.clickAndReadDownload("#playlist-download-zip");
+    expect(plain.suggestedFilename).toBe("ff7.zip");
+    expect(atob(plain.contentBase64)).toContain("ff7.disc01.cue\nff7.disc02.cue\n");
     expect(document.querySelector("#playlist-save-folder").disabled).toBe(true);
     const rename = document.querySelector("#playlist-rename-discs");
     expect(rename.disabled).toBe(false);
@@ -359,8 +361,8 @@ test("plans a playlist for discs named only by number once a game name is typed"
     .poll(() => document.querySelector('#playlist-container [role="alert"]')?.textContent ?? "")
     .toContain("Type a game name");
   typeInto(document.querySelector("#playlist-name"), "FF7");
-  await enabledButton("#playlist-download");
-  const download = await commands.clickAndReadDownload("#playlist-download");
-  expect(download.suggestedFilename).toBe("FF7.m3u");
-  expect(lines(atob(download.contentBase64))).toEqual(["Disc 1.cue", "Disc 2.cue"]);
+  await enabledButton("#playlist-download-zip");
+  const download = await commands.clickAndReadDownload("#playlist-download-zip");
+  expect(download.suggestedFilename).toBe("FF7.zip");
+  expect(atob(download.contentBase64)).toContain("Disc 1.cue\nDisc 2.cue\n");
 });

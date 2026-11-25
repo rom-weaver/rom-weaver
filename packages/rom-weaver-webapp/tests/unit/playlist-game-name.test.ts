@@ -6,25 +6,25 @@ const LONGEST_GAME_NAME_BYTES = 255 - " (Disc 99) (Track 99).bin".length;
 
 describe("checkGameName", () => {
   it("allows a name whose longest renamed file name is 255 bytes", () => {
-    expect(checkGameName("a".repeat(LONGEST_GAME_NAME_BYTES))).toBe("");
-    expect(checkGameName("a".repeat(LONGEST_GAME_NAME_BYTES + 1))).toMatch(/too long/);
+    expect(checkGameName("a".repeat(LONGEST_GAME_NAME_BYTES))).toBeNull();
+    expect(checkGameName("a".repeat(LONGEST_GAME_NAME_BYTES + 1))).toBe("length");
   });
 
   it("counts UTF-8 bytes, not characters", () => {
     const characters = Math.floor(LONGEST_GAME_NAME_BYTES / 3);
-    expect(checkGameName("\u4e2d".repeat(characters))).toBe("");
-    expect(checkGameName("\u4e2d".repeat(characters + 1))).toMatch(/too long/);
-    expect(checkGameName("\u4e2d".repeat(100))).toMatch(/too long/);
+    expect(checkGameName("\u4e2d".repeat(characters))).toBeNull();
+    expect(checkGameName("\u4e2d".repeat(characters + 1))).toBe("length");
+    expect(checkGameName("\u4e2d".repeat(100))).toBe("length");
   });
 
   it("refuses reserved characters, Windows device names, and a trailing dot", () => {
-    expect(checkGameName("A/B")).toMatch(/cannot contain/);
-    expect(checkGameName("CON")).toMatch(/Windows reserves/);
-    expect(checkGameName("Game.")).toMatch(/end with a dot/);
-    expect(checkGameName("  ")).toBe("");
+    expect(checkGameName("A/B")).toBe("characters");
+    expect(checkGameName("CON")).toBe("windows");
+    expect(checkGameName("Game.")).toBe("dot");
+    expect(checkGameName("  ")).toBeNull();
   });
 
   it("accepts a trailing space, which the name loses when trimmed", () => {
-    expect(checkGameName("Final ")).toBe("");
+    expect(checkGameName("Final ")).toBeNull();
   });
 });
