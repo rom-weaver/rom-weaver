@@ -1714,7 +1714,7 @@ mod playlist;
 #[path = "ingest_command.rs"]
 mod ingest_command;
 pub use ingest_command::{IngestKind, IngestResult, IngestRomAsset, PatchDescriptor};
-pub use playlist::{PlaylistDryRunPlan, PlaylistPlannedDisc, PlaylistRename};
+pub use playlist::{PlaylistBundleFile, PlaylistDryRunPlan, PlaylistPlannedDisc, PlaylistRename};
 
 #[path = "source_resolution.rs"]
 mod source_resolution;

@@ -556,7 +556,7 @@ export type PlaylistCommand = {
 /**
  * Browser inputs MUST map original logical paths to their staged paths explicitly.
  */
-staged_paths?: { [key in string]: string }, input: Array<string>, output?: string, name?: string, layout?: PlaylistLayout, rename?: boolean, no_sort?: boolean, flat?: boolean,
+staged_paths?: { [key in string]: string }, input: Array<string>, output?: string, name?: string, layout?: PlaylistLayout, rename?: boolean, codec?: string, no_sort?: boolean, flat?: boolean,
 /**
  * Plan renaming the discs `<game> (Disc N)` where they are, for the browser to carry out.
  * Only a dry run accepts it.
@@ -572,6 +572,20 @@ from: string,
  * Its new file name.
  */
 to: string,
+/**
+ * A disc sheet's new text, naming its renamed tracks.
+ */
+text?: string | null, };
+
+export type PlaylistBundleFile = {
+/**
+ * The `/`-separated path inside the output.
+ */
+path: string,
+/**
+ * The input file it copies; none for the playlist.
+ */
+source?: string | null,
 /**
  * A disc sheet's new text, naming its renamed tracks.
  */
@@ -607,7 +621,11 @@ text: string,
 /**
  * What a rename-in-place plan renames; empty for every other plan.
  */
-renames: Array<PlaylistRename>, };
+renames: Array<PlaylistRename>,
+/**
+ * The files a `.zip` or folder plan writes, the playlist first; empty for every other plan.
+ */
+bundle: Array<PlaylistBundleFile>, };
 
 export type ToolsCommands = { "type": "ppf-undo", "args": PpfUndoCommand };
 

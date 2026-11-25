@@ -3641,6 +3641,17 @@ pub struct PlaylistCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
+            value_name = "CODEC",
+            help = "Compression of a .zip output: store or deflate. Defaults to deflate"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub codec: Option<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
             help = "List the discs in the order given instead of ordering them by disc number"
         )
     )]

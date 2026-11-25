@@ -652,6 +652,37 @@ pub struct PlaylistPlannedDisc {
     pub game: String,
 }
 
+/// One file a `.zip` or folder plan writes.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+pub struct PlaylistBundleFile {
+    /// The `/`-separated path inside the output.
+    pub path: String,
+    /// The input file it copies; none for the playlist.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub source: Option<String>,
+    /// A disc sheet's new text, naming its renamed tracks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub text: Option<String>,
+}
+
+impl BundleEntry {
+    fn planned_file(&self) -> PlaylistBundleFile {
+        let (source, text) = match &self.source {
+            BundleSource::File(source) => (Some(source), None),
+            BundleSource::Text(_) => (None, None),
+            BundleSource::Sheet { source, text } => (Some(source), Some(text.clone())),
+        };
+        PlaylistBundleFile {
+            path: self.path.clone(),
+            source: source.map(|source| source.display().to_string()),
+            text,
+        }
+    }
+}
+
 /// The playlist a dry-run `playlist` plans, reported under `details.playlist`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
@@ -666,6 +697,8 @@ pub struct PlaylistDryRunPlan {
     pub text: String,
     /// What a rename-in-place plan renames; empty for every other plan.
     pub renames: Vec<PlaylistRename>,
+    /// The files a `.zip` or folder plan writes, the playlist first; empty for every other plan.
+    pub bundle: Vec<PlaylistBundleFile>,
 }
 
 /// What a `playlist` run writes, decided before anything is written.
@@ -713,6 +746,7 @@ impl PlaylistJob {
             file_name: self.playlist_name.clone(),
             text: render_m3u(&self.lines),
             renames: self.renames.clone(),
+            bundle: self.entries.iter().map(BundleEntry::planned_file).collect(),
         }
     }
 }
@@ -1054,6 +1088,11 @@ fn checked_output_kind(args: &PlaylistCommand) -> Result<PlaylistOutput> {
                 .to_string(),
         ));
     }
+    if kind != PlaylistOutput::Zip && args.codec.is_some() {
+        return Err(RomWeaverError::Validation(
+            "--codec sets a .zip's compression, so it needs a .zip --output".to_string(),
+        ));
+    }
     if kind == PlaylistOutput::M3u && args.output.is_some() && args.name.is_some() {
         return Err(RomWeaverError::Validation(
             "the .m3u --output already names the playlist; drop --name".to_string(),
@@ -1293,7 +1332,7 @@ impl CliApp {
             // `plan_job` refused an existing output, so a cancelled run may remove this one.
             rom_weaver_core::register_in_progress_output(&job.output);
             if job.kind == PlaylistOutput::Zip {
-                self.write_playlist_zip(&job)?;
+                self.write_playlist_zip(&job, args.codec.clone())?;
             } else {
                 let mut file = fs::OpenOptions::new()
                     .write(true)
@@ -1336,7 +1375,7 @@ impl CliApp {
         ))
     }
 
-    fn write_playlist_zip(&self, job: &PlaylistJob) -> Result<()> {
+    fn write_playlist_zip(&self, job: &PlaylistJob, codec: Option<String>) -> Result<()> {
         let context = self.context(ThreadBudget::default());
         let mut staged = Vec::new();
         let result = (|| {
@@ -1364,7 +1403,7 @@ impl CliApp {
                 archive_names: Some(job.entries.iter().map(|entry| entry.path.clone()).collect()),
                 output: job.output.clone(),
                 format: handler.descriptor().name.to_string(),
-                codec: None,
+                codec,
                 level: None,
                 rvz_block_size: None,
                 parent: None,

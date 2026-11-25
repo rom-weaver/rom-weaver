@@ -398,6 +398,7 @@ fn in_place_args(dir: &Path, inputs: &[&str], name: Option<&str>) -> PlaylistCom
         rename: false,
         no_sort: false,
         flat: false,
+        codec: None,
         rename_in_place: true,
     }
 }
@@ -531,5 +532,99 @@ fn rename_in_place_refuses_what_a_rename_could_lose_or_overwrite() {
     ] {
         let error = in_place_refusal(setup, inputs, name);
         assert!(error.contains(message), "{inputs:?}: {error}");
+    }
+}
+
+fn bundle_args(dir: &Path, output: &str, rename: bool, codec: Option<&str>) -> PlaylistCommand {
+    PlaylistCommand {
+        output: Some(dir.join(output)),
+        rename,
+        codec: codec.map(str::to_string),
+        rename_in_place: false,
+        ..in_place_args(dir, &["Game CD2.cue", "Game CD1.cue"], Some("Game"))
+    }
+}
+
+#[test]
+fn zip_plan_lists_each_file_with_its_source_and_rewritten_sheet() {
+    let temp = assert_fs::TempDir::new().expect("temp dir");
+    for stem in ["Game CD1", "Game CD2"] {
+        write_cue_disc(temp.path(), stem, &[&format!("{stem}.bin")]);
+    }
+    let plan = plan_job(&bundle_args(temp.path(), "Game.zip", true, None))
+        .expect("plan")
+        .dry_run_plan();
+    assert_eq!(plan.bundle[0].path, "Game.m3u");
+    assert!(plan.bundle[0].source.is_none() && plan.bundle[0].text.is_none());
+    let mut paths: Vec<_> = plan.bundle[1..]
+        .iter()
+        .map(|file| file.path.as_str())
+        .collect();
+    paths.sort_unstable();
+    assert_eq!(
+        paths,
+        [
+            "Game (Disc 1).bin",
+            "Game (Disc 1).cue",
+            "Game (Disc 2).bin",
+            "Game (Disc 2).cue"
+        ]
+    );
+    let file = |path: &str| {
+        plan.bundle
+            .iter()
+            .find(|file| file.path == path)
+            .expect(path)
+    };
+    let source_name = |path: &str| {
+        let source = file(path).source.as_ref().expect("source");
+        Path::new(source)
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned()
+    };
+    assert_eq!(source_name("Game (Disc 1).cue"), "Game CD1.cue");
+    assert_eq!(source_name("Game (Disc 1).bin"), "Game CD1.bin");
+    assert!(
+        file("Game (Disc 1).cue")
+            .text
+            .as_deref()
+            .is_some_and(|text| text.contains("FILE \"Game (Disc 1).bin\""))
+    );
+    assert!(file("Game (Disc 1).bin").text.is_none());
+}
+
+#[test]
+fn only_a_zip_or_folder_plan_lists_a_bundle() {
+    let temp = assert_fs::TempDir::new().expect("temp dir");
+    for stem in ["Game CD1", "Game CD2"] {
+        write_cue_disc(temp.path(), stem, &[&format!("{stem}.bin")]);
+    }
+    let mut m3u = bundle_args(temp.path(), "Game.m3u", false, None);
+    m3u.name = None;
+    let in_place = in_place_args(temp.path(), &["Game CD1.cue", "Game CD2.cue"], Some("Game"));
+    for args in [m3u, in_place] {
+        let plan = plan_job(&args).expect("plan").dry_run_plan();
+        assert!(plan.bundle.is_empty(), "{:?}", plan.bundle);
+    }
+    let folder = plan_job(&bundle_args(temp.path(), "out", false, None))
+        .expect("plan")
+        .dry_run_plan();
+    assert_eq!(folder.bundle.len(), 5);
+}
+
+#[test]
+fn codec_needs_a_zip_output() {
+    let temp = assert_fs::TempDir::new().expect("temp dir");
+    for stem in ["Game CD1", "Game CD2"] {
+        write_cue_disc(temp.path(), stem, &[&format!("{stem}.bin")]);
+    }
+    assert!(plan_job(&bundle_args(temp.path(), "Game.zip", false, Some("store"))).is_ok());
+    for output in ["out", "Game.m3u"] {
+        let mut args = bundle_args(temp.path(), output, false, Some("store"));
+        args.name = None;
+        let error = plan_job(&args).err().expect("refused").to_string();
+        assert!(error.contains("--codec"), "{output}: {error}");
     }
 }

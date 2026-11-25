@@ -155,6 +155,43 @@ fn playlist_zip_holds_playlist_discs_and_their_track_files() {
     }
 }
 
+/// The compression method (0 stored, 8 deflated) in a ZIP's first local file header.
+fn first_zip_method(zip: &Path) -> u16 {
+    let bytes = fs::read(zip).expect("read zip");
+    assert_eq!(&bytes[..4], b"PK\x03\x04", "local file header");
+    u16::from_le_bytes([bytes[8], bytes[9]])
+}
+
+#[test]
+fn playlist_zip_codec_picks_how_the_zip_is_compressed() {
+    let temp = setup_temp_dir();
+    write_cue_disc(temp.path(), "Game (Disc 1)");
+    let cue = temp.path().join("Game (Disc 1).cue");
+    let cue = cue.to_str().expect("p");
+    for (name, extra, method) in [
+        ("Default.zip", &[][..], 8),
+        ("Stored.zip", &["--codec", "store"][..], 0),
+    ] {
+        let out = temp.child(name);
+        run_single_json_event(
+            &playlist_args(&[cue], out.path().to_str().expect("p"), extra),
+            0,
+        );
+        assert_eq!(first_zip_method(out.path()), method, "{name}");
+    }
+    let unknown = temp.child("Unknown.zip");
+    let json = run_single_json_event(
+        &playlist_args(
+            &[cue],
+            unknown.path().to_str().expect("p"),
+            &["--codec", "nope"],
+        ),
+        1,
+    );
+    assert_eq!(json["status"], "failed", "{json}");
+    assert!(!unknown.path().exists());
+}
+
 #[test]
 fn playlist_refuses_existing_output_and_unknown_extensions() {
     let temp = setup_temp_dir();
@@ -231,6 +268,7 @@ fn playlist_dry_run_reports_the_playlist_it_would_write() {
             "file_name": "Game.m3u",
             "text": "Game (Disc 1).chd\n",
             "renames": [],
+            "bundle": [],
         })
     );
     assert!(!out.path().exists(), "dry run must not write the playlist");
@@ -575,6 +613,7 @@ fn playlist_refuses_copy_options_for_a_lone_m3u() {
         &["--rename"][..],
         &["--layout", "folder"],
         &["--name", "Other"],
+        &["--codec", "store"],
     ] {
         let json = run_single_json_event(
             &playlist_args(&[disc_path], out.path().to_str().expect("p"), extra),
