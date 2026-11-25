@@ -538,6 +538,29 @@ async function checkCachePolicy(origin, prefix) {
   console.log(`PASS Cache-Control matches the documented policy: ${origin}${prefix}`);
 }
 
+async function checkContentEncoding(origin) {
+  const asset = hashedAsset((await fetchPath(origin, "")("/")).text);
+  const url = `${origin}/${asset.path}`;
+  const request = (acceptEncoding) =>
+    fetch(url, { headers: { "Accept-Encoding": acceptEncoding }, signal: AbortSignal.timeout(10_000) });
+  const raw = await request("identity");
+  assert.equal(raw.status, 200, url);
+  assert.equal(raw.headers.get("content-encoding"), null);
+  const rawBytes = await raw.arrayBuffer();
+  for (const [accepted, expected] of [
+    ["gzip, br;q=0", "gzip"],
+    ["gzip, br;Q=0", "gzip"],
+    ["br;q=0, gzip;q=0", null],
+    ["br", "br"],
+  ]) {
+    const response = await request(accepted);
+    assert.equal(response.status, 200, url);
+    assert.equal(response.headers.get("content-encoding"), expected, `Accept-Encoding: ${accepted}`);
+    assert.deepEqual(await response.arrayBuffer(), rawBytes, `asset bytes for Accept-Encoding: ${accepted}`);
+  }
+  console.log("PASS Docker honors explicitly rejected encodings");
+}
+
 // A path that does not exist MUST answer 404, never the app shell with 200. A missing
 // /assets/* file answered 200 with HTML, or with a long cache lifetime, would be stored
 // under a content-addressed URL for a year by browsers and CDNs.
@@ -594,6 +617,7 @@ async function checkWebapp() {
   await Promise.all(
     [web, sub, bare, tls, mounted.pair, mounted.named].map(({ container }) => healthy(container)),
   );
+  await checkContentEncoding(web.origin);
   const barePage = await fetch(`${bare.origin}/no-such-route/`);
   assert.equal(barePage.status, 404);
   assert.ok((await barePage.text()).includes('<base href="/rom-weaver/" />'), "BASE_PATH=rom-weaver is normalized");

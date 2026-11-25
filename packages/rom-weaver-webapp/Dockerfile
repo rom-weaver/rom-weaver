@@ -210,16 +210,29 @@ COPY --from=dist / /dist
 COPY packages/rom-weaver-webapp/scripts/compress-static-assets.mjs /usr/local/bin/
 RUN node /usr/local/bin/compress-static-assets.mjs /dist
 
-# static-web-server serves the generated SPA as a non-root user. HTTPS can be
-# terminated by a reverse proxy or by static-web-server itself.
-# sws.toml relies on static-web-server 2.44.1 or later (no max-age on a 404).
-# Rebuild with `--pull` so a cached older base does not defeat it.
+FROM rust:1.97.1-alpine AS web-server-build
+WORKDIR /usr/src/static-web-server
+# Backport zero-quality filtering to Static Web Server 2.44.3.
+# https://github.com/static-web-server/static-web-server/pull/778
+# The quality parameter name MUST be case-insensitive.
+# https://www.rfc-editor.org/rfc/rfc9110.html#section-12.4.2
+ADD --checksum=sha256:1de0dac30443ba60182167ab38827b5eba6bdee8a9c859e1d6bee2fe760e1c49 https://codeload.github.com/static-web-server/static-web-server/tar.gz/501cb7fcb6a01a4e73e6d5f541559e3334c39976 /tmp/static-web-server.tar.gz
+RUN tar -xzf /tmp/static-web-server.tar.gz --strip-components=1 \
+    && sed -i \
+        -e 's/part.strip_prefix("q=")/part.strip_prefix("q=").or_else(|| part.strip_prefix("Q="))/' \
+        -e '/\.filter_map(|v| QualityMeta::try_from(v).ok())/a\            .filter(|meta| meta.quality > 0)' \
+        src/headers_ext/quality_value.rs \
+    && grep -Fx '            .filter(|meta| meta.quality > 0)' src/headers_ext/quality_value.rs \
+    && RUSTFLAGS="--cfg tokio_unstable" cargo build --locked --release --features all --bin static-web-server
+
+# Static Web Server runs as a non-root user. It can terminate HTTPS directly.
 FROM ghcr.io/static-web-server/static-web-server:2-alpine AS runtime
 USER root
 # The package version follows the Alpine base image; pinning it would make
 # routine base-image updates fail when the repository rotates package indexes.
 # hadolint ignore=DL3018
 RUN apk add --no-cache openssl
+COPY --from=web-server-build /usr/src/static-web-server/target/release/static-web-server /usr/local/bin/static-web-server
 COPY packages/rom-weaver-webapp/sws.toml /etc/sws.toml
 # `--chmod` rather than a following `RUN chmod`, which would copy the script
 # into a second layer. See the sticky-bit caveat in docs/ci.md before reusing
@@ -227,11 +240,7 @@ COPY packages/rom-weaver-webapp/sws.toml /etc/sws.toml
 # for 0755 and lossy for anything setuid or sticky.
 COPY --chmod=0755 packages/rom-weaver-webapp/scripts/docker-entrypoint.sh /usr/local/bin/rom-weaver-docker-entrypoint
 COPY --from=compressed /dist /srv
-# Fail the build, not the first missing asset in production, when the base image is older than
-# the cache policy needs or the 404 page is not the root-built page the entrypoint re-roots.
-RUN static-web-server --version >/tmp/sws-version \
-    && awk '/^Version:/ { found = 1; split($2, v, "."); if (v[1] < 2 || (v[1] == 2 && (v[2] < 44 || (v[2] == 44 && v[3] < 1)))) { print "static-web-server " $2 " is older than 2.44.1; rebuild with --pull" > "/dev/stderr"; exit 1 } } END { if (!found) { print "could not read the static-web-server version" > "/dev/stderr"; exit 1 } }' /tmp/sws-version \
-    && rm /tmp/sws-version \
+RUN static-web-server --version \
     && { grep -qF '<base href="/" />' /srv/404.html || { echo '/srv/404.html has no <base href="/" /> for the entrypoint to re-root' >&2; exit 1; }; }
 USER sws
 EXPOSE 8080
