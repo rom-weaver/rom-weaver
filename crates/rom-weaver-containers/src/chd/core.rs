@@ -676,7 +676,15 @@ impl ChdContainerHandler {
             }
             None => (prefix, header.logical_bytes, ".iso"),
         };
-        rom_weaver_checksum::detect_rom_identity(&user_data, user_total_len, Some(extension))
+        let mut identity =
+            rom_weaver_checksum::detect_rom_identity(&user_data, user_total_len, Some(extension));
+        // The CHGD/CHGT metadata names the medium; content sniffing of the first track cannot
+        // tell a GD-ROM from a CD (and reports nothing for an unrecognised data track).
+        if media_kind == ChdMediaKind::GdRom {
+            trace!(detected = ?identity.disc_format, "chd probe: GD-ROM metadata overrides sniffed medium");
+            identity.disc_format = Some(rom_weaver_checksum::DiscFormat::GdRom);
+        }
+        identity
     }
 
     pub(super) fn header_sha1_hex(&self, header: ChdHeader) -> Option<String> {
