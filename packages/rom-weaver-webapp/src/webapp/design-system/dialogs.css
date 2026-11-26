@@ -636,6 +636,23 @@
 .rw-app .storage-section-opfs {
   flex: 1 1 auto;
 }
+/* The saves and kept-ROM panels above the OPFS controls give way first when the
+   frame is short, and scroll inside their own band. As plain flex-none blocks
+   they pushed the filter and the refresh/copy/download buttons past the frame's
+   clipped edge (or under the phone dock), out of reach. The OPFS list keeps a
+   floor of its own so the shrinking lands on the saves band. */
+.rw-app .storage-saves {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.rw-app .log-dlg .storage-body.log-body {
+  flex: 1 1 0;
+  min-block-size: 5rem;
+}
 /* The OPFS title belongs to the control stack. This keeps the filter between
    the section name and the data it filters. */
 .rw-app .dlg-subhead .storage-section-title {

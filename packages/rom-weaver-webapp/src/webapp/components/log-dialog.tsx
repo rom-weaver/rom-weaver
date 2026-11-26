@@ -1560,10 +1560,10 @@ const LogsStoragePanel = ({
   return (
     <>
       {showingOpfs ? (
-        <>
+        <div className="storage-saves">
           <EmulatorSavesPanel active importRequest={emulatorSaveImport} onImportStarted={onEmulatorSaveImportStarted} />
           <KeptRomsPanel />
-        </>
+        </div>
       ) : null}
       <div className="dlg-subhead">
         {showingOpfs ? (
