@@ -335,6 +335,7 @@ describe("external links", () => {
     vi.stubGlobal("open", open);
     const { container } = render(withSettings(<Masthead {...mastheadProps} />));
 
+    const githubRow = rowNamed(navs(container).side, "GitHub");
     // happy-dom would fetch the real URL for an unprevented link click, so the
     // shell's verdict is read first and the navigation is cancelled afterwards.
     let defaultAllowed = false;
@@ -344,7 +345,7 @@ describe("external links", () => {
     };
     document.addEventListener("click", cancelNavigation);
     try {
-      fireEvent.click(rowNamed(navs(container).side, "GitHub"));
+      fireEvent.click(githubRow);
     } finally {
       document.removeEventListener("click", cancelNavigation);
     }
