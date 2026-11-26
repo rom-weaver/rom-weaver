@@ -445,10 +445,10 @@ fn rename_in_place_renames_discs_tracks_and_same_named_files() {
     let expected = [
         ("ff7.disc01.cue", "Final Fantasy VII (Disc 1).cue", true),
         ("ff7.disc02.cue", "Final Fantasy VII (Disc 2).cue", true),
-        ("ff7.disc01.bin", "Final Fantasy VII (Disc 1).bin", false),
-        ("ff7.disc02.bin", "Final Fantasy VII (Disc 2).bin", false),
         ("ff7.disc01.sbi", "Final Fantasy VII (Disc 1).sbi", false),
+        ("ff7.disc01.bin", "Final Fantasy VII (Disc 1).bin", false),
         ("ff7.disc02.sbi", "Final Fantasy VII (Disc 2).sbi", false),
+        ("ff7.disc02.bin", "Final Fantasy VII (Disc 2).bin", false),
     ]
     .map(|(from, to, text)| (from.to_string(), to, text));
     assert_eq!(renames, expected);
@@ -522,11 +522,11 @@ fn rename_in_place_refuses_what_a_rename_could_lose_or_overwrite() {
                     "a (Disc 1)",
                     &["a (Disc 1).bin", "a (Disc 1) (Track 2).bin"],
                 );
-                fs::write(dir.join("a (Disc 1).sbi"), b"sbi").expect("write sbi");
+                fs::write(dir.join("a (Disc 1).nfo"), b"nfo").expect("write nfo");
             }),
             &["a (Disc 1).cue"][..],
             Some("G"),
-            "`a (Disc 1).sbi` shares its name with files that get different names",
+            "`a (Disc 1).nfo` shares its name with files that get different names",
         ),
     ] {
         let error = in_place_refusal(setup, inputs, name);

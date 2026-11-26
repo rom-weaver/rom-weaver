@@ -538,6 +538,237 @@ fn playlist_rename_names_discs_and_rewrites_their_sheets() {
     );
 }
 
+fn write_sbi(dir: &Path, stem: &str, extension: &str) {
+    fs::write(
+        dir.join(format!("{stem}.{extension}")),
+        format!("libcrypt {stem}"),
+    )
+    .expect("write sbi");
+}
+
+fn sorted_file_names(dir: &Path) -> Vec<String> {
+    let mut names: Vec<String> = fs::read_dir(dir)
+        .expect("read dir")
+        .map(|item| {
+            item.expect("entry")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
+    names.sort();
+    names
+}
+
+#[test]
+fn playlist_rename_copies_each_discs_sbi_under_the_disc_name() {
+    let temp = setup_temp_dir();
+    let discs = temp.child("discs");
+    fs::create_dir_all(discs.path()).expect("discs dir");
+    for stem in ["Game (Disc 1)", "Game (Disc 2)"] {
+        write_cue_disc(discs.path(), stem);
+        write_sbi(discs.path(), stem, "sbi");
+    }
+    let one = discs.path().join("Game (Disc 1).cue");
+    let two = discs.path().join("Game (Disc 2).cue");
+    let out = temp.child("out");
+    let json = run_single_json_event(
+        &playlist_args(
+            &[one.to_str().expect("p"), two.to_str().expect("p")],
+            &format!("{}/", out.path().to_str().expect("p")),
+            &["--rename", "--name", "Game"],
+        ),
+        0,
+    );
+    assert_eq!(json["status"], "succeeded");
+    assert_eq!(
+        sorted_file_names(out.path()),
+        [
+            "Game (Disc 1).bin",
+            "Game (Disc 1).cue",
+            "Game (Disc 1).sbi",
+            "Game (Disc 2).bin",
+            "Game (Disc 2).cue",
+            "Game (Disc 2).sbi",
+            "Game.m3u",
+        ]
+    );
+    assert_eq!(
+        fs::read(out.child("Game (Disc 2).sbi").path()).expect("sbi"),
+        b"libcrypt Game (Disc 2)"
+    );
+    assert_eq!(
+        fs::read_to_string(out.child("Game.m3u").path()).expect("m3u"),
+        "Game (Disc 1).cue\nGame (Disc 2).cue\n"
+    );
+}
+
+#[test]
+fn playlist_zip_takes_an_sbi_input_as_a_companion_not_a_disc() {
+    let temp = setup_temp_dir();
+    for stem in ["Game (Disc 1)", "Game (Disc 2)"] {
+        write_cue_disc(temp.path(), stem);
+        write_sbi(temp.path(), stem, "sbi");
+    }
+    let inputs: Vec<String> = [
+        "Game (Disc 1).cue",
+        "Game (Disc 1).sbi",
+        "Game (Disc 2).sbi",
+        "Game (Disc 2).cue",
+    ]
+    .iter()
+    .map(|name| temp.path().join(name).to_str().expect("p").to_string())
+    .collect();
+    let input_refs: Vec<&str> = inputs.iter().map(String::as_str).collect();
+    let out = temp.child("Game.zip");
+    run_single_json_event(
+        &playlist_args(&input_refs, out.path().to_str().expect("p"), &[]),
+        0,
+    );
+    let extracted = temp.child("unzipped");
+    extract_zip(out.path(), extracted.path());
+    assert_eq!(
+        fs::read_to_string(extracted.child("Game.m3u").path()).expect("m3u"),
+        "Game (Disc 1).cue\nGame (Disc 2).cue\n"
+    );
+    assert_eq!(
+        sorted_file_names(extracted.path()),
+        [
+            "Game (Disc 1).bin",
+            "Game (Disc 1).cue",
+            "Game (Disc 1).sbi",
+            "Game (Disc 2).bin",
+            "Game (Disc 2).cue",
+            "Game (Disc 2).sbi",
+            "Game.m3u",
+        ]
+    );
+}
+
+#[test]
+fn playlist_copies_an_sbi_by_its_exact_name_and_skips_discs_without_one() {
+    let temp = setup_temp_dir();
+    // Dotted version, spaces and Unicode in the stem; an uppercase extension; a disc with no sbi.
+    let stems = [
+        ("Game v1.2", Some("sbi")),
+        ("Pokémon ünï [Disc 2]", Some("sbi")),
+        ("Loud (Disc 3)", Some("SBI")),
+        ("Bare (Disc 4)", None),
+    ];
+    let mut inputs = Vec::new();
+    for (stem, sbi) in stems {
+        write_cue_disc(temp.path(), stem);
+        if let Some(extension) = sbi {
+            write_sbi(temp.path(), stem, extension);
+        }
+        inputs.push(temp.path().join(format!("{stem}.cue")));
+    }
+    let input_refs: Vec<&str> = inputs
+        .iter()
+        .map(|input| input.to_str().expect("p"))
+        .collect();
+    let plain = temp.child("plain/");
+    run_single_json_event(
+        &playlist_args(
+            &input_refs,
+            plain.path().to_str().expect("p"),
+            &["--name", "G"],
+        ),
+        0,
+    );
+    let renamed = temp.child("renamed/");
+    run_single_json_event(
+        &playlist_args(
+            &input_refs,
+            renamed.path().to_str().expect("p"),
+            &["--rename", "--name", "G"],
+        ),
+        0,
+    );
+    let sbi_names = |dir: &Path| -> Vec<String> {
+        sorted_file_names(dir)
+            .into_iter()
+            .filter(|name| name.to_ascii_lowercase().ends_with(".sbi"))
+            .collect()
+    };
+    assert_eq!(
+        sbi_names(plain.path()),
+        [
+            "Game v1.2.sbi",
+            "Loud (Disc 3).SBI",
+            "Pokémon ünï [Disc 2].sbi"
+        ]
+    );
+    assert_eq!(
+        fs::read(plain.child("Pokémon ünï [Disc 2].sbi").path()).expect("sbi"),
+        "libcrypt Pokémon ünï [Disc 2]".as_bytes()
+    );
+    let renamed_files = sorted_file_names(renamed.path());
+    assert_eq!(
+        sbi_names(renamed.path()),
+        ["G (Disc 1).sbi", "G (Disc 2).SBI", "G (Disc 4).sbi"]
+    );
+    assert_eq!(
+        fs::read(renamed.child("G (Disc 2).SBI").path()).expect("sbi"),
+        b"libcrypt Loud (Disc 3)"
+    );
+    // Numbered discs sort first, so `Game v1.2` becomes disc 4 and `Bare (Disc 4)` disc 3.
+    assert!(
+        renamed_files.contains(&"G (Disc 3).cue".to_string())
+            && !renamed_files.contains(&"G (Disc 3).sbi".to_string()),
+        "a disc without an sbi gets none: {renamed_files:?}"
+    );
+}
+
+#[test]
+fn playlist_m3u_only_output_copies_no_sbi_and_lists_no_sbi_line() {
+    let temp = setup_temp_dir();
+    write_cue_disc(temp.path(), "Game (Disc 1)");
+    write_sbi(temp.path(), "Game (Disc 1)", "sbi");
+    let cue = temp.path().join("Game (Disc 1).cue");
+    let sbi = temp.path().join("Game (Disc 1).sbi");
+    let out = temp.child("out/Game.m3u");
+    fs::create_dir_all(out.path().parent().expect("parent")).expect("out dir");
+    run_single_json_event(
+        &playlist_args(
+            &[cue.to_str().expect("p"), sbi.to_str().expect("p")],
+            out.path().to_str().expect("p"),
+            &[],
+        ),
+        0,
+    );
+    assert_eq!(
+        sorted_file_names(out.path().parent().expect("parent")),
+        ["Game.m3u"]
+    );
+    assert!(
+        fs::read_to_string(out.path())
+            .expect("m3u")
+            .contains("Game (Disc 1).cue\n"),
+    );
+    assert!(!fs::read_to_string(out.path()).expect("m3u").contains("sbi"));
+}
+
+#[test]
+fn playlist_dry_run_lists_the_sbi_a_folder_output_writes() {
+    let temp = setup_temp_dir();
+    write_cue_disc(temp.path(), "Game (Disc 1)");
+    write_sbi(temp.path(), "Game (Disc 1)", "sbi");
+    let cue = temp.path().join("Game (Disc 1).cue");
+    let roms = temp.child("roms");
+    let json = run_single_json_event(
+        &playlist_args(
+            &[cue.to_str().expect("p")],
+            roms.path().to_str().expect("p"),
+            &["--rename", "--name", "G", "--dry-run"],
+        ),
+        0,
+    );
+    let writes = json["details"]["writes"].to_string();
+    assert!(writes.contains("G (Disc 1).sbi"), "{writes}");
+    assert!(!roms.path().exists(), "dry run must not write");
+}
+
 #[test]
 fn playlist_without_output_writes_the_game_playlist_beside_the_first_disc() {
     let temp = setup_temp_dir();
