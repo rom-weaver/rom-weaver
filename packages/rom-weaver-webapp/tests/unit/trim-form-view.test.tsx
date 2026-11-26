@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { fireEvent, render } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+import { loadCatalog } from "../../src/presentation/localization/catalog.ts";
 import { TrimPatchFormView } from "../../src/public/react/trim-form-view.tsx";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 
@@ -43,6 +44,10 @@ const renderView = (overrides: Record<string, unknown> = {}) =>
   );
 
 describe("TrimPatchFormView", () => {
+  beforeAll(async () => {
+    await loadCatalog("de");
+  });
+
   it("renders the empty trim hero and ghost steps", () => {
     const { container } = renderView();
     expect(container.querySelector("#trim-builder-container")).toBeTruthy();
@@ -50,6 +55,15 @@ describe("TrimPatchFormView", () => {
     expect(container.querySelectorAll(".ghost-next-step")).toHaveLength(2);
     expect(container.querySelector("[data-testid=candidate-dialog]")).toBeTruthy();
     expect(container.querySelector("#trim-builder-row-output")).toBeNull();
+  });
+
+  it("localizes the ghost step list label", () => {
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{ language: "de" }}>
+        <TrimPatchFormView {...(model() as never)} />
+      </RomWeaverSettingsProvider>,
+    );
+    expect(container.querySelector(".ghost-next-label")?.textContent).toBe("Weiter:");
   });
 
   it("renders staged source/output steps and an informational warning with a single dismiss action", () => {
