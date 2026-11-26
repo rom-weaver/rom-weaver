@@ -569,7 +569,7 @@ Procedures: [Undo PPF in the browser](../how-to/undo-ppf-browser.md) and [Undo P
 | `-o`, `--output PATH` | The `.m3u`, `.zip`, or folder to write. |
 | `--name GAME` | The game's name. Defaults to the `.zip` name, else the first disc's name without its extension and disc marker. Not valid with an `.m3u` output, which names the playlist itself. |
 | `--layout LAYOUT` | How a ZIP or folder output arranges the files (default `flat`). |
-| `--rename` | Name the discs `<game> (Disc N)` in playlist order, with their track files and sheets to match. Needs a ZIP or folder output. |
+| `--rename` | Name the discs `<game> (Disc N)` in playlist order, with their track files, sheets, and LibCrypt `.sbi` to match. Needs a ZIP or folder output. |
 | `--no-sort` | List the discs in the order given instead of by disc number. |
 | `--flat` | Write each disc as its bare file name instead of a path relative to the playlist. |
 

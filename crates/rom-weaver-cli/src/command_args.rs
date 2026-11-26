@@ -3631,7 +3631,7 @@ pub struct PlaylistCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Name the discs `<game> (Disc N)` in playlist order, with track files and sheets to match. Needs a .zip or folder output"
+            help = "Name the discs `<game> (Disc N)` in playlist order, with track files, sheets, and a LibCrypt .sbi to match. Needs a .zip or folder output"
         )
     )]
     #[serde(default)]

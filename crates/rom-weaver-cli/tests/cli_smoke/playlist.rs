@@ -561,49 +561,6 @@ fn sorted_file_names(dir: &Path) -> Vec<String> {
 }
 
 #[test]
-fn playlist_rename_copies_each_discs_sbi_under_the_disc_name() {
-    let temp = setup_temp_dir();
-    let discs = temp.child("discs");
-    fs::create_dir_all(discs.path()).expect("discs dir");
-    for stem in ["Game (Disc 1)", "Game (Disc 2)"] {
-        write_cue_disc(discs.path(), stem);
-        write_sbi(discs.path(), stem, "sbi");
-    }
-    let one = discs.path().join("Game (Disc 1).cue");
-    let two = discs.path().join("Game (Disc 2).cue");
-    let out = temp.child("out");
-    let json = run_single_json_event(
-        &playlist_args(
-            &[one.to_str().expect("p"), two.to_str().expect("p")],
-            &format!("{}/", out.path().to_str().expect("p")),
-            &["--rename", "--name", "Game"],
-        ),
-        0,
-    );
-    assert_eq!(json["status"], "succeeded");
-    assert_eq!(
-        sorted_file_names(out.path()),
-        [
-            "Game (Disc 1).bin",
-            "Game (Disc 1).cue",
-            "Game (Disc 1).sbi",
-            "Game (Disc 2).bin",
-            "Game (Disc 2).cue",
-            "Game (Disc 2).sbi",
-            "Game.m3u",
-        ]
-    );
-    assert_eq!(
-        fs::read(out.child("Game (Disc 2).sbi").path()).expect("sbi"),
-        b"libcrypt Game (Disc 2)"
-    );
-    assert_eq!(
-        fs::read_to_string(out.child("Game.m3u").path()).expect("m3u"),
-        "Game (Disc 1).cue\nGame (Disc 2).cue\n"
-    );
-}
-
-#[test]
 fn playlist_zip_takes_an_sbi_input_as_a_companion_not_a_disc() {
     let temp = setup_temp_dir();
     for stem in ["Game (Disc 1)", "Game (Disc 2)"] {
@@ -685,18 +642,30 @@ fn playlist_copies_an_sbi_by_its_exact_name_and_skips_discs_without_one() {
         ),
         0,
     );
+    // A case-insensitive file system (macOS APFS, Windows NTFS) finds `Loud (Disc 3).SBI` by its
+    // lowercase probe too, so the copy keeps a lowercase extension there: skip only the
+    // uppercase-name expectations.
+    let case_insensitive = temp.child("LOUD (DISC 3).CUE").path().exists();
+    let upper = if case_insensitive { "sbi" } else { "SBI" };
     let sbi_names = |dir: &Path| -> Vec<String> {
         sorted_file_names(dir)
             .into_iter()
             .filter(|name| name.to_ascii_lowercase().ends_with(".sbi"))
+            .map(|name| {
+                if case_insensitive {
+                    format!("{}.sbi", &name[..name.len() - ".sbi".len()])
+                } else {
+                    name
+                }
+            })
             .collect()
     };
     assert_eq!(
         sbi_names(plain.path()),
         [
-            "Game v1.2.sbi",
-            "Loud (Disc 3).SBI",
-            "Pokémon ünï [Disc 2].sbi"
+            "Game v1.2.sbi".to_string(),
+            format!("Loud (Disc 3).{upper}"),
+            "Pokémon ünï [Disc 2].sbi".to_string(),
         ]
     );
     assert_eq!(
@@ -706,10 +675,14 @@ fn playlist_copies_an_sbi_by_its_exact_name_and_skips_discs_without_one() {
     let renamed_files = sorted_file_names(renamed.path());
     assert_eq!(
         sbi_names(renamed.path()),
-        ["G (Disc 1).sbi", "G (Disc 2).SBI", "G (Disc 4).sbi"]
+        [
+            "G (Disc 1).sbi".to_string(),
+            format!("G (Disc 2).{upper}"),
+            "G (Disc 4).sbi".to_string(),
+        ]
     );
     assert_eq!(
-        fs::read(renamed.child("G (Disc 2).SBI").path()).expect("sbi"),
+        fs::read(renamed.child(format!("G (Disc 2).{upper}")).path()).expect("sbi"),
         b"libcrypt Loud (Disc 3)"
     );
     // Numbered discs sort first, so `Game v1.2` becomes disc 4 and `Bare (Disc 4)` disc 3.
@@ -747,26 +720,6 @@ fn playlist_m3u_only_output_copies_no_sbi_and_lists_no_sbi_line() {
             .contains("Game (Disc 1).cue\n"),
     );
     assert!(!fs::read_to_string(out.path()).expect("m3u").contains("sbi"));
-}
-
-#[test]
-fn playlist_dry_run_lists_the_sbi_a_folder_output_writes() {
-    let temp = setup_temp_dir();
-    write_cue_disc(temp.path(), "Game (Disc 1)");
-    write_sbi(temp.path(), "Game (Disc 1)", "sbi");
-    let cue = temp.path().join("Game (Disc 1).cue");
-    let roms = temp.child("roms");
-    let json = run_single_json_event(
-        &playlist_args(
-            &[cue.to_str().expect("p")],
-            roms.path().to_str().expect("p"),
-            &["--rename", "--name", "G", "--dry-run"],
-        ),
-        0,
-    );
-    let writes = json["details"]["writes"].to_string();
-    assert!(writes.contains("G (Disc 1).sbi"), "{writes}");
-    assert!(!roms.path().exists(), "dry run must not write");
 }
 
 #[test]

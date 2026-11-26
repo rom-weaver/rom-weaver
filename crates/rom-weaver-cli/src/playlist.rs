@@ -338,15 +338,11 @@ fn image_companions(input: &Path) -> Vec<Companion> {
         .extension()
         .and_then(|extension| extension.to_str())
         .map(str::to_ascii_lowercase);
-    let data_files: &[&str] = match extension.as_deref() {
-        Some("ccd") => &["img", "sub"],
-        Some("mds") => &["mdf"],
-        _ => &[],
-    };
-    let libcrypt: &[&str] = if extension.as_deref() == Some("sbi") {
-        &[]
-    } else {
-        &["sbi"]
+    let wanted: &[&str] = match extension.as_deref() {
+        Some("ccd") => &["img", "sub", "sbi"],
+        Some("mds") => &["mdf", "sbi"],
+        Some("sbi") => &[],
+        _ => &["sbi"],
     };
     let Some(stem) = input
         .file_stem()
@@ -356,7 +352,7 @@ fn image_companions(input: &Path) -> Vec<Companion> {
     };
     let dir = input.parent().unwrap_or_else(|| Path::new(""));
     let mut found = Vec::new();
-    for extension in data_files.iter().chain(libcrypt) {
+    for extension in wanted {
         for cased in [extension.to_string(), extension.to_ascii_uppercase()] {
             let name = format!("{stem}.{cased}");
             if dir.join(&name).is_file() {
