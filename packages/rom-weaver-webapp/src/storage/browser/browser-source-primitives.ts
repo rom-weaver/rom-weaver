@@ -26,6 +26,7 @@ const getBrowserSourceBlob = (source: unknown): Blob | null => {
 
 type ManagedSourceCleanup = {
   cleanup: () => Promise<void>;
+  hasRegistrantReference: boolean;
   references: number;
 };
 
@@ -44,15 +45,29 @@ const releaseManagedBrowserSource = async (source: unknown): Promise<void> => {
 };
 
 const registerBrowserSourceCleanup = (source: object, cleanup: () => Promise<void> | void): (() => Promise<void>) => {
-  const cleanupOnce = createCleanupOnce(cleanup);
-  managedSourceCleanups.set(source, { cleanup: cleanupOnce, references: 1 });
-  return () => releaseManagedBrowserSource(source);
+  const managed = { cleanup: createCleanupOnce(cleanup), hasRegistrantReference: true, references: 1 };
+  managedSourceCleanups.set(source, managed);
+  return async () => {
+    if (!managed.hasRegistrantReference) return;
+    managed.hasRegistrantReference = false;
+    await releaseManagedBrowserSource(source);
+  };
 };
 
 const retainBrowserSource = (source: unknown): void => {
   if (!(source && typeof source === "object")) return;
   const managed = managedSourceCleanups.get(source);
   if (managed) managed.references += 1;
+};
+
+// A workflow owner takes over the registrant's reference while the registrant still holds it, and
+// otherwise adds its own. The registrant's later release then cannot drop the workflow's reference.
+const claimBrowserSource = (source: unknown): void => {
+  if (!(source && typeof source === "object")) return;
+  const managed = managedSourceCleanups.get(source);
+  if (!managed) return;
+  if (managed.hasRegistrantReference) managed.hasRegistrantReference = false;
+  else managed.references += 1;
 };
 
 const releaseBrowserSource = releaseManagedBrowserSource;
@@ -73,6 +88,7 @@ const configureBrowserSourcePrimitives = () => {
 };
 
 export {
+  claimBrowserSource,
   configureBrowserSourcePrimitives,
   getBrowserSourceBlob,
   getBrowserSourceHandle,

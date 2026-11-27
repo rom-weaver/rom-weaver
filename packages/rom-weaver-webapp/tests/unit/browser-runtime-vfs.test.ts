@@ -19,11 +19,11 @@ const state = vi.hoisted(() => ({
 
 vi.mock("../../src/lib/logging.ts", () => ({ emitTraceLog: vi.fn() }));
 vi.mock("../../src/storage/browser/browser-source-primitives.ts", () => ({
+  claimBrowserSource: vi.fn((source: unknown) => {
+    state.retained.push(source);
+  }),
   releaseBrowserSource: vi.fn(async (source: unknown) => {
     state.released.push(source);
-  }),
-  retainBrowserSource: vi.fn((source: unknown) => {
-    state.retained.push(source);
   }),
 }));
 vi.mock("../../src/storage/vfs/runtime-output.ts", () => ({

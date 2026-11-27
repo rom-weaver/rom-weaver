@@ -151,7 +151,6 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   private readonly ownedSourceRefCounts = new Map<unknown, number>();
   private readonly retainUncompressedOutput: ApplyWorkflowOptions["retainUncompressedOutput"];
   private readonly pendingOwnedSourceReleases = new Map<unknown, ReturnType<typeof setTimeout>>();
-  private readonly releasedOwnedSources = new WeakSet<object>();
   /** Latest verification plan per target chain, refreshed by each plan-mode validate pass. The
    * form reads it for chain verdict chips, order suggestions, and output enforceability. */
   readonly latestChainPlans = new Map<string, PatchValidationPlan>();
@@ -2352,20 +2351,15 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     await this.runtime.workerIo?.releaseSources?.(sources).catch(() => undefined);
   }
 
-  // The source registry starts with one owner. The first workflow owner transfers that reference;
-  // only a later owner needs to reacquire it after a real release.
+  // The workflow holds one runtime reference per owned source. Owning a source again before its
+  // deferred release runs keeps that reference instead of taking another.
   private retainOwnedSources(sources: unknown[]): void {
     for (const source of sources) {
       const pendingRelease = this.pendingOwnedSourceReleases.get(source);
       if (pendingRelease) {
         clearTimeout(pendingRelease);
         this.pendingOwnedSourceReleases.delete(source);
-      } else if (
-        !this.ownedSourceRefCounts.has(source) &&
-        source &&
-        typeof source === "object" &&
-        this.releasedOwnedSources.has(source as object)
-      ) {
+      } else if (!this.ownedSourceRefCounts.has(source)) {
         this.runtime.workerIo?.retainOwnedSources?.([source]);
       }
       this.ownedSourceRefCounts.set(source, (this.ownedSourceRefCounts.get(source) || 0) + 1);
@@ -2388,7 +2382,6 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       if (refCount > 1) this.ownedSourceRefCounts.set(source, refCount - 1);
       else if (refCount === 1) {
         this.ownedSourceRefCounts.delete(source);
-        if (source && typeof source === "object") this.releasedOwnedSources.add(source);
         if (!this.pendingOwnedSourceReleases.has(source)) {
           this.pendingOwnedSourceReleases.set(
             source,

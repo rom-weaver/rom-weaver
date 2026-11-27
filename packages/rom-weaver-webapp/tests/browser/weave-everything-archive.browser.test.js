@@ -1,5 +1,6 @@
 import { createElement } from "react";
 import { expect, test, vi } from "vitest";
+import { ApplyWorkflow } from "../../src/platform/browser/browser-api.ts";
 import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
 import { browserVfs } from "../../src/platform/browser/workflow-runtime-vfs-cleanup.ts";
 import { ApplyPatchForm } from "../../src/public/react/index.tsx";
@@ -87,6 +88,41 @@ test("weave create keeps its operation scope until the last output is disposed",
       .toEqual([null, null]);
   } finally {
     await Promise.all([weaveOutput.dispose(), archiveOutput.dispose()]);
+  }
+});
+
+test("weave parse cleanup keeps extracted members an Apply workflow owns until it is disposed", async () => {
+  const weaveFile = await buildEverythingArchive();
+  const parse = browserRuntime.weave?.parse;
+  if (!parse) throw new Error("Runtime weave parse capability is unavailable");
+  const parsed = await parse({ fileName: weaveFile.name, source: weaveFile });
+  const extracted = [...parsed.extractedFiles.values()];
+  const romFile = extracted.find((file) => file.name === "game.bin");
+  const patchFile = extracted.find((file) => file.name === "change.ips");
+  if (!(romFile && patchFile)) throw new Error("Weave parse did not extract game.bin and change.ips");
+  const extractedPaths = [romFile.filePath, patchFile.filePath];
+  const workflow = new ApplyWorkflow({
+    settings: {
+      output: { compression: "none", outputName: "patched.bin" },
+      workers: { threads: 1 },
+    },
+  });
+  let disposed = false;
+  try {
+    await workflow.setInput(romFile);
+    await workflow.addPatch(patchFile);
+    await parsed.cleanup();
+    expect(await Promise.all(extractedPaths.map((path) => browserVfs.stat(path)))).not.toContain(null);
+
+    const applied = await workflow.run();
+    await applied.output.dispose();
+
+    await workflow.dispose();
+    disposed = true;
+    await expect.poll(() => Promise.all(extractedPaths.map((path) => browserVfs.stat(path)))).toEqual([null, null]);
+  } finally {
+    if (!disposed) await workflow.dispose();
+    await parsed.cleanup();
   }
 });
 
