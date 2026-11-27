@@ -313,13 +313,14 @@ impl PlaylistOutput {
     }
 }
 
-/// A file a disc needs beside it: a track its `.cue`/`.gdi` names, or a data file stored
-/// with its `.ccd`/`.mds`.
+/// A file a disc needs beside it: a track its `.cue`/`.gdi` names, a data file stored with its
+/// `.ccd`/`.mds`, or a LibCrypt `.sbi` that shares its name.
 struct Companion {
     source: PathBuf,
     /// The `/`-separated path from the disc's folder.
     name: String,
-    /// The reference exactly as the sheet writes it; `None` for a `.ccd`/`.mds` data file.
+    /// The reference exactly as the sheet writes it; `None` for a `.ccd`/`.mds` data file or an
+    /// `.sbi`.
     reference: Option<String>,
 }
 
@@ -329,17 +330,19 @@ struct PlannedDisc {
     companions: Vec<Companion>,
 }
 
-/// The data files a `.ccd`/`.mds` image descriptor is stored with (`.img` and
-/// `.sub`, or `.mdf`), as they sit next to it. Only files that exist count.
+/// The files a disc is stored with that no sheet names, as they sit next to it: a `.ccd`'s
+/// `.img` and `.sub`, an `.mds`'s `.mdf`, and the `.sbi` that emulators read LibCrypt data from.
+/// Only files that exist count, and an `.sbi` is not its own companion.
 fn image_companions(input: &Path) -> Vec<Companion> {
     let extension = input
         .extension()
         .and_then(|extension| extension.to_str())
         .map(str::to_ascii_lowercase);
     let wanted: &[&str] = match extension.as_deref() {
-        Some("ccd") => &["img", "sub"],
-        Some("mds") => &["mdf"],
-        _ => return Vec::new(),
+        Some("ccd") => &["img", "sub", "sbi"],
+        Some("mds") => &["mdf", "sbi"],
+        Some("sbi") => &[],
+        _ => &["sbi"],
     };
     let Some(stem) = input
         .file_stem()
@@ -365,9 +368,9 @@ fn image_companions(input: &Path) -> Vec<Companion> {
 }
 
 /// The discs among the inputs, each with the files it needs. An input that a disc sheet among
-/// the inputs names (a `.cue`/`.gdi` track file, or the data files stored with a `.ccd`/`.mds`)
-/// is not a disc. Only a bundle copies companions, so only a bundle refuses names that point
-/// outside the sheet's folder or are missing.
+/// the inputs names (a `.cue`/`.gdi` track file, or the data files stored with a `.ccd`/`.mds`),
+/// or that is another input's same-named `.sbi`, is not a disc. Only a bundle copies companions,
+/// so only a bundle refuses names that point outside the sheet's folder or are missing.
 fn plan_playlist(
     inputs: &[PathBuf],
     sort: bool,
