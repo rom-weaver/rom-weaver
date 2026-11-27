@@ -21,14 +21,14 @@ describe("ApplyWorkflowController owned source replacement", () => {
     await controller.releaseOwnedSources([source]);
     controller.retainOwnedSources([source]);
 
-    expect(retainOwnedSources).not.toHaveBeenCalled();
+    expect(retainOwnedSources).toHaveBeenCalledTimes(1);
     expect(releaseOwnedSources).not.toHaveBeenCalled();
 
     await controller.releaseOwnedSources([source]);
     await flushPendingRelease();
     controller.retainOwnedSources([source]);
 
-    expect(retainOwnedSources).toHaveBeenCalledTimes(1);
+    expect(retainOwnedSources).toHaveBeenCalledTimes(2);
     expect(releaseOwnedSources).toHaveBeenCalledTimes(1);
   });
 

@@ -13,7 +13,8 @@
     transform: scale(0.5);
   }
   60% {
-    transform: scale(1.25);
+    /* a surface that must stay inside a clip sets --pop-peak below the default */
+    transform: scale(var(--pop-peak, 1.25));
   }
   100% {
     transform: scale(1);

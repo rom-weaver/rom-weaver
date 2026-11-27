@@ -1209,6 +1209,55 @@ fn chd_compress_and_extract_gdi_round_trip() {
     assert!(gdi.contains("2 4 4 2048 \"disc (Track 2).bin\" 0"));
 }
 
+#[test]
+fn probe_gd_chd_reports_gd_rom_media_in_json_and_human_output() {
+    // The raw CD sync header makes the content sniffer report a CD for the unknown console.
+    let temp = setup_temp_dir();
+    let mut track01 = vec![0_u8; 4 * 2352];
+    track01[1..11].fill(0xFF);
+    fs::write(temp.child("track01.bin").path(), &track01).expect("track01");
+    temp.child("disc.gdi")
+        .write_str("1\n1 0 4 2352 track01.bin 0\n")
+        .expect("gdi fixture");
+    let chd_path = temp.child("disc.chd");
+    let chd = chd_path.path().to_str().expect("path");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("disc.gdi").path().to_str().expect("path"),
+            "--format",
+            "chd",
+            "--output",
+            chd,
+            "--jsonl",
+        ],
+        0,
+    );
+
+    let json = run_single_json_event(&["probe", "--input", chd, "--no-extract", "--jsonl"], 0);
+    assert_eq!(json["details"]["chd"]["media_kind"], "gd");
+    assert_eq!(json["details"]["disc_format"], "GD-ROM");
+
+    let human = String::from_utf8_lossy(&command_stdout(
+        &["probe", "--input", chd, "--no-extract"],
+        0,
+    ))
+    .into_owned();
+    let human_rows = human
+        .lines()
+        .map(|line| line.split_whitespace().collect::<Vec<_>>().join(" "))
+        .collect::<Vec<_>>();
+    assert!(
+        human_rows.contains(&"Chd / Media kind gd".to_string()),
+        "{human}"
+    );
+    assert!(
+        human_rows.contains(&"Disc format GD-ROM".to_string()),
+        "{human}"
+    );
+}
+
 /// Writes a three-track synthetic GD-ROM (data, audio, data) with the given
 /// frame counts and the audio/high-density `.gdi` offsets, then compresses it.
 /// Returns the temp dir, CHD path and track contents.

@@ -425,6 +425,7 @@ dependencies = [
  "anstyle",
  "clap_lex",
  "strsim",
+ "terminal_size",
 ]
 
 [[package]]
@@ -1027,6 +1028,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "libmimalloc-sys"
+version = "0.1.49"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a45a52f43e1c16f667ccfe4dd8c85b7f7c204fd5e3bf46c5b0db9a5c3c0b8e9"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "libz-sys"
 version = "1.1.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1099,9 +1109,9 @@ dependencies = [
 
 [[package]]
 name = "lzma-rust2"
-version = "0.23.0"
+version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1c46f3fcd2e888afdb01a07efc071cb21300e07c68d32c3e8b01b5c8cb1fcaa"
+checksum = "ef1d73c59a56771343712b22ea5615092c612c16ba291c0979e3105dfeec4890"
 dependencies = [
  "sha2",
 ]
@@ -1158,6 +1168,15 @@ name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
+
+[[package]]
+name = "mimalloc"
+version = "0.1.52"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d4139bb28d14ad1facf21d5eb8825051b326e172d216b39f6d31df53cc97862"
+dependencies = [
+ "libmimalloc-sys",
+]
 
 [[package]]
 name = "minimal-lexical"
@@ -1508,7 +1527,7 @@ checksum = "323c417e1d9665a65b263ec744ba09030cfb277e9daa0b018a4ab62e57bc8189"
 
 [[package]]
 name = "rom-weaver-checksum"
-version = "0.23.0"
+version = "0.25.1"
 dependencies = [
  "adler2",
  "blake3",
@@ -1527,7 +1546,7 @@ dependencies = [
 
 [[package]]
 name = "rom-weaver-cli"
-version = "0.23.0"
+version = "0.25.1"
 dependencies = [
  "brotli",
  "clap",
@@ -1539,6 +1558,7 @@ dependencies = [
  "flate2",
  "indicatif",
  "libc",
+ "mimalloc",
  "miniz_oxide",
  "owo-colors",
  "quick-xml",
@@ -1561,7 +1581,7 @@ dependencies = [
 
 [[package]]
 name = "rom-weaver-containers"
-version = "0.23.0"
+version = "0.25.1"
 dependencies = [
  "adler2",
  "aes",
@@ -1630,7 +1650,7 @@ dependencies = [
 
 [[package]]
 name = "rom-weaver-core"
-version = "0.23.0"
+version = "0.25.1"
 dependencies = [
  "bzip2",
  "flate2",
@@ -1639,6 +1659,7 @@ dependencies = [
  "rayon",
  "serde",
  "serde_json",
+ "sha1",
  "strsim",
  "thiserror",
  "tracing",
@@ -1659,7 +1680,7 @@ dependencies = [
 
 [[package]]
 name = "rom-weaver-patches"
-version = "0.23.0"
+version = "0.25.1"
 dependencies = [
  "bzip2",
  "crc32fast",
@@ -1732,9 +1753,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.15"
+version = "0.103.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3c3cf1d8b1e7d4927e2d154c3fcb02979afb9939629c62cd9048d4f07b60ac2"
+checksum = "e3a0760a887c14823fca5a1c970b01d47c328c696c0c64829d1df50e8f853fd5"
 dependencies = [
  "ring",
  "rustls-pki-types",
@@ -1975,6 +1996,16 @@ dependencies = [
  "filetime",
  "libc",
  "xattr",
+]
+
+[[package]]
+name = "terminal_size"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "230a1b821ccbd75b185820a1f1ff7b14d21da1e442e22c0863ea5f08771a8874"
+dependencies = [
+ "rustix",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

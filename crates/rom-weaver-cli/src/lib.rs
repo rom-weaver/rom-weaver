@@ -233,10 +233,10 @@ beside the first disc, where the game is the disc name without its number.
   rom-weaver playlist -i Game.disc02.cue -i Game.disc01.cue -o Game.m3u
 
 A .zip --output holds the playlist and its discs, with the files each .cue,
-.gdi, .ccd, or .mds needs. A folder --output (ending in `/`, or without an
-extension) gets a copy of them instead. --layout arranges both for a frontend,
---rename names the discs `<game> (Disc N)`, and --chd compresses each disc to
-CHD:
+.gdi, .ccd, or .mds needs, and a same-named LibCrypt .sbi. A folder --output
+(ending in `/`, or without an extension) gets a copy of them instead. --layout
+arranges both for a frontend, --rename names the discs `<game> (Disc N)`, and
+--chd compresses each disc to CHD:
 
   rom-weaver playlist -i 'FF7 (Disc 1).cue' -i 'FF7 (Disc 2).cue' \\
     -o roms/psx --layout folder

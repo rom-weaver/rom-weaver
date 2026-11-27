@@ -2284,6 +2284,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.step.weave": msg({ id: "ui.step.weave", message: "Weave" }),
   "ui.step.cheats": msg({ id: "ui.step.cheats", message: "Cheats as a Patch" }),
   "ui.step.identify": msg({ id: "ui.step.identify", message: "Identify" }),
+  "ui.step.next": msg({ id: "ui.step.next", message: "Next:" }),
   "ui.step.modified": msg({ id: "ui.step.modified", message: "Modified" }),
   "ui.step.original": msg({ id: "ui.step.original", message: "Original" }),
   "ui.step.output": msg({ id: "ui.step.output", message: "Output" }),

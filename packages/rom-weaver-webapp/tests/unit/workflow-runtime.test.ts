@@ -530,6 +530,39 @@ describe("browser ingest and weave runtime", () => {
     }
   });
 
+  it("keeps a retained weave file in place after parse cleanup until its last owner releases it", async () => {
+    const { registerBrowserSourceCleanup, releaseBrowserSource, retainBrowserSource } = await vi.importActual<
+      typeof import("../../src/storage/browser/browser-source-primitives.ts")
+    >("../../src/storage/browser/browser-source-primitives.ts");
+    state.registerCleanup
+      .mockImplementationOnce(registerBrowserSourceCleanup)
+      .mockImplementationOnce(registerBrowserSourceCleanup);
+    const parsed = await browserRuntime.weave.parse?.({ fileName: "weave.json", source: "weave" } as never);
+    const extractDirPath = state.weaveParse.mock.calls.at(-1)?.[0]?.extractDirPath;
+    const retained = parsed?.extractedFiles.get("/work/extracted/game.bin") as File;
+    retainBrowserSource(retained);
+    state.browserVfs.remove.mockClear();
+    state.storageRequest.mockClear();
+
+    await parsed?.cleanup();
+    expect(state.browserVfs.remove).toHaveBeenCalledTimes(1);
+    expect(state.browserVfs.remove).toHaveBeenCalledWith("/work/extracted/patch.ips");
+    expect(state.storageRequest).not.toHaveBeenCalled();
+
+    await releaseBrowserSource(retained);
+    expect(state.browserVfs.remove).toHaveBeenCalledWith("/work/extracted/game.bin");
+    expect(state.storageRequest).toHaveBeenCalledWith({ action: "remove", filePath: extractDirPath });
+  });
+
+  it("removes the weave parse directory on cleanup when nothing was extracted", async () => {
+    state.weaveParse.mockResolvedValueOnce({ patchSources: [], romSource: undefined } as never);
+    const parsed = await browserRuntime.weave.parse?.({ fileName: "weave.json", source: "weave" } as never);
+    const extractDirPath = state.weaveParse.mock.calls.at(-1)?.[0]?.extractDirPath;
+    state.storageRequest.mockClear();
+    await parsed?.cleanup();
+    expect(state.storageRequest).toHaveBeenCalledWith({ action: "remove", filePath: extractDirPath });
+  });
+
   it("cleans a weave create failure after output creation", async () => {
     state.weaveCreate.mockRejectedValueOnce(new Error("weave failed"));
     await expect(browserRuntime.weave.create?.({ patches: [], rom: { source: "rom" } } as never)).rejects.toThrow(

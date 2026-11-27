@@ -260,6 +260,11 @@ msgstr "{name} - an Original ROM is already loaded."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.update.newSinceLastVisit"
+msgstr "{name}, updated since your last visit"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.drop.chooseFilesHint"
 msgstr "{page} can't use every file you added. Choose which ones to bring."
 
@@ -3670,6 +3675,11 @@ msgstr "Next"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.step.next"
+msgstr "Next:"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.channel.nightly"
 msgstr "Nightly build"
 
@@ -6422,11 +6432,6 @@ msgstr "Update available"
 #: src/presentation/localization/messages.ts
 msgid "ui.update.ready"
 msgstr "Update ready"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.update.newSinceLastVisit"
-msgstr "{name}, updated since your last visit"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { onRequestGet } from "../../functions/assets/[name].js";
 
 const WASM_URL = "https://rom-weaver.com/assets/rom-weaver-app-BWS09Fxt.wasm";
-const NEXT_SENTINEL = new Response("static passthrough");
+const STATIC_CACHE_CONTROL = "public, max-age=31536000, immutable";
 
 type FetchLogEntry = { method: string; url: string };
 
@@ -12,10 +12,12 @@ const makeContext = ({
   url = WASM_URL,
   acceptEncoding = "gzip, br, zstd",
   sidecarResponse,
+  staticResponse = new Response("static passthrough", { headers: { "Cache-Control": STATIC_CACHE_CONTROL } }),
 }: {
   url?: string;
   acceptEncoding?: string | null;
   sidecarResponse?: Response;
+  staticResponse?: Response;
 }) => {
   const headers = new Headers();
   if (acceptEncoding !== null) headers.set("Accept-Encoding", acceptEncoding);
@@ -30,11 +32,19 @@ const makeContext = ({
           },
         },
       },
-      next: () => Promise.resolve(NEXT_SENTINEL),
+      next: () => Promise.resolve(staticResponse),
       request: new Request(url, { headers }),
     },
     fetchLog,
+    staticResponse,
   };
+};
+
+const expectEdgeUncachedStatic = async (response: Response) => {
+  expect(response.headers.get("Cloudflare-CDN-Cache-Control")).toBe("no-store");
+  expect(response.headers.get("Cache-Control")).toBe(STATIC_CACHE_CONTROL);
+  expect(response.status).toBe(200);
+  expect(await response.text()).toBe("static passthrough");
 };
 
 const brSidecar = (body = "brotli-bytes", headers: HeadersInit = {}) => {
@@ -97,34 +107,45 @@ describe("pages brotli sidecar function", () => {
   });
 
   it("falls through for an extension the build stages no sidecar for", async () => {
-    const { context, fetchLog } = makeContext({
+    const { context, fetchLog, staticResponse } = makeContext({
       sidecarResponse: brSidecar(),
       url: "https://rom-weaver.com/assets/font-DXrUVZxZ.woff2",
     });
-    expect(await onRequestGet(context)).toBe(NEXT_SENTINEL);
+    expect(await onRequestGet(context)).toBe(staticResponse);
     expect(fetchLog).toEqual([]);
   });
 
   it("falls through to static serving when the client does not accept br", async () => {
     const { context, fetchLog } = makeContext({ acceptEncoding: "gzip, deflate" });
-    expect(await onRequestGet(context)).toBe(NEXT_SENTINEL);
+    await expectEdgeUncachedStatic(await onRequestGet(context));
     expect(fetchLog).toEqual([]);
   });
 
   it("falls through when Accept-Encoding is absent", async () => {
     const { context } = makeContext({ acceptEncoding: null });
-    expect(await onRequestGet(context)).toBe(NEXT_SENTINEL);
+    await expectEdgeUncachedStatic(await onRequestGet(context));
   });
 
   it("does not treat a br token inside another encoding name as br support", async () => {
     const { context } = makeContext({ acceptEncoding: "libre, zbr" });
-    expect(await onRequestGet(context)).toBe(NEXT_SENTINEL);
+    await expectEdgeUncachedStatic(await onRequestGet(context));
   });
 
   it("falls through when the client rejects br with a zero quality", async () => {
     const { context, fetchLog } = makeContext({ acceptEncoding: "gzip, br;q=0" });
-    expect(await onRequestGet(context)).toBe(NEXT_SENTINEL);
+    await expectEdgeUncachedStatic(await onRequestGet(context));
     expect(fetchLog).toEqual([]);
+  });
+
+  it("keeps the static status for a client without br", async () => {
+    const { context } = makeContext({
+      acceptEncoding: "gzip",
+      staticResponse: new Response("missing", { status: 404, statusText: "Not Found" }),
+    });
+    const response = await onRequestGet(context);
+    expect(response.status).toBe(404);
+    expect(response.statusText).toBe("Not Found");
+    expect(response.headers.get("Cloudflare-CDN-Cache-Control")).toBe("no-store");
   });
 
   it.each(["identity", "gzip", "gzip, br;q=0", ""])(
@@ -132,18 +153,18 @@ describe("pages brotli sidecar function", () => {
     async (clientAcceptEncoding) => {
       const { context, fetchLog } = makeContext({ acceptEncoding: "br, gzip" });
       Object.assign(context.request, { cf: { clientAcceptEncoding } });
-      expect(await onRequestGet(context)).toBe(NEXT_SENTINEL);
+      await expectEdgeUncachedStatic(await onRequestGet(context));
       expect(fetchLog).toEqual([]);
     },
   );
 
   it("falls through when the sidecar is missing (SPA fallback response), which also covers a missing asset", async () => {
-    const { context } = makeContext({ sidecarResponse: spaFallback() });
-    expect(await onRequestGet(context)).toBe(NEXT_SENTINEL);
+    const { context, staticResponse } = makeContext({ sidecarResponse: spaFallback() });
+    expect(await onRequestGet(context)).toBe(staticResponse);
   });
 
   it("falls through when the sidecar fetch is not ok", async () => {
-    const { context } = makeContext({ sidecarResponse: new Response("nope", { status: 404 }) });
-    expect(await onRequestGet(context)).toBe(NEXT_SENTINEL);
+    const { context, staticResponse } = makeContext({ sidecarResponse: new Response("nope", { status: 404 }) });
+    expect(await onRequestGet(context)).toBe(staticResponse);
   });
 });

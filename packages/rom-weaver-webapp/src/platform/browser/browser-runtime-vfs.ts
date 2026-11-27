@@ -1,6 +1,6 @@
 import { waitForBrowserOpfsBootCleanup } from "../../storage/browser/browser-opfs-cleanup.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
-import { releaseBrowserSource, retainBrowserSource } from "../../storage/browser/browser-source-primitives.ts";
+import { claimBrowserSource, releaseBrowserSource } from "../../storage/browser/browser-source-primitives.ts";
 import { getNamedSource } from "../../storage/shared/binary/source-file-utils.ts";
 import { createRuntimeOutputFromVfs } from "../../storage/vfs/runtime-output.ts";
 import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
@@ -148,7 +148,7 @@ const createBrowserRuntimeVfsIo = ({
   const retainOwnedSources: RuntimeWorkerIo["retainOwnedSources"] = (sources) => {
     for (const source of sources) {
       const directSource = getNamedSource(source as Parameters<typeof getNamedSource>[0]);
-      retainBrowserSource(directSource || source);
+      claimBrowserSource(directSource || source);
     }
   };
   const releaseOwnedSources: RuntimeWorkerIo["releaseOwnedSources"] = async (sources) => {
