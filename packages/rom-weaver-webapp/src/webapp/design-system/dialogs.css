@@ -654,7 +654,6 @@
 }
 .rw-app .log-dlg .storage-body.log-body {
   flex: 1 1 5rem;
-  min-block-size: 0;
 }
 /* The OPFS title belongs to the control stack. This keeps the filter between
    the section name and the data it filters. */
