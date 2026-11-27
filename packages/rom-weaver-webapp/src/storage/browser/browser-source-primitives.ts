@@ -60,8 +60,7 @@ const retainBrowserSource = (source: unknown): void => {
   if (managed) managed.references += 1;
 };
 
-// A workflow owner takes over the registrant's reference while the registrant still holds it, and
-// otherwise adds its own. The registrant's later release then cannot drop the workflow's reference.
+// Taking over a held registrant reference makes the registrant's later release a no-op.
 const claimBrowserSource = (source: unknown): void => {
   if (!(source && typeof source === "object")) return;
   const managed = managedSourceCleanups.get(source);

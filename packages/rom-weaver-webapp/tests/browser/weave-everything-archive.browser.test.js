@@ -152,7 +152,7 @@ test.each([
     parseCleanup: () => parsed.cleanup(),
     workflowClears: async () => {
       await workflow.clearPatches();
-      // The workflow returns its reference one task later; waiting makes the next add take a new one.
+      // The workflow returns its reference one task later. Waiting lets the next add take a new one.
       await new Promise((resolve) => setTimeout(resolve, 0));
     },
     workflowTakes: () => workflow.addPatch(patchFile),

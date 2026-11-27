@@ -2351,8 +2351,8 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     await this.runtime.workerIo?.releaseSources?.(sources).catch(() => undefined);
   }
 
-  // The workflow holds one runtime reference per owned source. Owning a source again before its
-  // deferred release runs keeps that reference instead of taking another.
+  // The workflow holds one runtime reference per owned source. Owning it again before the deferred
+  // release runs keeps that reference.
   private retainOwnedSources(sources: unknown[]): void {
     for (const source of sources) {
       const pendingRelease = this.pendingOwnedSourceReleases.get(source);
