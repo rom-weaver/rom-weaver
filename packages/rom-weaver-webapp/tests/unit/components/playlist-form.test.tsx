@@ -492,6 +492,22 @@ describe("PlaylistForm", () => {
     expect((screen.getByRole("button", { name: "Download Game.zip" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it("warns before leaving while a ZIP is being written", async () => {
+    support.writeZip.mockImplementation(
+      ({ signal }: { signal: AbortSignal }) =>
+        new Promise((_, reject) => signal.addEventListener("abort", () => reject(new Error("cancelled")))),
+    );
+    const onSessionChange = vi.fn();
+    render(<PlaylistForm onSessionChange={onSessionChange} />);
+    await dropDiscs();
+    expect(onSessionChange).toHaveBeenLastCalledWith(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Download Game.zip" }));
+    await waitFor(() => expect(onSessionChange).toHaveBeenLastCalledWith(true));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(onSessionChange).toHaveBeenLastCalledWith(false));
+  });
+
   it("shows no error when the engine fails because the ZIP write was cancelled", async () => {
     support.writeZip.mockImplementation(
       ({ signal }: { signal: AbortSignal }) =>

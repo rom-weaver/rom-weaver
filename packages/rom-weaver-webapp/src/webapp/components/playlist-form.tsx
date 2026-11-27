@@ -598,7 +598,7 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
     setCanWriteFolders(canWritePlaylistFolders());
   }, []);
   useEffect(() => {
-    onSessionChange(busy === "rename");
+    onSessionChange(busy === "rename" || busy === "zip");
   }, [busy, onSessionChange]);
   useEffect(() => {
     setWorkbenchActivity(
