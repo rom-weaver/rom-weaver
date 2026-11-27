@@ -627,7 +627,8 @@ const createBrowserWeaveRuntime = (
       const cleanup = createCleanupOnce(async () => {
         logger.debug("weave cleanup requested", { extractDirId, files: extractedPaths.size });
         await Promise.all(extractedCleanups.map((release) => release()));
-        await removeExtractDir("weave cleanup").catch(() => undefined);
+        // A file a form still retains stays in the directory. Its final release removes the directory.
+        if (!remainingPaths.size) await removeExtractDir("weave cleanup").catch(() => undefined);
       });
       return { cleanup, extractedFiles, result };
     } catch (error) {
