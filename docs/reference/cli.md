@@ -590,7 +590,9 @@ A ZIP or folder output holds the playlist as `<game>.m3u`, each disc by its file
 
 `--rename` numbers the discs from 1 in playlist order and keeps each extension. A disc's single sheet file takes the disc's name, for example `Game (Disc 1).bin`. Several take `<disc> (Track N)`, zero-padded to the width of the file count, for example `Game (Disc 1) (Track 01).bin`. The rewritten sheet quotes names that contain spaces, and the source sheet is not changed. An `.mds` disc cannot be renamed, because it can name its `.mdf` inside.
 
-`--chd` writes each disc as the CHD that `compress` writes for it with its default codecs and level, named `<disc>.chd`, or `<game> (Disc N).chd` with `--rename`. The CHD holds the files the disc's sheet names, so they are not copied. A `.chd` disc is copied as it is. A disc that cannot become a CD, GD-ROM, or DVD CHD, such as a `.pbp`, an `.mds`, or an `.iso` that is not a whole number of sectors, is rejected before anything is written. Renaming in place does not accept `--chd`.
+`--chd` writes each disc as the CHD that `compress` writes with its default codecs and level. The file is named `<disc>.chd`, or `<game> (Disc N).chd` with `--rename`. The CHD holds the files the disc's sheet names, so they are not copied. A `.chd` disc is copied as it is.
+
+Discs that cannot become a CD, GD-ROM, or DVD CHD are rejected before writing. Examples are a `.pbp`, an `.mds`, or an `.iso` that is not whole sectors. The error says why. Renaming in place does not accept `--chd`.
 
 Procedure: [Make an M3U playlist from the CLI](../how-to/cli-playlist.md).
 

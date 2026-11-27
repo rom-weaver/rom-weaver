@@ -880,7 +880,7 @@ fn playlist_refuses_stdout_output() {
 }
 
 /// A one-track CD that `compress` accepts: [`write_cue_disc`] with eight sectors of pseudo-random
-/// words. `seed` makes two discs differ, and unlike a short repeating pattern the words compress to
+/// words. `seed` makes two discs differ. Unlike a short repeating pattern, the words compress to
 /// different bytes at each compression level.
 fn write_cd_disc(dir: &Path, stem: &str, seed: u32) {
     write_cue_disc(dir, stem);

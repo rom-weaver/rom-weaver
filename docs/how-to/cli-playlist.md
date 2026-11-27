@@ -83,7 +83,7 @@ The copies are `Final Fantasy VII (Disc 1).cue` and so on, and each copied `.cue
 
 ## Compress the discs to CHD
 
-`--chd` compresses each disc to CHD as it copies the game, and the playlist lists the `.chd` files:
+`--chd` compresses each disc to CHD as it copies the game. The playlist lists the `.chd` files:
 
 ```bash
 rom-weaver playlist --chd --codec store \
@@ -91,7 +91,9 @@ rom-weaver playlist --chd --codec store \
   -o Game.zip
 ```
 
-The ZIP holds `Game.m3u`, `Game (Disc 1).chd`, and `Game (Disc 2).chd`, without the track files. Each `.chd` is the file `rom-weaver compress` writes for that disc with its default options. `--codec store` keeps the ZIP from compressing the CHDs again. A disc that is already a `.chd` is copied as it is. `--chd` works with a folder or `.zip` output.
+The ZIP holds `Game.m3u`, `Game (Disc 1).chd`, and `Game (Disc 2).chd`, without the track files. Each `.chd` is the file `rom-weaver compress` writes for that disc with its default options.
+
+`--codec store` keeps the ZIP from compressing the CHDs again. A disc that is already a `.chd` is copied as it is. `--chd` works with a folder or `.zip` output.
 
 ## Write bare file names
 

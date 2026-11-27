@@ -485,8 +485,8 @@ enum BundleSource {
 struct ChdDisc {
     disc: PathBuf,
     tracks: Vec<PathBuf>,
-    /// The sheet's text naming each track by the file found for it, when one was found under
-    /// another name, such as one in another case. `compress` opens the exact names.
+    /// The sheet text with each track named by the file found for it. Set only when a track was
+    /// found under another name, such as in another case. `compress` opens the exact names.
     sheet: Option<String>,
 }
 
@@ -1323,8 +1323,8 @@ fn check_entries_are_readable(entries: &[BundleEntry]) -> Result<()> {
     Ok(())
 }
 
-/// The sheet or image `compress` reads for a [`ChdDisc`]: the disc itself, or a temporary copy
-/// of its rewritten sheet that is removed on drop.
+/// The sheet or image `compress` reads for a [`ChdDisc`]. It is the disc, or a temporary copy of
+/// its rewritten sheet that drop removes.
 struct ChdInput {
     path: PathBuf,
     temporary: bool,
@@ -1372,8 +1372,8 @@ pub(super) fn playlist_failure(error: RomWeaverError) -> OperationReport {
     )
 }
 
-/// Copy a folder output's files under `folder`, never replacing a file, and write each CHD entry
-/// with `compress_chd(chd, target)`. A failed or cancelled run removes the files and folders it
+/// Copy a folder output's files under `folder`, never replacing a file. Write each CHD entry with
+/// `compress_chd(chd, target)`. A failed or cancelled run removes the files and folders it
 /// made, so no partial game is left behind.
 fn write_playlist_folder(
     folder: &Path,
@@ -1566,8 +1566,8 @@ impl CliApp {
         handler.validate_create(&request, &self.context(ThreadBudget::default()))
     }
 
-    /// Refuse a disc that `compress` cannot store as a CD, GD-ROM, or DVD CHD, with the reason
-    /// `compress` gives for it.
+    /// Refuse a disc that `compress` cannot store as a CD, GD-ROM, or DVD CHD. The error gives
+    /// `compress`'s reason when it has one.
     pub(super) fn check_playlist_discs_compress_to_chd(&self, job: &PlaylistJob) -> Result<()> {
         let context = self.context(ThreadBudget::default());
         for entry in &job.entries {
@@ -1624,7 +1624,7 @@ impl CliApp {
         }
     }
 
-    /// Compress a disc to the CHD that `compress` writes for it with its default codecs and level.
+    /// Compress a disc to the CHD `compress` writes with its default codecs and level.
     fn compress_disc_to_chd(
         &self,
         chd: &ChdDisc,

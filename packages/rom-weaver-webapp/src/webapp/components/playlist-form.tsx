@@ -576,7 +576,8 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
   const [chd, setChd] = useState(false);
   const [outputPlan, setOutputPlan] = useState<BrowserPlaylistPlan | null>(null);
   const [outputReason, setOutputReason] = useState("");
-  // Whether the plan behind `outputReason` renamed the discs without compressing them; the checkboxes may have changed since.
+  // Whether the plan behind `outputReason` renamed the discs without compressing them.
+  // The checkboxes may have changed since.
   const [reasonFromRename, setReasonFromRename] = useState(false);
   const [planning, setPlanning] = useState(false);
   const [busy, setBusy] = useState<Busy>(null);

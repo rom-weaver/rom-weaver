@@ -29,7 +29,9 @@ The ZIP works in every browser. It holds the playlist and copies of the discs. I
    - **In a game folder** (MinUI, muOS): a `<game>` folder that holds the playlist and discs.
    - **In a .m3u folder** (ES-DE, RetroDECK): a `<game>.m3u` folder that holds the playlist and discs.
    - **One folder per disc** (igir): the playlist beside one folder for each disc.
-7. To compress the discs, turn on **Compress the discs to CHD**. Each `.cue`, `.gdi`, or `.iso` becomes the `.chd` that [Compress](convert-to-chd-browser.md) makes from it with default settings, and the playlist lists the `.chd` files. Their track files are left out. A `.chd` disc is copied as it is. Compressing takes longer than copying.
+7. To compress the discs, turn on **Compress the discs to CHD**. Each `.cue`, `.gdi`, or `.iso` becomes the `.chd` that [Compress](convert-to-chd-browser.md) makes with default settings. The playlist lists the `.chd` files without their tracks. Compressing takes longer than copying.
+
+   A `.chd` disc is copied as it is. A disc that cannot become a CHD holds the download, and the page says why.
 8. Select **Download `<game>.zip`**. Select **Cancel** to stop; no ZIP is saved.
 9. Unzip it where your frontend reads games.
 
@@ -39,7 +41,7 @@ In subfolders, **Beside the discs** moves each disc to the top of the ZIP. Its p
 
 Most emulators name save files after the playlist. Saves made while playing one disc directly keep that disc's name, so rename them to match the playlist.
 
-The ZIP is stored without compression. Building it needs free browser storage about the size of the discs. With **Compress the discs to CHD** on, it also needs room for the compressed discs while the ZIP is built. If storage runs out, the page reports it and removes the partial ZIP.
+The ZIP is stored without compression. Building it needs free browser storage about the size of the discs. With **Compress the discs to CHD** on, it also needs room for the compressed discs. If storage runs out, the page reports it and removes the partial ZIP.
 
 The finished ZIP stays in storage. Making another ZIP, adding other discs, or reloading the page frees it.
 

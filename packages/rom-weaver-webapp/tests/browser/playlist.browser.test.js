@@ -280,7 +280,7 @@ const storedZipEntries = (bytes) => {
   return entries;
 };
 
-/** The CHD the Compress page writes for a CUE/BIN disc with its default CD codecs and level. */
+/** The Compress page's CHD for a CUE/BIN disc, with its default CD codecs and level. */
 const compressLikeCompressPage = async ({ bin, cue }) => {
   const root = `${WORKER_OPFS_MOUNTPOINT}/compress-${crypto.randomUUID()}`;
   const paths = [cue, bin].map((file) => `${root}/${file.name}`);
