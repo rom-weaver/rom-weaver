@@ -879,9 +879,11 @@ fn playlist_refuses_stdout_output() {
     );
 }
 
-/// A one-track CD of pseudo-random words. `seed` makes two discs differ, and unlike a short
-/// repeating pattern the words compress to different bytes at each compression level.
+/// A one-track CD that `compress` accepts: [`write_cue_disc`] with eight sectors of pseudo-random
+/// words. `seed` makes two discs differ, and unlike a short repeating pattern the words compress to
+/// different bytes at each compression level.
 fn write_cd_disc(dir: &Path, stem: &str, seed: u32) {
+    write_cue_disc(dir, stem);
     const WORDS: [&[u8]; 8] = [
         b"disc ", b"track ", b"sector ", b"weave ", b"rom ", b"patch ", b"game ", b"data ",
     ];
@@ -893,11 +895,6 @@ fn write_cd_disc(dir: &Path, stem: &str, seed: u32) {
     }
     track.truncate(8 * 2352);
     fs::write(dir.join(format!("{stem}.bin")), track).expect("write bin");
-    fs::write(
-        dir.join(format!("{stem}.cue")),
-        format!("FILE \"{stem}.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n"),
-    )
-    .expect("write cue");
 }
 
 fn sorted_file_names(dir: &Path) -> Vec<String> {
@@ -985,6 +982,27 @@ fn playlist_chd_writes_the_chd_compress_writes_for_each_disc() {
             );
         }
     }
+}
+
+#[test]
+fn playlist_chd_refuses_a_disc_compress_stores_as_raw_data_before_writing() {
+    let temp = setup_temp_dir();
+    write_cd_disc(temp.path(), "Game (Disc 1)", 1);
+    let cue = temp.path().join("Game (Disc 1).cue");
+    let pbp = temp.path().join("Game (Disc 2).pbp");
+    fs::write(&pbp, b"PBP").expect("write pbp");
+    let inputs = [&cue, &pbp].map(|path| path.to_str().expect("p"));
+    let zip = temp.path().join("Game.zip");
+    for extra in [&["--chd", "--dry-run"][..], &["--chd"]] {
+        let json =
+            run_single_json_event(&playlist_args(&inputs, zip.to_str().expect("p"), extra), 1);
+        assert!(
+            json.to_string()
+                .contains("--chd cannot compress `Game (Disc 2).pbp`"),
+            "{extra:?}: {json}"
+        );
+    }
+    assert!(!zip.exists(), "a refused run wrote the ZIP");
 }
 
 #[cfg(unix)]

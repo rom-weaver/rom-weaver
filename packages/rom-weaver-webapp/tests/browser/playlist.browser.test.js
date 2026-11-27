@@ -212,15 +212,19 @@ describe("writeBrowserPlaylistZip", () => {
   });
 
   test("compresses each disc to the CHD that Compress writes for it", async () => {
+    const sheet = (track) => `FILE "${track}" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n`;
     const discs = [1, 2].map((number) => {
       const name = `Game (Disc ${number})`;
+      // A sheet made on a case-insensitive filesystem can name its track in another case.
+      const track = number === 1 ? `${name}.bin`.toUpperCase() : `${name}.bin`;
       return {
         bin: new File([cdTrack(number)], `${name}.bin`),
-        cue: new File([`FILE "${name}.bin" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n`], `${name}.cue`),
+        cue: new File([sheet(`${name}.bin`)], `${name}.cue`),
+        picked: new File([sheet(track)], `${name}.cue`),
       };
     });
     const output = await writeBrowserPlaylistZip({
-      files: discs.flatMap(({ bin, cue }) => [at(cue.name, [cue]), at(bin.name, [bin])]),
+      files: discs.flatMap(({ bin, picked }) => [at(picked.name, [picked]), at(bin.name, [bin])]),
       name: "Game",
       zip: { chd: true, layout: "flat", rename: false },
     });
