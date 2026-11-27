@@ -17,7 +17,9 @@ Use Make playlist to list every disc of a multi-disc game in an `.m3u` file. An 
 
 ## Download the playlist and discs as a ZIP
 
-The ZIP works in every browser. It holds the playlist and copies of the discs. It also holds the track files their `.cue` or `.gdi` sheets name. A LibCrypt `.sbi` that shares a disc's name goes in too. Other files in the folder are left out. The discs you picked are not changed.
+The ZIP works in every browser. It holds the playlist and copies of the discs. The discs you picked are not changed.
+
+The ZIP also holds the track files their `.cue` or `.gdi` sheets name. A LibCrypt `.sbi` that shares a disc's name goes in too. Other files in the folder are left out.
 
 1. Open [Make playlist](https://rom-weaver.com/create-m3u-playlist).
 2. Drop the discs of one game, with the track files their sheets name, or select **Open game folder** and pick the folder that holds them.
