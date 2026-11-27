@@ -157,7 +157,7 @@ const getUnloadConfirmationMessage = (state: PendingChangeInputState): string =>
   if (pendingChangeState.trim) return "You have an in-progress trim session. Reload and lose those changes?";
   if (pendingChangeState["ppf-undo"]) return "You have an in-progress PPF undo session. Reload and lose those changes?";
   if (pendingChangeState.playlist)
-    return "Discs are being renamed. Leaving now can leave them half renamed. Leave anyway?";
+    return "Make playlist is still working. Leaving now can leave discs half renamed or lose the ZIP. Leave anyway?";
   if (pendingChangeState["save-editor"]) return "You have unsaved save edits. Reload and lose those changes?";
   if (pendingChangeState.patcher) return "You have an in-progress patching session. Reload and lose those changes?";
   return "";
