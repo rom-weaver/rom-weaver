@@ -301,7 +301,7 @@ type RenameChoiceProps = {
   name: string;
   /** Why the output cannot be made; empty when it can. */
   reason: string;
-  /** Whether the plan that failed renamed the discs. It picks what the warning calls the failure. */
+  /** Whether the plan that failed renamed the discs without compressing them. It picks what the warning calls the failure. */
   reasonFromRename: boolean;
   onChange: (rename: boolean) => void;
 };
@@ -576,7 +576,7 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
   const [chd, setChd] = useState(false);
   const [outputPlan, setOutputPlan] = useState<BrowserPlaylistPlan | null>(null);
   const [outputReason, setOutputReason] = useState("");
-  // Whether the plan behind `outputReason` renamed the discs; the Rename checkbox may have changed since.
+  // Whether the plan behind `outputReason` renamed the discs without compressing them; the checkboxes may have changed since.
   const [reasonFromRename, setReasonFromRename] = useState(false);
   const [planning, setPlanning] = useState(false);
   const [busy, setBusy] = useState<Busy>(null);

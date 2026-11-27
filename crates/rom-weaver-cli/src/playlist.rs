@@ -485,8 +485,8 @@ enum BundleSource {
 struct ChdDisc {
     disc: PathBuf,
     tracks: Vec<PathBuf>,
-    /// The sheet's text naming each track by the file found for it, when one was found under a
-    /// name that differs only in case, as the browser does. `compress` opens the exact names.
+    /// The sheet's text naming each track by the file found for it, when one was found under
+    /// another name, such as one in another case. `compress` opens the exact names.
     sheet: Option<String>,
 }
 
