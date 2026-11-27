@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { PublicOutput } from "../types/workflow-runtime-types.ts";
 
 /**
@@ -9,10 +9,12 @@ import type { PublicOutput } from "../types/workflow-runtime-types.ts";
 export function useKeptZip() {
   const zipAbortRef = useRef<AbortController | null>(null);
   const keptZipRef = useRef<PublicOutput | null>(null);
+  const [zipKept, setZipKept] = useState(false);
 
   const disposeZip = useCallback(() => {
     const old = keptZipRef.current;
     keptZipRef.current = null;
+    setZipKept(false);
     void old?.dispose();
   }, []);
 
@@ -23,6 +25,7 @@ export function useKeptZip() {
       return false;
     }
     keptZipRef.current = output;
+    setZipKept(true);
     return true;
   }, []);
 
@@ -34,5 +37,5 @@ export function useKeptZip() {
     [disposeZip],
   );
 
-  return { disposeZip, keepZip, zipAbortRef };
+  return { disposeZip, keepZip, zipAbortRef, zipKept };
 }

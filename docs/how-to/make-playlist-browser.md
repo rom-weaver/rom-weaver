@@ -45,7 +45,7 @@ Most emulators name save files after the playlist. Saves made while playing one 
 
 The ZIP is stored without compression. Building it needs free browser storage about the size of the discs. With **Compress the discs to CHD** on, it also needs room for the compressed discs. If storage runs out, the page reports it and removes the partial ZIP.
 
-The finished ZIP stays in storage. Making another ZIP, adding other discs, or reloading the page frees it.
+The finished ZIP stays in storage. Making another ZIP, adding other discs, or reloading the page frees it. Until then, the page asks before you leave or reload it.
 
 ## Save it into the game's folder
 

@@ -590,7 +590,7 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
   const surveyRef = useRef<BrowserPlaylistPlan | null>(null);
   const plannedSourceRef = useRef<PlaylistSource | null>(null);
   const busyRef = useRef(false);
-  const { disposeZip, keepZip, zipAbortRef } = useKeptZip();
+  const { disposeZip, keepZip, zipAbortRef, zipKept } = useKeptZip();
   const nameProblem = checkGameName(name);
 
   useEffect(() => {
@@ -598,8 +598,8 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
     setCanWriteFolders(canWritePlaylistFolders());
   }, []);
   useEffect(() => {
-    onSessionChange(busy === "rename" || busy === "zip");
-  }, [busy, onSessionChange]);
+    onSessionChange(busy === "rename" || busy === "zip" || zipKept);
+  }, [busy, onSessionChange, zipKept]);
   useEffect(() => {
     setWorkbenchActivity(
       PLAYLIST_ACTIVITY_KEY,

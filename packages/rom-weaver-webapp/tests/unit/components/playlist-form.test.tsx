@@ -508,6 +508,22 @@ describe("PlaylistForm", () => {
     await waitFor(() => expect(onSessionChange).toHaveBeenLastCalledWith(false));
   });
 
+  it("keeps warning before leaving while the ZIP is kept for its download", async () => {
+    support.writeZip.mockResolvedValue(zipOutput());
+    const onSessionChange = vi.fn();
+    render(<PlaylistForm onSessionChange={onSessionChange} />);
+    const download = await dropDiscs();
+
+    fireEvent.click(download);
+    await screen.findByText("Downloaded Game.zip");
+    await waitFor(() => expect((download as HTMLButtonElement).disabled).toBe(false));
+    expect(onSessionChange).toHaveBeenLastCalledWith(true);
+    fireEvent.change(document.getElementById("playlist-input-picker") as HTMLInputElement, {
+      target: { files: [new File(["x"], "Other (Disc 1).cue")] },
+    });
+    await waitFor(() => expect(onSessionChange).toHaveBeenLastCalledWith(false));
+  });
+
   it("shows no error when the engine fails because the ZIP write was cancelled", async () => {
     support.writeZip.mockImplementation(
       ({ signal }: { signal: AbortSignal }) =>
