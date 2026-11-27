@@ -86,7 +86,8 @@ const getGameName = (plan: BrowserPlaylistPlan) => plan.file_name.replace(/\.m3u
 // In-place renaming changes the picked folder. It needs a writable folder, every disc at the top,
 // and the playlist beside them. Any other rename or layout, or discs compressed to CHD, go into a ZIP.
 const getOutputMode = ({ canRename, chd, layout, plan, rename }: OutputChoices): OutputMode => {
-  const fitsInPlace = canRename && layout === "flat" && !chd && !!plan && isAllAtTop(plan);
+  const keepsDiscFiles = layout === "flat" && !chd;
+  const fitsInPlace = canRename && keepsDiscFiles && !!plan && isAllAtTop(plan);
   if (rename && fitsInPlace) return "in-place";
   return rename || chd || layout !== "flat" ? "zip" : "m3u";
 };
