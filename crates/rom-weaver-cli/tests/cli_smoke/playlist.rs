@@ -1107,6 +1107,8 @@ fn playlist_chd_writes_the_chd_compress_writes_for_each_disc() {
     // A disc that is already a CHD is copied as it is.
     let third = discs.path().join("Game (Disc 3).chd");
     fs::write(&third, &expected[0]).expect("write chd");
+    // A LibCrypt `.sbi` stays beside its disc's CHD.
+    fs::write(discs.path().join("Game (Disc 1).sbi"), b"libcrypt").expect("write sbi");
     let inputs = [cue(2), third, cue(1)];
     let inputs: Vec<&str> = inputs
         .iter()
@@ -1129,6 +1131,7 @@ fn playlist_chd_writes_the_chd_compress_writes_for_each_disc() {
             sorted_file_names(&folder),
             [
                 "Game (Disc 1).chd",
+                "Game (Disc 1).sbi",
                 "Game (Disc 2).chd",
                 "Game (Disc 3).chd",
                 "Game.m3u"
@@ -1138,6 +1141,11 @@ fn playlist_chd_writes_the_chd_compress_writes_for_each_disc() {
         assert_eq!(
             fs::read_to_string(folder.join("Game.m3u")).expect("m3u"),
             "Game (Disc 1).chd\nGame (Disc 2).chd\nGame (Disc 3).chd\n",
+            "{output}"
+        );
+        assert_eq!(
+            fs::read(folder.join("Game (Disc 1).sbi")).expect("sbi"),
+            b"libcrypt",
             "{output}"
         );
         for (name, bytes) in [
