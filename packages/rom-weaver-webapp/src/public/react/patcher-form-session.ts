@@ -1109,6 +1109,24 @@ const useLocalApplyPatchFormSession = ({
       const patchSettingsChanged = patchStageSyncRef.current.settingsKey !== stageSettingsKey;
       if (hasNewPatch || patchSettingsChanged) setPatchStaging(true);
     }
+    // Staging an emptied list makes the workflow release the sources it staged for that list.
+    const dispatchStageClear = (
+      role: "input" | "patch",
+      previousCount: number,
+      clear: () => Promise<unknown> | undefined,
+    ) => {
+      emitSessionTrace(`${role} staging clear dispatched`, { previousCount });
+      void clear()?.catch((error) => {
+        const normalizedError = toError(error);
+        if (isWorkflowDisposedError(normalizedError)) return;
+        emitSessionTrace(`${role} staging clear failed`, {
+          message: normalizedError.message,
+          name: normalizedError.name,
+        });
+        logUiError(`${role === "input" ? "Input" : "Patch"} staging clear failed`, normalizedError);
+        onError?.(normalizedError);
+      });
+    };
     const syncInputStage = () => {
       const previousSync = inputStageSyncRef.current;
       const inputsChanged = !sameKeyList(previousSync.keys, currentInputKeys);
@@ -1124,23 +1142,13 @@ const useLocalApplyPatchFormSession = ({
         setInputStaging(false);
         setRomInputs([]);
         if (shouldClearStagedInput) {
-          emitSessionTrace("input staging clear dispatched", {
-            previousCount: previousSync.inputs.length,
-          });
-          void stageInput?.(createStageSnapshot(), {
-            onChecksum: () => undefined,
-            onProgress: () => undefined,
-            onState: () => undefined,
-          }).catch((error) => {
-            const normalizedError = toError(error);
-            if (isWorkflowDisposedError(normalizedError)) return;
-            emitSessionTrace("input staging clear failed", {
-              message: normalizedError.message,
-              name: normalizedError.name,
-            });
-            logUiError("Input staging clear failed", normalizedError);
-            onError?.(normalizedError);
-          });
+          dispatchStageClear("input", previousSync.inputs.length, () =>
+            stageInput?.(createStageSnapshot(), {
+              onChecksum: () => undefined,
+              onProgress: () => undefined,
+              onState: () => undefined,
+            }),
+          );
         }
       } else if (inputsChanged || settingsChanged) {
         const previousInputs = previousSync.inputs.slice();
@@ -1150,6 +1158,23 @@ const useLocalApplyPatchFormSession = ({
           settingsKey: stageSettingsKey,
         };
         syncRomInput(createStageSnapshot(), previousInputs);
+      }
+    };
+    const clearPatchStage = (previousPatchCount: number) => {
+      patchStageSyncRef.current = {
+        inputs: effectiveInputs.slice(),
+        keys: [],
+        patches: [],
+        settingsKey: stageSettingsKey,
+      };
+      patchStageMachine.invalidateStage();
+      setPatchStaging(false);
+      setPatchProgress(null);
+      setPatchProgressByKey({});
+      if (previousPatchCount > 0) {
+        dispatchStageClear("patch", previousPatchCount, () =>
+          stagePatches?.(createStageSnapshot(), { onProgress: () => undefined }),
+        );
       }
     };
     const syncPatchStage = () => {
@@ -1169,16 +1194,7 @@ const useLocalApplyPatchFormSession = ({
       const settingsChanged = previousSync.settingsKey !== stageSettingsKey;
       if (!(inputsChanged || patchesChanged || settingsChanged)) return;
       if (!activePatches.length) {
-        patchStageSyncRef.current = {
-          inputs: effectiveInputs.slice(),
-          keys: [],
-          patches: [],
-          settingsKey: stageSettingsKey,
-        };
-        patchStageMachine.invalidateStage();
-        setPatchStaging(false);
-        setPatchProgress(null);
-        setPatchProgressByKey({});
+        clearPatchStage(previousPatchCount);
         return;
       }
 

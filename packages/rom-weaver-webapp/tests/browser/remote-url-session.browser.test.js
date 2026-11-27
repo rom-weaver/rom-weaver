@@ -95,6 +95,40 @@ test("Apply workflow releases replaced inputs and cleared patches without waitin
   }
 });
 
+test("Apply form releases its last removed patch while it stays mounted", async () => {
+  const [rom, patch] = await fetchRemoteFiles(
+    [RAW_ROM, RAW_PATCH].map((path) => ({ url: `${location.origin}/${path}` })),
+  );
+  const logs = [];
+  try {
+    mount(
+      createElement(ApplyPatchForm, {
+        defaultSettings: { logging: { level: "trace", sink: (record) => logs.push(record) } },
+        pageDrop: { files: [rom.file, patch.file], id: 1 },
+      }),
+    );
+    // Apply turns ready before the coalesced staging pass starts, and the workflow owns the patch only
+    // after that pass adds it.
+    await expect
+      .poll(() => logs.some(({ details, message }) => message === "source.stage.finish" && details?.role === "patch"), {
+        timeout: 30000,
+      })
+      .toBe(true);
+    await waitForApplyButtonEnabled();
+
+    const remove = document.getElementById("rom-weaver-patch-menu-remove-0");
+    if (!(remove instanceof HTMLButtonElement)) throw new Error("Missing remove button for the patch");
+    remove.click();
+    await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).toHaveLength(0);
+
+    await expect.poll(() => browserVfs.stat(patch.filePath), { timeout: 10000 }).toBeNull();
+    expect((await browserVfs.stat(rom.filePath))?.size).toBeGreaterThan(0);
+  } finally {
+    mount(createElement("div"));
+    await Promise.all([rom.cleanup(), patch.cleanup()]);
+  }
+});
+
 test("url boot cancellation removes a partial OPFS download before delivery", async () => {
   const originalFetch = globalThis.fetch;
   const truncateSpy = vi.spyOn(browserVfs, "truncate");
