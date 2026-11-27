@@ -556,7 +556,7 @@ export type PlaylistCommand = {
 /**
  * Browser inputs MUST map original logical paths to their staged paths explicitly.
  */
-staged_paths?: { [key in string]: string }, input: Array<string>, output?: string, name?: string, layout?: PlaylistLayout, rename?: boolean, codec?: string, no_sort?: boolean, flat?: boolean,
+staged_paths?: { [key in string]: string }, input: Array<string>, output?: string, name?: string, layout?: PlaylistLayout, rename?: boolean, chd?: boolean, codec?: string, no_sort?: boolean, flat?: boolean,
 /**
  * Plan renaming the discs `<game> (Disc N)` where they are, for the browser to carry out.
  * Only a dry run accepts it.

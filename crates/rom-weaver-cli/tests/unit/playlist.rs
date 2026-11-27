@@ -2,11 +2,12 @@ use std::{
     collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use super::{
-    BundleSource, Companion, PlannedDisc, PlaylistCommand, PlaylistLayout, checked_game_name,
-    disc_number, game_name, natural_cmp, order_discs, plan_bundle, plan_job,
+    BundleOptions, BundleSource, CliApp, Companion, PlannedDisc, PlaylistCommand, PlaylistLayout,
+    checked_game_name, disc_number, game_name, natural_cmp, order_discs, plan_bundle, plan_job,
     relative_playlist_path, renamed_companions, render_m3u, sheet_track_path,
 };
 
@@ -314,7 +315,12 @@ fn each_layout_places_the_playlist_discs_and_tracks() {
             "Game (Disc 1)/Game (Disc 1).chd",
         ),
     ] {
-        let (lines, entries) = plan_bundle(&discs(), "Game", layout, false).unwrap();
+        let options = BundleOptions {
+            layout,
+            rename: false,
+            chd: false,
+        };
+        let (lines, entries) = plan_bundle(&discs(), "Game", options).unwrap();
         let paths: Vec<&str> = entries.iter().map(|entry| entry.path.as_str()).collect();
         assert_eq!(paths[..2], [playlist, first_disc], "{layout:?}");
         assert_eq!(paths[3], first_track, "{layout:?}");
@@ -335,13 +341,18 @@ fn rename_numbers_discs_in_playlist_order_and_refuses_mds() {
         })
         .into_iter()
         .collect();
-    let (lines, _) = plan_bundle(&discs, "FF7", PlaylistLayout::Flat, true).unwrap();
+    let options = BundleOptions {
+        layout: PlaylistLayout::Flat,
+        rename: true,
+        chd: false,
+    };
+    let (lines, _) = plan_bundle(&discs, "FF7", options).unwrap();
     assert_eq!(lines, ["FF7 (Disc 1).chd", "FF7 (Disc 2).chd"]);
     let mds = [PlannedDisc {
         path: PathBuf::from("/in/x.mds"),
         companions: vec![companion("x.mdf", false)],
     }];
-    assert!(plan_bundle(&mds, "FF7", PlaylistLayout::Flat, true).is_err());
+    assert!(plan_bundle(&mds, "FF7", options).is_err());
 }
 
 #[test]
@@ -396,6 +407,7 @@ fn in_place_args(dir: &Path, inputs: &[&str], name: Option<&str>) -> PlaylistCom
         name: name.map(str::to_string),
         layout: PlaylistLayout::Flat,
         rename: false,
+        chd: false,
         no_sort: false,
         flat: false,
         codec: None,
@@ -627,4 +639,173 @@ fn codec_needs_a_zip_output() {
         let error = plan_job(&args).err().expect("refused").to_string();
         assert!(error.contains("--codec"), "{output}: {error}");
     }
+}
+
+/// A one-track CD that `compress` accepts: [`write_cue_disc`] with whole 2352-byte sectors.
+fn write_cd_disc(dir: &Path, stem: &str) {
+    let track = format!("{stem}.bin");
+    write_cue_disc(dir, stem, &[&track]);
+    fs::write(dir.join(track), vec![0_u8; 4 * 2352]).expect("write track");
+}
+
+fn app() -> CliApp {
+    CliApp::new(
+        Arc::new(rom_weaver_core::NoopProgressSink),
+        Arc::new(rom_weaver_core::NoninteractivePrompter),
+        false,
+        false,
+        false,
+    )
+}
+
+fn chd_args(dir: &Path, output: &str, inputs: &[&str], rename: bool) -> PlaylistCommand {
+    PlaylistCommand {
+        input: inputs.iter().map(|input| dir.join(input)).collect(),
+        chd: true,
+        ..bundle_args(dir, output, rename, None)
+    }
+}
+
+#[test]
+fn chd_plan_lists_one_chd_per_disc_without_its_tracks() {
+    let temp = assert_fs::TempDir::new().expect("temp dir");
+    write_cd_disc(temp.path(), "Game CD1");
+    fs::write(temp.path().join("Game CD2.chd"), b"chd").expect("write chd");
+    let inputs = ["Game CD2.chd", "Game CD1.cue"];
+    for (rename, first, second) in [
+        (true, "Game (Disc 1).chd", "Game (Disc 2).chd"),
+        (false, "Game CD1.chd", "Game CD2.chd"),
+    ] {
+        let plan = plan_job(&chd_args(temp.path(), "Game.zip", &inputs, rename))
+            .expect("plan")
+            .dry_run_plan();
+        let files: Vec<(&str, String)> = plan
+            .bundle
+            .iter()
+            .map(|file| {
+                let source = file.source.as_deref().map(Path::new);
+                let source_name = source.and_then(Path::file_name).unwrap_or_default();
+                (
+                    file.path.as_str(),
+                    source_name.to_string_lossy().into_owned(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            files,
+            [
+                ("Game.m3u", String::new()),
+                (first, "Game CD1.cue".to_string()),
+                (second, "Game CD2.chd".to_string()),
+            ],
+            "rename: {rename}"
+        );
+        assert_eq!(plan.entries, [first, second], "rename: {rename}");
+    }
+}
+
+#[test]
+fn chd_refuses_discs_it_cannot_compress_and_outputs_that_do_not_copy() {
+    let temp = assert_fs::TempDir::new().expect("temp dir");
+    write_cd_disc(temp.path(), "Game CD1");
+    write_cd_disc(temp.path(), "Game CD2");
+    fs::write(temp.path().join("Game CD2.chd"), b"chd").expect("write chd");
+    let mut m3u = chd_args(temp.path(), "Game.m3u", &["Game CD1.cue"], false);
+    m3u.name = None;
+    let mut in_place = chd_args(temp.path(), "unused", &["Game CD1.cue"], false);
+    in_place.output = None;
+    in_place.rename_in_place = true;
+    for (args, message) in [
+        (
+            chd_args(
+                temp.path(),
+                "Game.zip",
+                &["Game CD2.cue", "Game CD2.chd"],
+                false,
+            ),
+            "two files would both be written as `Game CD2.chd`",
+        ),
+        (m3u, "--chd copy the discs"),
+        (in_place, "--chd"),
+    ] {
+        let error = plan_job(&args).err().expect("refused").to_string();
+        assert!(error.contains(message), "{:?}: {error}", args.input);
+    }
+}
+
+#[test]
+fn chd_refuses_a_disc_compress_refuses_with_its_reason() {
+    let temp = assert_fs::TempDir::new().expect("temp dir");
+    write_cd_disc(temp.path(), "Game CD1");
+    write_cd_disc(temp.path(), "Game CD2");
+    fs::write(
+        temp.path().join("Game CD2.cue"),
+        "FILE \"Game CD2.bin\" BINARY\n  TRACK 01 MODE1/2352\n    PREGAP 00:00:02\n    INDEX 00 00:00:00\n    INDEX 01 00:00:01\n",
+    )
+    .expect("write cue");
+    fs::write(temp.path().join("Game CD3.pbp"), b"PBP").expect("write pbp");
+    fs::write(temp.path().join("Game CD3.iso"), vec![0_u8; 1000]).expect("write iso");
+    for (second, message) in [
+        (
+            "Game CD2.cue",
+            "uses both INDEX 00 and PREGAP; current chd cue support requires one pregap style",
+        ),
+        (
+            "Game CD3.iso",
+            "--chd cannot compress `Game CD3.iso`: dvd image size must be a multiple of 2048 bytes",
+        ),
+        // `compress` makes a raw CHD of a `.pbp`, which Compress does not offer.
+        (
+            "Game CD3.pbp",
+            "--chd cannot compress `Game CD3.pbp`: it is not a CD, GD-ROM, or DVD image",
+        ),
+    ] {
+        let job = plan_job(&chd_args(
+            temp.path(),
+            "Game.zip",
+            &["Game CD1.cue", second],
+            false,
+        ))
+        .expect("plan");
+        let error = app()
+            .check_playlist_discs_compress_to_chd(&job)
+            .expect_err("refused")
+            .to_string();
+        assert!(error.contains(message), "{second}: {error}");
+    }
+}
+
+#[test]
+fn chd_compresses_a_disc_whose_sheet_names_its_track_in_another_case() {
+    let temp = assert_fs::TempDir::new().expect("temp dir");
+    let (picked, exact) = (temp.path().join("picked"), temp.path().join("exact"));
+    for dir in [&picked, &exact] {
+        fs::create_dir(dir).expect("create dir");
+        write_cd_disc(dir, "Game CD1");
+    }
+    let cue = picked.join("Game CD1.cue");
+    let sheet = fs::read_to_string(&cue).expect("read cue");
+    fs::write(&cue, sheet.replace("Game CD1.bin", "GAME CD1.BIN")).expect("write cue");
+    // The browser passes every picked file, and its sheets' tracks match them in any case.
+    let mut args = chd_args(&picked, "out", &["Game CD1.cue"], false);
+    args.staged_paths = [cue.clone(), picked.join("Game CD1.bin")]
+        .into_iter()
+        .map(|path| (path.clone(), path))
+        .collect();
+    let app = app();
+    app.check_playlist_discs_compress_to_chd(&plan_job(&args).expect("plan"))
+        .expect("compressible");
+    app.build_playlist(&args).expect("write picked");
+    app.build_playlist(&chd_args(&exact, "out", &["Game CD1.cue"], false))
+        .expect("write exact");
+    let chd = |dir: &Path| fs::read(dir.join("out/Game CD1.chd")).expect("read chd");
+    assert_eq!(chd(&picked), chd(&exact));
+    let mut written = names(
+        fs::read_dir(picked.join("out"))
+            .expect("list")
+            .map(|entry| entry.expect("entry").path())
+            .collect(),
+    );
+    written.sort();
+    assert_eq!(written, ["Game CD1.chd", "Game.m3u"]);
 }

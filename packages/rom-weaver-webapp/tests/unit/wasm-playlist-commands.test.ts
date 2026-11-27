@@ -24,6 +24,7 @@ const succeeded = (plan: unknown) => ({
 });
 
 const input = {
+  chd: true,
   codec: "store",
   inputs: ["/g/a.cue"],
   knownPaths: ["/g/a.cue"],
@@ -46,7 +47,7 @@ describe("playlist commands", () => {
     expect(write.dry_run).toBe(false);
     expect(write.command).toEqual(plan.command);
     expect(plan.command).toMatchObject({
-      args: { codec: "store", layout: "folder", name: "Game", output: "/o/Game.zip", rename: true },
+      args: { chd: true, codec: "store", layout: "folder", name: "Game", output: "/o/Game.zip", rename: true },
     });
   });
 

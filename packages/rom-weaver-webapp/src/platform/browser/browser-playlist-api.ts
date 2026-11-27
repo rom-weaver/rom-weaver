@@ -21,6 +21,8 @@ type PlaylistSourceFile = { file: File; path: string };
 type PlaylistZipOptions = {
   layout: PlaylistLayout;
   rename: boolean;
+  /** Compress each disc to CHD. */
+  chd: boolean;
 };
 
 type BrowserPlaylistPlanRequest = {
@@ -154,7 +156,7 @@ const planMountedPlaylist = async (
       logLevel,
       signal,
       ...(renameInPlace ? { name, renameInPlace } : { output }),
-      ...(zip ? { layout: zip.layout, name, rename: zip.rename } : {}),
+      ...(zip ? { chd: zip.chd, layout: zip.layout, name, rename: zip.rename } : {}),
     });
   let result = await plan(!renameInPlace && name ? toGuest(`${name}.${zip ? "zip" : "m3u"}`) : undefined);
   // Without a name the engine writes the playlist beside the first disc. Lines are relative to
@@ -179,7 +181,8 @@ const rewordPlanError = (error: unknown, root: string) => {
     error.message = error.message
       .replaceAll(`${root}/`, "")
       .replace("; pass --name", ". Type a game name")
-      .replace("--rename cannot rename", "Cannot rename");
+      .replace("--rename cannot rename", "Cannot rename")
+      .replace("--chd cannot compress", "Cannot compress");
   }
 };
 
@@ -230,6 +233,7 @@ const writeBrowserPlaylistZip = (request: BrowserPlaylistZipRequest): Promise<Pu
     const output = scope.selectOutputPath("", zipName, knownPaths);
     try {
       await invokeRomWeaverPlaylistWrite({
+        chd: zip.chd,
         codec: PLAYLIST_ZIP_CODEC,
         inputs: inputs.map((source) => toGuestPath(root, source.path)),
         knownPaths,

@@ -160,6 +160,7 @@ impl CliApp {
             if let Some(codec) = args.codec.as_deref() {
                 self.validate_playlist_zip_codec(&job, codec)?;
             }
+            self.check_playlist_discs_compress_to_chd(&job)?;
             Ok(job)
         });
         match planned {

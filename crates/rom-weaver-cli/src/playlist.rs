@@ -478,6 +478,16 @@ enum BundleSource {
         source: PathBuf,
         text: String,
     },
+    Chd(ChdDisc),
+}
+
+/// A disc to compress to CHD, with the track files its sheet names.
+struct ChdDisc {
+    disc: PathBuf,
+    tracks: Vec<PathBuf>,
+    /// The sheet text with each track named by the file found for it. Set only when a track was
+    /// found under another name, such as in another case. `compress` opens the exact names.
+    sheet: Option<String>,
 }
 
 /// One file of a `.zip` or folder output.
@@ -512,15 +522,127 @@ fn renamed_companions(disc: &PlannedDisc, disc_stem: &str) -> Vec<String> {
         .collect()
 }
 
+/// How a `.zip` or folder output names, places, and stores the discs.
+#[derive(Clone, Copy)]
+struct BundleOptions {
+    layout: PlaylistLayout,
+    rename: bool,
+    /// Compress each disc that is not already a CHD to CHD.
+    chd: bool,
+}
+
+/// A disc copied as it is, or under `--rename` a disc sheet's text naming its renamed tracks.
+fn copied_disc_source(disc: &PlannedDisc, names: &[String], rename: bool) -> Result<BundleSource> {
+    if !(rename && detect_disc_sheet(&disc.path).is_some()) {
+        return Ok(BundleSource::File(disc.path.clone()));
+    }
+    let text = super::patch_apply_disc::rewrite_sheet(&disc.path, |reference| {
+        disc.companions
+            .iter()
+            .zip(names)
+            .find(|(companion, _)| companion.reference.as_deref() == Some(reference))
+            .map(|(_, name)| name.clone())
+            .ok_or_else(|| {
+                RomWeaverError::Validation(format!(
+                    "disc sheet `{}` changed its files while the playlist was planned",
+                    file_name_of(&disc.path)
+                ))
+            })
+    })?;
+    Ok(BundleSource::Sheet {
+        source: disc.path.clone(),
+        text,
+    })
+}
+
+/// A disc to compress to CHD. See [`ChdDisc::sheet`] for when it carries a rewritten sheet.
+fn chd_disc_source(disc: &PlannedDisc) -> Result<BundleSource> {
+    let sheet_dir = disc.path.parent().unwrap_or_else(|| Path::new(""));
+    let tracks: Vec<&Companion> = disc
+        .companions
+        .iter()
+        .filter(|companion| companion.reference.is_some())
+        .collect();
+    let found_by_other_name = tracks.iter().any(|companion| {
+        let named = sheet_dir.join(companion.reference.as_deref().unwrap_or_default());
+        normalize_lexically(&named) != normalize_lexically(&companion.source)
+    });
+    let sheet = if found_by_other_name {
+        Some(super::patch_apply_disc::rewrite_sheet(
+            &disc.path,
+            |reference| {
+                let companion = tracks
+                    .iter()
+                    .find(|companion| companion.reference.as_deref() == Some(reference))
+                    .ok_or_else(|| {
+                        RomWeaverError::Validation(format!(
+                            "disc sheet `{}` changed its files while the playlist was planned",
+                            file_name_of(&disc.path)
+                        ))
+                    })?;
+                let source = std::path::absolute(&companion.source)
+                    .io_op(IoOp::Inspect, &companion.source)?;
+                Ok(source.to_string_lossy().into_owned())
+            },
+        )?)
+    } else {
+        None
+    };
+    trace!(disc = %disc.path.display(), rewritten = sheet.is_some(), "playlist disc compresses to chd");
+    Ok(BundleSource::Chd(ChdDisc {
+        disc: disc.path.clone(),
+        tracks: tracks
+            .iter()
+            .map(|companion| companion.source.clone())
+            .collect(),
+        sheet,
+    }))
+}
+
+/// The name a disc takes in a `.zip` or folder output, and whether `--chd` compresses it.
+fn bundle_disc_name(
+    disc: &PlannedDisc,
+    index: usize,
+    game: &str,
+    options: BundleOptions,
+) -> Result<(String, bool)> {
+    let original = file_name_of(&disc.path);
+    let original_extension = &original[stem_of(&original).len()..];
+    if options.rename && original_extension.eq_ignore_ascii_case(".mds") {
+        return Err(RomWeaverError::Validation(format!(
+            "--rename cannot rename `{original}`: an .mds can name its .mdf inside"
+        )));
+    }
+    let compress = options.chd && !original_extension.eq_ignore_ascii_case(".chd");
+    let extension = if compress { ".chd" } else { original_extension };
+    let stem = if options.rename {
+        format!("{game} (Disc {})", index + 1)
+    } else {
+        stem_of(&original).to_string()
+    };
+    Ok((format!("{stem}{extension}"), compress))
+}
+
+/// The names of a disc's companions in a `.zip` or folder output.
+fn bundle_companion_names(disc: &PlannedDisc, disc_stem: &str, rename: bool) -> Vec<String> {
+    if rename {
+        return renamed_companions(disc, disc_stem);
+    }
+    disc.companions
+        .iter()
+        .map(|companion| companion.name.clone())
+        .collect()
+}
+
 /// The playlist lines and the files of a `.zip` or folder output, the playlist first, placed as
-/// `layout` arranges them for a frontend.
+/// the layout arranges them for a frontend. A disc compressed to CHD holds its sheet's tracks, so
+/// they are left out.
 fn plan_bundle(
     discs: &[PlannedDisc],
     game: &str,
-    layout: PlaylistLayout,
-    rename: bool,
+    options: BundleOptions,
 ) -> Result<(Vec<String>, Vec<BundleEntry>)> {
-    let root = match layout {
+    let root = match options.layout {
         PlaylistLayout::Flat | PlaylistLayout::DiscFolders => String::new(),
         PlaylistLayout::Folder => format!("{game}/"),
         PlaylistLayout::M3uFolder => format!("{game}.m3u/"),
@@ -529,56 +651,27 @@ fn plan_bundle(
     let mut files = Vec::with_capacity(discs.len());
     let mut companions = Vec::new();
     for (index, disc) in discs.iter().enumerate() {
-        let original = file_name_of(&disc.path);
-        let extension = &original[stem_of(&original).len()..];
-        if rename && extension.eq_ignore_ascii_case(".mds") {
-            return Err(RomWeaverError::Validation(format!(
-                "--rename cannot rename `{original}`: an .mds can name its .mdf inside"
-            )));
-        }
-        let name = if rename {
-            format!("{game} (Disc {}){extension}", index + 1)
-        } else {
-            original.clone()
-        };
+        let (name, compress) = bundle_disc_name(disc, index, game, options)?;
         let disc_stem = stem_of(&name);
-        let folder = if layout == PlaylistLayout::DiscFolders {
+        let folder = if options.layout == PlaylistLayout::DiscFolders {
             format!("{disc_stem}/")
         } else {
             String::new()
         };
-        let names = if rename {
-            renamed_companions(disc, disc_stem)
+        let names = bundle_companion_names(disc, disc_stem, options.rename);
+        let source = if compress {
+            chd_disc_source(disc)?
         } else {
-            disc.companions
-                .iter()
-                .map(|companion| companion.name.clone())
-                .collect()
-        };
-        let source = if rename && detect_disc_sheet(&disc.path).is_some() {
-            BundleSource::Sheet {
-                source: disc.path.clone(),
-                text: super::patch_apply_disc::rewrite_sheet(&disc.path, |reference| {
-                    disc.companions
-                        .iter()
-                        .zip(&names)
-                        .find(|(companion, _)| companion.reference.as_deref() == Some(reference))
-                        .map(|(_, name)| name.clone())
-                        .ok_or_else(|| {
-                            RomWeaverError::Validation(format!(
-                                "disc sheet `{original}` changed its files while the playlist was planned"
-                            ))
-                        })
-                })?,
-            }
-        } else {
-            BundleSource::File(disc.path.clone())
+            copied_disc_source(disc, &names, options.rename)?
         };
         files.push(BundleEntry {
             path: format!("{root}{folder}{name}"),
             source,
         });
         for (companion, companion_name) in disc.companions.iter().zip(names) {
+            if compress && companion.reference.is_some() {
+                continue;
+            }
             companions.push(BundleEntry {
                 path: format!("{root}{folder}{companion_name}"),
                 source: BundleSource::File(companion.source.clone()),
@@ -671,7 +764,9 @@ pub struct PlaylistBundleFile {
 impl BundleEntry {
     fn planned_file(&self) -> PlaylistBundleFile {
         let (source, text) = match &self.source {
-            BundleSource::File(source) => (Some(source), None),
+            BundleSource::File(source) | BundleSource::Chd(ChdDisc { disc: source, .. }) => {
+                (Some(source), None)
+            }
             BundleSource::Text(_) => (None, None),
             BundleSource::Sheet { source, text } => (Some(source), Some(text.clone())),
         };
@@ -805,9 +900,10 @@ fn resolve_game_name(
 /// and same-named companions (such as a LibCrypt `.sbi`), and the playlist beside them. The
 /// browser carries it out, so the plan refuses anything a rename could lose or overwrite.
 fn plan_rename_in_place(args: &PlaylistCommand) -> Result<PlaylistJob> {
-    if args.output.is_some() || args.layout != PlaylistLayout::Flat || args.rename || args.flat {
+    let copies_discs = args.layout != PlaylistLayout::Flat || args.rename || args.chd;
+    if args.output.is_some() || copies_discs || args.flat {
         return Err(RomWeaverError::Validation(
-            "renaming in place writes the playlist beside the discs; drop --output, --layout, --rename, and --flat"
+            "renaming in place writes the playlist beside the discs; drop --output, --layout, --rename, --chd, and --flat"
                 .to_string(),
         ));
     }
@@ -821,7 +917,12 @@ fn plan_rename_in_place(args: &PlaylistCommand) -> Result<PlaylistJob> {
     check_discs_share_folder(&discs, &folder)?;
     check_discs_are_numbered_in_order(&discs)?;
     let game = resolve_game_name(args, PlaylistOutput::M3u, &discs)?;
-    let (lines, entries) = plan_bundle(&discs, &game, PlaylistLayout::Flat, true)?;
+    let options = BundleOptions {
+        layout: PlaylistLayout::Flat,
+        rename: true,
+        chd: false,
+    };
+    let (lines, entries) = plan_bundle(&discs, &game, options)?;
     let entries = unique_entries(entries)?;
     let (mut renames, mut sources) = disc_renames(&entries)?;
     let folder_names = folder_file_names(&folder)?;
@@ -884,7 +985,8 @@ fn disc_renames(entries: &[BundleEntry]) -> Result<(Vec<PlaylistRename>, HashSet
         let (source, text) = match &entry.source {
             BundleSource::File(source) => (source, None),
             BundleSource::Sheet { source, text } => (source, Some(text.clone())),
-            BundleSource::Text(_) => continue,
+            // Renaming in place refuses --chd.
+            BundleSource::Text(_) | BundleSource::Chd(_) => continue,
         };
         if !sources.insert(source.clone()) {
             return Err(RomWeaverError::Validation(format!(
@@ -1043,7 +1145,12 @@ pub(super) fn plan_job(args: &PlaylistCommand) -> Result<PlaylistJob> {
     let (lines, entries) = if kind == PlaylistOutput::M3u {
         (m3u_lines(args, &discs, &output)?, Vec::new())
     } else {
-        let (lines, entries) = plan_bundle(&discs, &game, args.layout, args.rename)?;
+        let options = BundleOptions {
+            layout: args.layout,
+            rename: args.rename,
+            chd: args.chd,
+        };
+        let (lines, entries) = plan_bundle(&discs, &game, options)?;
         (lines, unique_entries(entries)?)
     };
     check_lines_are_unique(&lines)?;
@@ -1055,6 +1162,7 @@ pub(super) fn plan_job(args: &PlaylistCommand) -> Result<PlaylistJob> {
         ?kind,
         layout = ?args.layout,
         rename = args.rename,
+        chd = args.chd,
         discs = discs.len(),
         files = entries.len(),
         "planned playlist"
@@ -1082,9 +1190,11 @@ fn checked_output_kind(args: &PlaylistCommand) -> Result<PlaylistOutput> {
         Some(output) => PlaylistOutput::from_path(output)?,
         None => PlaylistOutput::M3u,
     };
-    if kind == PlaylistOutput::M3u && (args.layout != PlaylistLayout::Flat || args.rename) {
+    if kind == PlaylistOutput::M3u
+        && (args.layout != PlaylistLayout::Flat || args.rename || args.chd)
+    {
         return Err(RomWeaverError::Validation(
-            "--layout and --rename copy the discs, so they need a .zip or folder --output"
+            "--layout, --rename, and --chd copy the discs, so they need a .zip or folder --output"
                 .to_string(),
         ));
     }
@@ -1201,13 +1311,55 @@ fn check_folder_target_is_free(target: &Path) -> Result<()> {
 }
 
 fn check_entries_are_readable(entries: &[BundleEntry]) -> Result<()> {
-    for entry in entries {
-        if let BundleSource::File(source) = &entry.source {
-            // Name an unreadable disc file before anything is written.
-            fs::File::open(source).io_op(IoOp::Open, source)?;
-        }
+    let sources = entries.iter().flat_map(|entry| match &entry.source {
+        BundleSource::File(source) => vec![source],
+        BundleSource::Chd(chd) => std::iter::once(&chd.disc).chain(&chd.tracks).collect(),
+        BundleSource::Text(_) | BundleSource::Sheet { .. } => Vec::new(),
+    });
+    for source in sources {
+        // Name an unreadable disc or track file before anything is written.
+        fs::File::open(source).io_op(IoOp::Open, source)?;
     }
     Ok(())
+}
+
+/// The sheet or image `compress` reads for a [`ChdDisc`]. It is the disc, or a temporary copy of
+/// its rewritten sheet that drop removes.
+struct ChdInput {
+    path: PathBuf,
+    temporary: bool,
+}
+
+impl ChdInput {
+    fn new(chd: &ChdDisc, context: &OperationContext) -> Result<Self> {
+        let Some(text) = &chd.sheet else {
+            return Ok(Self {
+                path: chd.disc.clone(),
+                temporary: false,
+            });
+        };
+        let extension = chd
+            .disc
+            .extension()
+            .and_then(|extension| extension.to_str());
+        let input = Self {
+            path: context.temp_paths().next_path("playlist", extension),
+            temporary: true,
+        };
+        if let Some(parent) = input.path.parent() {
+            fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
+        }
+        fs::write(&input.path, text).io_op(IoOp::Write, &input.path)?;
+        Ok(input)
+    }
+}
+
+impl Drop for ChdInput {
+    fn drop(&mut self) {
+        if self.temporary {
+            let _ = fs::remove_file(&self.path);
+        }
+    }
 }
 
 pub(super) fn playlist_failure(error: RomWeaverError) -> OperationReport {
@@ -1220,12 +1372,14 @@ pub(super) fn playlist_failure(error: RomWeaverError) -> OperationReport {
     )
 }
 
-/// Copy a folder output's files under `folder`, never replacing a file. A failed or cancelled
-/// run removes the files and folders it made, so no partial game is left behind.
+/// Copy a folder output's files under `folder`, never replacing a file. Write each CHD entry with
+/// `compress_chd(chd, target)`. A failed or cancelled run removes the files and folders it
+/// made, so no partial game is left behind.
 fn write_playlist_folder(
     folder: &Path,
     targets: &[PathBuf],
     entries: &[BundleEntry],
+    compress_chd: &dyn Fn(&ChdDisc, &Path) -> Result<()>,
 ) -> Result<()> {
     let token = rom_weaver_core::process_cancellation_token();
     let mut made_dirs: Vec<PathBuf> = Vec::new();
@@ -1262,6 +1416,11 @@ fn write_playlist_folder(
                             other => other,
                         },
                     )?;
+                }
+                BundleSource::Chd(chd) => {
+                    // The CHD writer reopens the claimed target and truncates it.
+                    drop(file);
+                    compress_chd(chd, target)?;
                 }
             }
         }
@@ -1306,6 +1465,7 @@ impl CliApp {
             ));
         }
         let job = plan_job(args)?;
+        self.check_playlist_discs_compress_to_chd(&job)?;
         let thread_execution = None;
         self.emit_running(
             OperationLabel {
@@ -1320,7 +1480,10 @@ impl CliApp {
         );
         let writes = job.writes();
         if job.kind == PlaylistOutput::Folder {
-            write_playlist_folder(&job.output, &writes, &job.entries)?;
+            let context = self.context(ThreadBudget::default());
+            let compress_chd =
+                |chd: &ChdDisc, target: &Path| self.compress_disc_to_chd(chd, target, &context);
+            write_playlist_folder(&job.output, &writes, &job.entries, &compress_chd)?;
         } else {
             // The ZIP writer's errors name no path, so a denied folder is reported here first.
             let parent = job
@@ -1382,7 +1545,9 @@ impl CliApp {
             .entries
             .iter()
             .find_map(|entry| match &entry.source {
-                BundleSource::File(path) => Some(path.clone()),
+                BundleSource::File(path) | BundleSource::Chd(ChdDisc { disc: path, .. }) => {
+                    Some(path.clone())
+                }
                 BundleSource::Text(_) | BundleSource::Sheet { .. } => None,
             })
             .ok_or_else(|| {
@@ -1401,6 +1566,89 @@ impl CliApp {
         handler.validate_create(&request, &self.context(ThreadBudget::default()))
     }
 
+    /// Refuse a disc that `compress` cannot store as a CD, GD-ROM, or DVD CHD. The error gives
+    /// `compress`'s reason when it has one.
+    pub(super) fn check_playlist_discs_compress_to_chd(&self, job: &PlaylistJob) -> Result<()> {
+        let context = self.context(ThreadBudget::default());
+        for entry in &job.entries {
+            let BundleSource::Chd(chd) = &entry.source else {
+                continue;
+            };
+            let input = ChdInput::new(chd, &context)?;
+            let mode = Self::chd_create_mode_for_path(&input.path);
+            if matches!(mode, Some("cd" | "gd" | "dvd")) {
+                continue;
+            }
+            trace!(disc = %chd.disc.display(), ?mode, "playlist disc cannot become a disc CHD");
+            // `compress` says why it cannot read a sheet or image. It stores other files as raw
+            // or hard-disk CHDs, which Compress does not offer.
+            let handler = self.containers.find_creatable_by_name("chd")?;
+            let request = Self::default_chd_request(handler.as_ref(), &input.path, &job.output);
+            let reason = match handler.validate_create(&request, &context) {
+                Err(RomWeaverError::Validation(reason)) => reason,
+                Err(error) => return Err(error),
+                Ok(()) => {
+                    "it is not a CD, GD-ROM, or DVD image such as a .cue, .gdi, or .iso".to_string()
+                }
+            };
+            return Err(RomWeaverError::Validation(format!(
+                "--chd cannot compress `{}`: {reason}",
+                file_name_of(&chd.disc)
+            )));
+        }
+        Ok(())
+    }
+
+    /// The request `compress` makes for `input` with its default codecs and level.
+    fn default_chd_request(
+        handler: &dyn ContainerHandler,
+        input: &Path,
+        output: &Path,
+    ) -> ContainerCreateRequest {
+        let format = handler.descriptor().name.to_string();
+        let level = Self::resolve_compression_level_for_profile(
+            &format,
+            None,
+            None,
+            CompressionLevelProfile::Max,
+        );
+        ContainerCreateRequest {
+            inputs: vec![input.to_path_buf()],
+            archive_names: None,
+            output: output.to_path_buf(),
+            format,
+            codec: None,
+            level,
+            rvz_block_size: None,
+            parent: None,
+        }
+    }
+
+    /// Compress a disc to the CHD `compress` writes with its default codecs and level.
+    fn compress_disc_to_chd(
+        &self,
+        chd: &ChdDisc,
+        output: &Path,
+        context: &OperationContext,
+    ) -> Result<()> {
+        let handler = self.containers.find_creatable_by_name("chd")?;
+        let input = ChdInput::new(chd, context)?;
+        let request = Self::default_chd_request(handler.as_ref(), &input.path, output);
+        self.emit_running(
+            OperationLabel {
+                command: "playlist",
+                family: OperationFamily::Command,
+                format: Some(PLAYLIST_FORMAT),
+            },
+            "compress",
+            format!("compressing `{}` to CHD", file_name_of(&chd.disc)),
+            None,
+            None,
+        );
+        debug!(disc = %chd.disc.display(), input = %input.path.display(), output = %output.display(), level = ?request.level, "compressing playlist disc to chd");
+        handler.create(&request, context).map(|_| ())
+    }
+
     fn write_playlist_zip(&self, job: &PlaylistJob, codec: Option<String>) -> Result<()> {
         let context = self.context(ThreadBudget::default());
         let mut staged = Vec::new();
@@ -1409,6 +1657,15 @@ impl CliApp {
             for entry in &job.entries {
                 inputs.push(match &entry.source {
                     BundleSource::File(path) => path.clone(),
+                    BundleSource::Chd(chd) => {
+                        let path = context.temp_paths().next_path("playlist", Some("chd"));
+                        if let Some(parent) = path.parent() {
+                            fs::create_dir_all(parent)?;
+                        }
+                        staged.push(path.clone());
+                        self.compress_disc_to_chd(chd, &path, &context)?;
+                        path
+                    }
                     BundleSource::Text(text) | BundleSource::Sheet { text, .. } => {
                         let extension = Path::new(&entry.path)
                             .extension()

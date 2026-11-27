@@ -3641,6 +3641,16 @@ pub struct PlaylistCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
+            help = "Compress each disc to the CHD that `compress` writes with its defaults, and list the .chd files. A .chd disc is copied as it is. Needs a .zip or folder output"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub chd: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
             value_name = "CODEC",
             help = "Compression of a .zip output: store, deflate, or zstd. Defaults to deflate"
         )

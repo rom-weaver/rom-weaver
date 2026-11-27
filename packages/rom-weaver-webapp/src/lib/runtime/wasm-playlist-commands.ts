@@ -11,6 +11,8 @@ import { asRecord, ensureRomWeaverSuccess, getTerminalEvent } from "./run-result
 import { runRomWeaverJson } from "./wasm-command-shared.ts";
 
 type RuntimePlaylistInput = {
+  /** Compress each disc of a `.zip` or folder output to CHD. */
+  chd?: boolean;
   /** The `.zip` compression, such as `store`; only a `.zip` output takes one. */
   codec?: string;
   /** Guest paths of the disc files to list. */
@@ -74,6 +76,7 @@ const runRomWeaverPlaylist = async (input: RuntimePlaylistInput, dryRun: boolean
     ...(input.name ? { name: input.name } : {}),
     ...(input.layout ? { layout: input.layout } : {}),
     ...(input.rename ? { rename: true } : {}),
+    ...(input.chd ? { chd: true } : {}),
     ...(input.codec ? { codec: input.codec } : {}),
     ...(input.renameInPlace ? { rename_in_place: true } : {}),
   });

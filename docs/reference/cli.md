@@ -570,6 +570,7 @@ Procedures: [Undo PPF in the browser](../how-to/undo-ppf-browser.md) and [Undo P
 | `--name GAME` | The game's name. Defaults to the `.zip` name, else the first disc's name without its extension and disc marker. Not valid with an `.m3u` output, which names the playlist itself. |
 | `--layout LAYOUT` | How a ZIP or folder output arranges the files (default `flat`). |
 | `--rename` | Name the discs `<game> (Disc N)` in playlist order, with their track files and sheets to match. Needs a ZIP or folder output. |
+| `--chd` | Compress each disc to CHD and list the `.chd` files. Needs a ZIP or folder output. |
 | `--codec CODEC` | Compression of a ZIP output: `store`, `deflate`, or `zstd` (default `deflate`). Not valid with another output. |
 | `--no-sort` | List the discs in the order given instead of by disc number. |
 | `--flat` | Write each disc as its bare file name instead of a path relative to the playlist. |
@@ -588,6 +589,10 @@ A ZIP or folder output holds the playlist as `<game>.m3u`, each disc by its file
 | `disc-folders` | `<game>.m3u` beside one `<disc name>/` folder per disc | `<disc name>/<disc>` | igir layouts |
 
 `--rename` numbers the discs from 1 in playlist order and keeps each extension. A disc's single sheet file takes the disc's name, for example `Game (Disc 1).bin`. Several take `<disc> (Track N)`, zero-padded to the width of the file count, for example `Game (Disc 1) (Track 01).bin`. The rewritten sheet quotes names that contain spaces, and the source sheet is not changed. An `.mds` disc cannot be renamed, because it can name its `.mdf` inside.
+
+`--chd` writes each disc as the CHD that `compress` writes with its default codecs and level. The file is named `<disc>.chd`, or `<game> (Disc N).chd` with `--rename`. The CHD holds the files the disc's sheet names, so they are not copied. A `.chd` disc is copied as it is.
+
+Discs that cannot become a CD, GD-ROM, or DVD CHD are rejected before writing. Examples are a `.pbp`, an `.mds`, or an `.iso` that is not whole sectors. The error says why. Renaming in place does not accept `--chd`.
 
 Procedure: [Make an M3U playlist from the CLI](../how-to/cli-playlist.md).
 

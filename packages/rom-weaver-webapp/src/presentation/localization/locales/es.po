@@ -2240,6 +2240,11 @@ msgstr "Disposición"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.playlist.compressChd"
+msgstr "Comprimir los discos a CHD"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.playlist.folderTooLarge"
 msgstr "«{folder}» contiene más de {max} archivos. Elige la carpeta de un solo juego."
 
