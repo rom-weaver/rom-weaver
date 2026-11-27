@@ -190,6 +190,11 @@ export const WORKFLOW_ROUTE_LASTMOD_SOURCES = Object.freeze({
     "src/public/react/workflow-guides.ts",
     "src/webapp/components/workflow-about.tsx",
   ],
+  "create-m3u-playlist": [
+    "src/webapp/components/playlist-form.tsx",
+    "src/public/react/workflow-guides.ts",
+    "src/webapp/components/workflow-about.tsx",
+  ],
   "trim-rom": [
     "src/public/react/trim-form.tsx",
     "src/public/react/trim-form-view.tsx",
@@ -287,6 +292,10 @@ const WORKFLOW_MARKDOWN_GUIDES = {
   "identify-rom": {
     slug: "docs/identify-roms-browser",
     sections: ["Identify a file", "Search without a file", "Compare a checksum"],
+  },
+  "create-m3u-playlist": {
+    slug: "docs/make-playlist-browser",
+    sections: ["Download the playlist and discs as a ZIP"],
   },
   "ppf-undo": {
     slug: "docs/undo-ppf-browser",

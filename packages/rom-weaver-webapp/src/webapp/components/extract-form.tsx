@@ -14,6 +14,7 @@ import type { ProgressEvent, PublicOutput } from "../../types/workflow-runtime-t
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import { getEngineError } from "../../lib/errors.ts";
 import { describeAgentSource, useAgentWorkflow } from "../agent/workflow-registry.ts";
+import { useKeptZip } from "../use-kept-zip.ts";
 
 type ExtractFormProps = { pageDrop?: PageFileDrop | null };
 type ProgressState = { label: string; percent: number | null };
@@ -92,18 +93,9 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
   const [skipped, setSkipped] = useState<string[]>([]);
   const outputRef = useRef<PublicOutput[]>([]);
   const abortRef = useRef<AbortController | null>(null);
-  const zipAbortRef = useRef<AbortController | null>(null);
-  // `saveAs` returns once the browser starts reading the file, so the last ZIP MUST stay in storage
-  // until it is replaced; disposing it at once cancels a large download mid-transfer.
-  const zipRef = useRef<PublicOutput | null>(null);
+  const { disposeZip, keepZip, zipAbortRef } = useKeptZip();
   const handledDropRef = useRef(0);
   const runIdRef = useRef(0);
-
-  const disposeZip = useCallback(() => {
-    const old = zipRef.current;
-    zipRef.current = null;
-    void old?.dispose();
-  }, []);
 
   const clearOutputs = useCallback(() => {
     disposeZip();
@@ -258,8 +250,6 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
     () => () => {
       runIdRef.current += 1;
       abortRef.current?.abort();
-      zipAbortRef.current?.abort();
-      void zipRef.current?.dispose();
       void Promise.all(outputRef.current.map((output) => output.dispose()));
     },
     [],
@@ -305,12 +295,7 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
       if (!result) throw new Error("ZIP downloads are not available in this browser.");
       const archive = "output" in result ? result.output : result;
       if (!archive) throw new Error("The ZIP file was not created.");
-      // The runtime can finish after a cancel or an unmount aborted the signal.
-      if (abort.signal.aborted) {
-        void archive.dispose();
-        return;
-      }
-      zipRef.current = archive;
+      if (!keepZip(archive, abort.signal)) return;
       setZipProgress(null);
       await archive.saveAs({ fileName: zipName(source), interactive: true });
     } catch (cause) {

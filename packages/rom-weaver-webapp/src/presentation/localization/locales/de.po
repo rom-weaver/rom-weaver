@@ -2216,7 +2216,212 @@ msgstr "Download angefordert"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.about.playlistBody3"
-msgstr "Lade die Playlist herunter. In Chrome oder Edge auf einem Computer kannst du sie auch im Ordner des Spiels speichern und die Discs passend umbenennen. Es wird nichts hochgeladen."
+msgstr "Lade eine ZIP-Datei mit der Playlist und den Discs herunter, auf Wunsch umbenannt und für dein Frontend angeordnet. In Chrome oder Edge auf einem Computer kannst du die Playlist auch im Ordner des Spiels speichern und die Discs dort umbenennen. Es wird nichts hochgeladen."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.layoutFlat"
+msgstr "Neben den Discs (RetroArch, Batocera, Recalbox)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.layoutFolder"
+msgstr "In einem Spielordner (MinUI, muOS)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.layoutM3uFolder"
+msgstr "In einem .m3u-Ordner (ES-DE, RetroDECK)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.layoutDiscFolders"
+msgstr "Ein Ordner pro Disc (igir)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.layout"
+msgstr "Anordnung"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.compressChd"
+msgstr "Discs zu CHD komprimieren"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.folderTooLarge"
+msgstr "„{folder}“ enthält mehr als {max} Dateien. Wähle den Ordner eines einzelnen Spiels."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.activityStage"
+msgstr "Playlist erstellen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.hintOpenFolder"
+msgstr "Öffne den Ordner des Spiels, um die Playlist darin zu speichern oder die Discs umzubenennen."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.hintSubfolders"
+msgstr "Die Discs liegen in Unterordnern, daher enthält die Playlist ihre Pfade. Speichere sie in dem Ordner, den du geöffnet hast."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.game"
+msgstr "Spiel"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.gameName"
+msgstr "Spielname"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.nameCharacters"
+msgstr "Ein Spielname darf keines der Zeichen < > : \" / \\ | ? oder * enthalten."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.nameWindows"
+msgstr "Windows reserviert den Namen „{name}“."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.nameDot"
+msgstr "Ein Spielname darf nicht mit einem Punkt enden."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.nameLength"
+msgstr "Dieser Spielname ist als Dateiname zu lang."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.renameDiscs"
+msgstr "Discs umbenennen in {name}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.cannotRename"
+msgstr "Diese Discs lassen sich nicht umbenennen: {reason}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.cannotZip"
+msgstr "Die ZIP-Datei lässt sich nicht erstellen: {reason}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.openingFolder"
+msgstr "Ordner wird geöffnet …"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.openFolder"
+msgstr "Spielordner öffnen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.readingSheets"
+msgstr "Disc-Sheets werden gelesen …"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.discNumber"
+msgstr "Disc {n}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.supportNote"
+msgstr "Das Speichern in einen Ordner und das Umbenennen von Discs an Ort und Stelle erfordern Chrome oder Edge auf einem Computer. In jedem Browser kannst du eine ZIP-Datei mit der Playlist und den Discs herunterladen."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.zipDownload"
+msgstr "{fileName} herunterladen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.zipCreating"
+msgstr "{fileName} wird erstellt …"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.zipCreatingPercent"
+msgstr "{fileName} wird erstellt … {percent} %"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.renamingDiscs"
+msgstr "Discs werden umbenannt …"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.renameAndSave"
+msgstr "Discs umbenennen und Playlist speichern"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.saving"
+msgstr "Wird gespeichert …"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.saveToFolder"
+msgstr "In Ordner speichern"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.doneSaved"
+msgstr "{fileName} in {folder} gespeichert"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.doneRenamed"
+msgstr "{count, plural, one {# Datei umbenannt und {fileName} in {folder} gespeichert} other {# Dateien umbenannt und {fileName} in {folder} gespeichert}}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.doneZip"
+msgstr "{fileName} heruntergeladen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.addDiscs"
+msgstr "Discs ersetzen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.dropDiscs"
+msgstr "Discs eines Spiels hier ablegen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.tapDiscs"
+msgstr "Tippen, um die Discs eines Spiels hinzuzufügen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.dropInfo"
+msgstr "Eine Playlist führt jede Disc eines Spiels mit mehreren Discs auf, damit ein Emulator die Disc wechseln kann."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.discFiles"
+msgstr "Disc-Dateien"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.stepPlaylist"
+msgstr "Playlist"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.stepSave"
+msgstr "Speichern"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2391,7 +2596,7 @@ msgstr "EmulatorJS: {name}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
-msgstr "Beta-Tools aktivieren (Save Editor, Disc-Playlists erstellen)"
+msgstr "Beta-Tools aktivieren (Save Editor)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

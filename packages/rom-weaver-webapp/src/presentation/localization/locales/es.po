@@ -2216,7 +2216,212 @@ msgstr "Descarga solicitada"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.about.playlistBody3"
-msgstr "Descarga la lista. En Chrome o Edge en un ordenador también puedes guardarla en la carpeta del juego y renombrar los discos para que coincidan. No se sube nada."
+msgstr "Descarga un ZIP con la lista y los discos, renombrados y organizados para tu frontend si quieres. En Chrome o Edge en un ordenador también puedes guardar la lista en la carpeta del juego y renombrar los discos allí. No se sube nada."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.layoutFlat"
+msgstr "Junto a los discos (RetroArch, Batocera, Recalbox)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.layoutFolder"
+msgstr "En una carpeta del juego (MinUI, muOS)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.layoutM3uFolder"
+msgstr "En una carpeta .m3u (ES-DE, RetroDECK)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.layoutDiscFolders"
+msgstr "Una carpeta por disco (igir)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.layout"
+msgstr "Disposición"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.compressChd"
+msgstr "Comprimir los discos a CHD"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.folderTooLarge"
+msgstr "«{folder}» contiene más de {max} archivos. Elige la carpeta de un solo juego."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.activityStage"
+msgstr "Crear lista de discos"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.hintOpenFolder"
+msgstr "Abre la carpeta del juego para guardar la lista en ella o renombrar sus discos."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.hintSubfolders"
+msgstr "Los discos están en subcarpetas, así que la lista incluye sus rutas. Guárdala en la carpeta que abriste."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.game"
+msgstr "Juego"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.gameName"
+msgstr "Nombre del juego"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.nameCharacters"
+msgstr "Un nombre de juego no puede contener < > : \" / \\ | ? ni *."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.nameWindows"
+msgstr "Windows reserva el nombre «{name}»."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.nameDot"
+msgstr "Un nombre de juego no puede terminar en punto."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.nameLength"
+msgstr "Ese nombre de juego es demasiado largo para un nombre de archivo."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.renameDiscs"
+msgstr "Renombrar los discos a {name}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.cannotRename"
+msgstr "No se pueden renombrar estos discos: {reason}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.cannotZip"
+msgstr "No se puede crear el ZIP: {reason}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.openingFolder"
+msgstr "Abriendo carpeta…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.openFolder"
+msgstr "Abrir carpeta del juego"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.readingSheets"
+msgstr "Leyendo las hojas de los discos…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.discNumber"
+msgstr "Disco {n}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.supportNote"
+msgstr "Guardar en una carpeta o renombrar los discos donde están requiere Chrome o Edge en un ordenador. En cualquier navegador puedes descargar un ZIP con la lista y los discos."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.zipDownload"
+msgstr "Descargar {fileName}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.zipCreating"
+msgstr "Creando {fileName}…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.zipCreatingPercent"
+msgstr "Creando {fileName}… {percent} %"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.renamingDiscs"
+msgstr "Renombrando discos…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.renameAndSave"
+msgstr "Renombrar discos y guardar la lista"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.saving"
+msgstr "Guardando…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.saveToFolder"
+msgstr "Guardar en la carpeta"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.doneSaved"
+msgstr "{fileName} guardado en {folder}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.doneRenamed"
+msgstr "{count, plural, one {# archivo renombrado y {fileName} guardado en {folder}} other {# archivos renombrados y {fileName} guardado en {folder}}}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.doneZip"
+msgstr "{fileName} descargado"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.addDiscs"
+msgstr "Reemplazar los discos"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.dropDiscs"
+msgstr "Suelta los discos de un juego"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.tapDiscs"
+msgstr "Toca para añadir los discos de un juego"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.dropInfo"
+msgstr "Una lista enumera cada disco de un juego multidisco para que el emulador pueda cambiar de disco."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.discFiles"
+msgstr "Archivos de disco"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.stepPlaylist"
+msgstr "Lista"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.playlist.stepSave"
+msgstr "Guardar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2391,7 +2596,7 @@ msgstr "EmulatorJS: {name}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
-msgstr "Activar herramientas beta (Save Editor, Crear listas de discos)"
+msgstr "Activar herramientas beta (Save Editor)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

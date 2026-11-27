@@ -1,12 +1,29 @@
-import { invokeRomWeaverPlaylistPlan } from "../../lib/runtime/wasm-playlist-commands.ts";
-import type { LogLevel } from "../../types/logging.ts";
+import { createRomWeaverOutputScope } from "../../lib/runtime/run-output-paths.ts";
+import { invokeRomWeaverPlaylistPlan, invokeRomWeaverPlaylistWrite } from "../../lib/runtime/wasm-playlist-commands.ts";
+import { withBrowserOutputStorageFailureContext } from "../../storage/browser/browser-output-storage-guard.ts";
 import { getBaseName } from "../../storage/shared/path-utils.ts";
-import type { PlaylistDryRunPlan } from "../../wasm/generated/rom-weaver-rust-types.d.ts";
+import { createRuntimeOutputFromVfs } from "../../storage/vfs/runtime-output.ts";
+import type { LogLevel } from "../../types/logging.ts";
+import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
+import type {
+  PlaylistDryRunPlan,
+  PlaylistLayout,
+  RomWeaverRunJsonEvent,
+} from "../../wasm/generated/rom-weaver-rust-types.d.ts";
 import { registerBrowserVirtualFile } from "../../workers/protocol/browser-virtual-files.ts";
 import { WORKER_OPFS_MOUNTPOINT } from "../../workers/shared/worker-storage/storage-layout.ts";
+import { browserVfs } from "./workflow-runtime-vfs-cleanup.ts";
 
 /** A picked file and its `/`-separated path from the picked folder, ending in its name. */
 type PlaylistSourceFile = { file: File; path: string };
+
+/** What a `.zip` of the playlist and discs holds: the discs' names and where the files go. */
+type PlaylistZipOptions = {
+  layout: PlaylistLayout;
+  rename: boolean;
+  /** Compress each disc to CHD. */
+  chd: boolean;
+};
 
 type BrowserPlaylistPlanRequest = {
   files: readonly PlaylistSourceFile[];
@@ -15,8 +32,17 @@ type BrowserPlaylistPlanRequest = {
   /** The game's name, which names the playlist and renamed discs. */
   name?: string;
   renameInPlace?: boolean;
+  /** Plan a `.zip` of the playlist and discs instead of a lone `.m3u`; needs `name`. */
+  zip?: PlaylistZipOptions;
   logLevel?: LogLevel | string;
   signal?: AbortSignal;
+};
+
+type BrowserPlaylistZipRequest = Omit<BrowserPlaylistPlanRequest, "name" | "renameInPlace" | "zip"> & {
+  /** The game's name, which names the ZIP, the playlist, and renamed discs. */
+  name: string;
+  onEvent?: (event: RomWeaverRunJsonEvent) => void;
+  zip: PlaylistZipOptions;
 };
 
 /** A {@link PlaylistDryRunPlan} whose paths are `path`s of the picked files. */
@@ -46,8 +72,11 @@ const PLAYLIST_DISC_EXTENSIONS: ReadonlySet<string> = new Set([
 // Files that operating systems leave beside games. `._Game.cue` is macOS metadata, not a disc sheet.
 const SYSTEM_FILE_NAMES: ReadonlySet<string> = new Set([".ds_store", "thumbs.db", "desktop.ini"]);
 
+// The discs are already compressed or nearly incompressible, and deflating gigabytes in wasm is slow.
+const PLAYLIST_ZIP_CODEC = "store";
+
 const CONTROL_CHARACTERS = /\p{Cc}/u;
-const PLAYLIST_FILE = /\.m3u8?$/i;
+const PLAYLIST_OUTPUT_FILE = /\.(?:m3u8?|zip)$/i;
 
 const isSystemFile = (path: string) => {
   const name = getBaseName(path);
@@ -92,9 +121,9 @@ const selectPlanFiles = (
   discs: readonly string[] | undefined,
   renameInPlace: boolean | undefined,
 ) => {
-  // An existing playlist would block the engine from writing a new one beside it, and a download
-  // never lands there. Renaming keeps it, so the plan refuses a name that is already taken.
-  const mounted = renameInPlace ? sources : sources.filter((source) => !PLAYLIST_FILE.test(source.path));
+  // An existing playlist or ZIP would block a new one beside it. A download never lands there.
+  // Renaming keeps them, so the plan refuses a name that is already taken.
+  const mounted = renameInPlace ? sources : sources.filter((source) => !PLAYLIST_OUTPUT_FILE.test(source.path));
   const wanted = discs ? new Set(discs) : null;
   const inputs = mounted.filter((source) => (wanted ? wanted.has(source.path) : isPlaylistDisc(source.path)));
   if (!inputs.length) throw new Error("Add the game's disc files, such as .cue, .chd, or .iso files.");
@@ -108,12 +137,14 @@ type MountedPlaylistFiles = {
   inputs: readonly PlaylistSourceFile[];
 };
 
+const toGuestPath = (root: string, path: string) => `${root}/${path}`;
+
 /** Run the engine's dry run over files already mounted under `root`, and map its paths back. */
 const planMountedPlaylist = async (
   { root, mounted, inputs }: MountedPlaylistFiles,
-  { name, renameInPlace, logLevel, signal }: BrowserPlaylistPlanRequest,
+  { name, renameInPlace, zip, logLevel, signal }: BrowserPlaylistPlanRequest,
 ): Promise<BrowserPlaylistPlan> => {
-  const toGuest = (path: string) => `${root}/${path}`;
+  const toGuest = (path: string) => toGuestPath(root, path);
   const fromGuest = (path: string) => {
     if (!path.startsWith(`${root}/`)) throw new Error(`The playlist plan named a file outside the folder: ${path}`);
     return path.slice(root.length + 1);
@@ -125,8 +156,9 @@ const planMountedPlaylist = async (
       logLevel,
       signal,
       ...(renameInPlace ? { name, renameInPlace } : { output }),
+      ...(zip ? { chd: zip.chd, layout: zip.layout, name, rename: zip.rename } : {}),
     });
-  let result = await plan(!renameInPlace && name ? toGuest(`${name}.m3u`) : undefined);
+  let result = await plan(!renameInPlace && name ? toGuest(`${name}.${zip ? "zip" : "m3u"}`) : undefined);
   // Without a name the engine writes the playlist beside the first disc. Lines are relative to
   // the playlist, so a first disc in a subfolder plans again with the playlist at the top.
   if (!(renameInPlace || name) && result.discs[0] && fromGuest(result.discs[0].path).includes("/")) {
@@ -136,6 +168,7 @@ const planMountedPlaylist = async (
     ...result,
     discs: result.discs.map((disc) => ({ ...disc, path: fromGuest(disc.path) })),
     renames: result.renames.map((rename) => ({ ...rename, from: fromGuest(rename.from) })),
+    bundle: result.bundle.map((file) => (file.source ? { ...file, source: fromGuest(file.source) } : file)),
   };
 };
 
@@ -148,28 +181,30 @@ const rewordPlanError = (error: unknown, root: string) => {
     error.message = error.message
       .replaceAll(`${root}/`, "")
       .replace("; pass --name", ". Type a game name")
-      .replace("--rename cannot rename", "Cannot rename");
+      .replace("--rename cannot rename", "Cannot rename")
+      .replace("--chd cannot compress", "Cannot compress");
   }
 };
 
-/**
- * Plan a playlist from picked files with the engine's dry run. The files are mounted at their
- * exact names and relative paths, so the plan's lines and renamed sheets match the real folder.
- */
-const planBrowserPlaylist = async (request: BrowserPlaylistPlanRequest): Promise<BrowserPlaylistPlan> => {
+/** Mount the picked files at their exact names, run `use`, then release the mounts. */
+const withMountedPlaylist = async <Result>(
+  request: BrowserPlaylistPlanRequest,
+  use: (files: MountedPlaylistFiles) => Promise<Result>,
+): Promise<Result> => {
+  if (request.zip && !request.name) throw new Error("A ZIP needs a game name.");
   const sources = getPlaylistSourceFiles(request.files);
   checkSourceFiles(sources);
   const { mounted, inputs } = selectPlanFiles(sources, request.discs, request.renameInPlace);
   const root = `${WORKER_OPFS_MOUNTPOINT}/playlist-${crypto.randomUUID()}`;
   const unregister = mounted.map((source) =>
     registerBrowserVirtualFile({
-      path: `${root}/${source.path}`,
+      path: toGuestPath(root, source.path),
       source: source.file,
       trace: { logLevel: request.logLevel },
     }),
   );
   try {
-    return await planMountedPlaylist({ root, mounted, inputs }, request);
+    return await use({ root, mounted, inputs });
   } catch (error) {
     rewordPlanError(error, root);
     throw error;
@@ -178,5 +213,48 @@ const planBrowserPlaylist = async (request: BrowserPlaylistPlanRequest): Promise
   }
 };
 
-export { planBrowserPlaylist };
-export type { BrowserPlaylistPlan, PlaylistSourceFile };
+/**
+ * Plan a playlist from picked files with the engine's dry run. Files mount at their exact names
+ * and paths. The plan's lines and renamed sheets then match the real folder.
+ */
+const planBrowserPlaylist = (request: BrowserPlaylistPlanRequest): Promise<BrowserPlaylistPlan> =>
+  withMountedPlaylist(request, (files) => planMountedPlaylist(files, request));
+
+/**
+ * Write the `.zip` that {@link planBrowserPlaylist} plans, into the browser's private storage.
+ * The caller saves the returned output and disposes it.
+ */
+const writeBrowserPlaylistZip = (request: BrowserPlaylistZipRequest): Promise<PublicOutput> =>
+  withMountedPlaylist(request, async ({ root, mounted, inputs }) => {
+    const { name, zip, logLevel, onEvent, signal } = request;
+    const zipName = `${name}.zip`;
+    const knownPaths = mounted.map((source) => toGuestPath(root, source.path));
+    const scope = createRomWeaverOutputScope();
+    const output = scope.selectOutputPath("", zipName, knownPaths);
+    try {
+      await invokeRomWeaverPlaylistWrite({
+        chd: zip.chd,
+        codec: PLAYLIST_ZIP_CODEC,
+        inputs: inputs.map((source) => toGuestPath(root, source.path)),
+        knownPaths,
+        layout: zip.layout,
+        logLevel,
+        name,
+        onEvent,
+        output,
+        rename: zip.rename,
+        signal,
+      });
+      const [cleanup] = await scope.createOutputCleanups([output], (filePath) => browserVfs.remove(filePath));
+      return await createRuntimeOutputFromVfs(browserVfs, output, zipName, { cleanup });
+    } catch (error) {
+      await scope.cleanup().catch(() => undefined);
+      throw await withBrowserOutputStorageFailureContext(error, {
+        operationLabel: `write \`${zipName}\``,
+        requiredBytes: mounted.reduce((total, source) => total + source.file.size, 0),
+      });
+    }
+  });
+
+export { planBrowserPlaylist, writeBrowserPlaylistZip };
+export type { BrowserPlaylistPlan, PlaylistSourceFile, PlaylistZipOptions };

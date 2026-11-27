@@ -1372,7 +1372,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "settings.betaToolsEnabled": msg({
     id: "settings.betaToolsEnabled",
-    message: "Enable beta tools (Save Editor, Make playlist)",
+    message: "Enable beta tools (Save Editor)",
   }),
   "settings.accent": msg({ id: "settings.accent", message: "Accent" }),
   "settings.weavePackage": msg({ id: "settings.weavePackage", message: "What a shared weave includes" }),
@@ -1987,8 +1987,84 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.about.playlistBody3": msg({
     id: "ui.about.playlistBody3",
     message:
-      "Download the playlist. In Chrome or Edge on a computer you can also save it into the game's folder and rename the discs to match. Nothing is uploaded.",
+      "Download a ZIP of the playlist and the discs, renamed and arranged for your frontend. In Chrome or Edge on a computer you can also save the playlist into the game's folder and rename the discs there. Nothing is uploaded.",
   }),
+  "ui.playlist.layoutFlat": msg({
+    id: "ui.playlist.layoutFlat",
+    message: "Beside the discs (RetroArch, Batocera, Recalbox)",
+  }),
+  "ui.playlist.layoutFolder": msg({ id: "ui.playlist.layoutFolder", message: "In a game folder (MinUI, muOS)" }),
+  "ui.playlist.layoutM3uFolder": msg({
+    id: "ui.playlist.layoutM3uFolder",
+    message: "In a .m3u folder (ES-DE, RetroDECK)",
+  }),
+  "ui.playlist.layoutDiscFolders": msg({ id: "ui.playlist.layoutDiscFolders", message: "One folder per disc (igir)" }),
+  "ui.playlist.layout": msg({ id: "ui.playlist.layout", message: "Layout" }),
+  "ui.playlist.compressChd": msg({ id: "ui.playlist.compressChd", message: "Compress the discs to CHD" }),
+  "ui.playlist.folderTooLarge": msg({
+    id: "ui.playlist.folderTooLarge",
+    message: '"{folder}" holds more than {max} files. Pick the folder of one game.',
+  }),
+  "ui.playlist.activityStage": msg({ id: "ui.playlist.activityStage", message: "Make playlist" }),
+  "ui.playlist.hintOpenFolder": msg({
+    id: "ui.playlist.hintOpenFolder",
+    message: "Open the game's folder to save the playlist into it or rename its discs.",
+  }),
+  "ui.playlist.hintSubfolders": msg({
+    id: "ui.playlist.hintSubfolders",
+    message: "The discs are in subfolders, so the playlist lists their paths. Save it into the folder you opened.",
+  }),
+  "ui.playlist.game": msg({ id: "ui.playlist.game", message: "Game" }),
+  "ui.playlist.gameName": msg({ id: "ui.playlist.gameName", message: "Game name" }),
+  "ui.playlist.nameCharacters": msg({
+    id: "ui.playlist.nameCharacters",
+    message: 'A game name cannot contain < > : " / \\ | ? or *.',
+  }),
+  "ui.playlist.nameWindows": msg({ id: "ui.playlist.nameWindows", message: 'Windows reserves the name "{name}".' }),
+  "ui.playlist.nameDot": msg({ id: "ui.playlist.nameDot", message: "A game name cannot end with a dot." }),
+  "ui.playlist.nameLength": msg({
+    id: "ui.playlist.nameLength",
+    message: "That game name is too long for a file name.",
+  }),
+  "ui.playlist.renameDiscs": msg({ id: "ui.playlist.renameDiscs", message: "Rename the discs to {name}" }),
+  "ui.playlist.cannotRename": msg({ id: "ui.playlist.cannotRename", message: "Can't rename these discs: {reason}" }),
+  "ui.playlist.cannotZip": msg({ id: "ui.playlist.cannotZip", message: "Can't make the ZIP: {reason}" }),
+  "ui.playlist.openingFolder": msg({ id: "ui.playlist.openingFolder", message: "Opening folder…" }),
+  "ui.playlist.openFolder": msg({ id: "ui.playlist.openFolder", message: "Open game folder" }),
+  "ui.playlist.readingSheets": msg({ id: "ui.playlist.readingSheets", message: "Reading the disc sheets…" }),
+  "ui.playlist.discNumber": msg({ id: "ui.playlist.discNumber", message: "Disc {n}" }),
+  "ui.playlist.supportNote": msg({
+    id: "ui.playlist.supportNote",
+    message:
+      "Saving into a folder, or renaming discs where they are, needs Chrome or Edge on a computer. In any browser, you can download a ZIP with the playlist and the discs.",
+  }),
+  "ui.playlist.zipDownload": msg({ id: "ui.playlist.zipDownload", message: "Download {fileName}" }),
+  "ui.playlist.zipCreating": msg({ id: "ui.playlist.zipCreating", message: "Creating {fileName}…" }),
+  "ui.playlist.zipCreatingPercent": msg({
+    id: "ui.playlist.zipCreatingPercent",
+    message: "Creating {fileName}… {percent}%",
+  }),
+  "ui.playlist.renamingDiscs": msg({ id: "ui.playlist.renamingDiscs", message: "Renaming discs…" }),
+  "ui.playlist.renameAndSave": msg({ id: "ui.playlist.renameAndSave", message: "Rename discs and save playlist" }),
+  "ui.playlist.saving": msg({ id: "ui.playlist.saving", message: "Saving…" }),
+  "ui.playlist.saveToFolder": msg({ id: "ui.playlist.saveToFolder", message: "Save into folder" }),
+  "ui.playlist.doneSaved": msg({ id: "ui.playlist.doneSaved", message: "Saved {fileName} in {folder}" }),
+  "ui.playlist.doneRenamed": msg({
+    id: "ui.playlist.doneRenamed",
+    message:
+      "{count, plural, one {Renamed # file and saved {fileName} in {folder}} other {Renamed # files and saved {fileName} in {folder}}}",
+  }),
+  "ui.playlist.doneZip": msg({ id: "ui.playlist.doneZip", message: "Downloaded {fileName}" }),
+  "ui.playlist.addDiscs": msg({ id: "ui.playlist.addDiscs", message: "Replace the discs" }),
+  "ui.playlist.dropDiscs": msg({ id: "ui.playlist.dropDiscs", message: "Drop the discs of one game" }),
+  "ui.playlist.tapDiscs": msg({ id: "ui.playlist.tapDiscs", message: "Tap to add the discs of one game" }),
+  "ui.playlist.dropInfo": msg({
+    id: "ui.playlist.dropInfo",
+    message: "A playlist lists each disc of a multi-disc game, so an emulator can change discs.",
+  }),
+  "ui.playlist.discFiles": msg({ id: "ui.playlist.discFiles", message: "Disc files" }),
+  "ui.playlist.stepPlaylist": msg({ id: "ui.playlist.stepPlaylist", message: "Playlist" }),
+  "ui.playlist.stepSave": msg({ id: "ui.playlist.stepSave", message: "Save" }),
   "ui.about.testTitle": msg({ id: "ui.about.testTitle", message: "About the online ROM tester" }),
   "ui.about.testBody1": msg({
     id: "ui.about.testBody1",

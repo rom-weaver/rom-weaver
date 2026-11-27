@@ -155,6 +155,64 @@ fn playlist_zip_holds_playlist_discs_and_their_track_files() {
     }
 }
 
+/// The compression method (0 stored, 8 deflated) in a ZIP's first local file header.
+fn first_zip_method(zip: &Path) -> u16 {
+    let bytes = fs::read(zip).expect("read zip");
+    assert_eq!(&bytes[..4], b"PK\x03\x04", "local file header");
+    u16::from_le_bytes([bytes[8], bytes[9]])
+}
+
+#[test]
+fn playlist_zip_codec_picks_how_the_zip_is_compressed() {
+    let temp = setup_temp_dir();
+    write_cue_disc(temp.path(), "Game (Disc 1)");
+    let cue = temp.path().join("Game (Disc 1).cue");
+    let cue = cue.to_str().expect("p");
+    for (name, extra, method) in [
+        ("Default.zip", &[][..], 8),
+        ("Stored.zip", &["--codec", "store"][..], 0),
+    ] {
+        let out = temp.child(name);
+        run_single_json_event(
+            &playlist_args(&[cue], out.path().to_str().expect("p"), extra),
+            0,
+        );
+        assert_eq!(first_zip_method(out.path()), method, "{name}");
+    }
+    let unknown = temp.child("Unknown.zip");
+    let json = run_single_json_event(
+        &playlist_args(
+            &[cue],
+            unknown.path().to_str().expect("p"),
+            &["--codec", "nope"],
+        ),
+        1,
+    );
+    assert_eq!(json["status"], "failed", "{json}");
+    assert!(!unknown.path().exists());
+    let json = run_single_json_event(
+        &playlist_args(
+            &[cue],
+            unknown.path().to_str().expect("p"),
+            &["--codec", "nope", "--dry-run"],
+        ),
+        1,
+    );
+    assert_eq!(
+        json["status"], "failed",
+        "a dry run refuses the codec too: {json}"
+    );
+    let json = run_single_json_event(
+        &playlist_args(
+            &[cue],
+            unknown.path().to_str().expect("p"),
+            &["--codec", "store", "--dry-run"],
+        ),
+        0,
+    );
+    assert_eq!(json["status"], "succeeded", "{json}");
+}
+
 #[test]
 fn playlist_refuses_existing_output_and_unknown_extensions() {
     let temp = setup_temp_dir();
@@ -231,6 +289,7 @@ fn playlist_dry_run_reports_the_playlist_it_would_write() {
             "file_name": "Game.m3u",
             "text": "Game (Disc 1).chd\n",
             "renames": [],
+            "bundle": [],
         })
     );
     assert!(!out.path().exists(), "dry run must not write the playlist");
@@ -388,6 +447,7 @@ fn extract_zip(zip: &Path, into: &Path) {
             zip.to_str().expect("p"),
             "--output",
             into.to_str().expect("p"),
+            "--no-nested-extract",
             "--json",
         ],
         0,
@@ -759,6 +819,8 @@ fn playlist_refuses_copy_options_for_a_lone_m3u() {
         &["--rename"][..],
         &["--layout", "folder"],
         &["--name", "Other"],
+        &["--codec", "store"],
+        &["--chd"],
     ] {
         let json = run_single_json_event(
             &playlist_args(&[disc_path], out.path().to_str().expect("p"), extra),
@@ -999,4 +1061,159 @@ fn playlist_refuses_stdout_output() {
         !temp.path().join("-").exists(),
         "`-` must not become a folder"
     );
+}
+
+/// A one-track CD that `compress` accepts: [`write_cue_disc`] with eight sectors of pseudo-random
+/// words. `seed` makes two discs differ. Unlike a short repeating pattern, the words compress to
+/// different bytes at each compression level.
+fn write_cd_disc(dir: &Path, stem: &str, seed: u32) {
+    write_cue_disc(dir, stem);
+    const WORDS: [&[u8]; 8] = [
+        b"disc ", b"track ", b"sector ", b"weave ", b"rom ", b"patch ", b"game ", b"data ",
+    ];
+    let mut state = seed;
+    let mut track = Vec::with_capacity(8 * 2352);
+    while track.len() < 8 * 2352 {
+        state = state.wrapping_mul(1_103_515_245).wrapping_add(12_345) & 0x7fff_ffff;
+        track.extend_from_slice(WORDS[(state % 8) as usize]);
+    }
+    track.truncate(8 * 2352);
+    fs::write(dir.join(format!("{stem}.bin")), track).expect("write bin");
+}
+
+#[test]
+fn playlist_chd_writes_the_chd_compress_writes_for_each_disc() {
+    let temp = setup_temp_dir();
+    let discs = temp.child("discs");
+    fs::create_dir_all(discs.path()).expect("discs dir");
+    write_cd_disc(discs.path(), "Game (Disc 1)", 1);
+    write_cd_disc(discs.path(), "Game (Disc 2)", 2);
+    let cue = |number: u8| discs.path().join(format!("Game (Disc {number}).cue"));
+    let expected = [1, 2].map(|number| {
+        let chd = temp.path().join(format!("compressed {number}.chd"));
+        command_stdout(
+            &[
+                "compress",
+                "--input",
+                cue(number).to_str().expect("p"),
+                "--output",
+                chd.to_str().expect("p"),
+                "--json",
+            ],
+            0,
+        );
+        fs::read(&chd).expect("read chd")
+    });
+    // A disc that is already a CHD is copied as it is.
+    let third = discs.path().join("Game (Disc 3).chd");
+    fs::write(&third, &expected[0]).expect("write chd");
+    // A LibCrypt `.sbi` stays beside its disc's CHD.
+    fs::write(discs.path().join("Game (Disc 1).sbi"), b"libcrypt").expect("write sbi");
+    let inputs = [cue(2), third, cue(1)];
+    let inputs: Vec<&str> = inputs
+        .iter()
+        .map(|path| path.to_str().expect("p"))
+        .collect();
+    for output in ["Game.zip", "roms"] {
+        let out = temp.path().join(output);
+        run_single_json_event(
+            &playlist_args(&inputs, out.to_str().expect("p"), &["--chd"]),
+            0,
+        );
+        let folder = if output.ends_with(".zip") {
+            let unzipped = temp.path().join("unzipped");
+            extract_zip(&out, &unzipped);
+            unzipped
+        } else {
+            out
+        };
+        assert_eq!(
+            sorted_file_names(&folder),
+            [
+                "Game (Disc 1).chd",
+                "Game (Disc 1).sbi",
+                "Game (Disc 2).chd",
+                "Game (Disc 3).chd",
+                "Game.m3u"
+            ],
+            "{output}"
+        );
+        assert_eq!(
+            fs::read_to_string(folder.join("Game.m3u")).expect("m3u"),
+            "Game (Disc 1).chd\nGame (Disc 2).chd\nGame (Disc 3).chd\n",
+            "{output}"
+        );
+        assert_eq!(
+            fs::read(folder.join("Game (Disc 1).sbi")).expect("sbi"),
+            b"libcrypt",
+            "{output}"
+        );
+        for (name, bytes) in [
+            ("Game (Disc 1).chd", &expected[0]),
+            ("Game (Disc 2).chd", &expected[1]),
+            ("Game (Disc 3).chd", &expected[0]),
+        ] {
+            assert!(
+                fs::read(folder.join(name)).expect(name) == *bytes,
+                "{output}: `{name}` differs from the compress output"
+            );
+        }
+    }
+}
+
+#[test]
+fn playlist_chd_refuses_a_disc_compress_stores_as_raw_data_before_writing() {
+    let temp = setup_temp_dir();
+    write_cd_disc(temp.path(), "Game (Disc 1)", 1);
+    let cue = temp.path().join("Game (Disc 1).cue");
+    let pbp = temp.path().join("Game (Disc 2).pbp");
+    fs::write(&pbp, b"PBP").expect("write pbp");
+    let inputs = [&cue, &pbp].map(|path| path.to_str().expect("p"));
+    let zip = temp.path().join("Game.zip");
+    for extra in [&["--chd", "--dry-run"][..], &["--chd"]] {
+        let json =
+            run_single_json_event(&playlist_args(&inputs, zip.to_str().expect("p"), extra), 1);
+        assert!(
+            json.to_string()
+                .contains("--chd cannot compress `Game (Disc 2).pbp`"),
+            "{extra:?}: {json}"
+        );
+    }
+    assert!(!zip.exists(), "a refused run wrote the ZIP");
+}
+
+#[cfg(unix)]
+#[test]
+fn playlist_chd_names_an_unreadable_track_before_writing() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = setup_temp_dir();
+    write_cd_disc(temp.path(), "Game (Disc 1)", 1);
+    write_cd_disc(temp.path(), "Game (Disc 2)", 2);
+    let cues =
+        ["Game (Disc 1)", "Game (Disc 2)"].map(|stem| temp.path().join(format!("{stem}.cue")));
+    let inputs = cues.each_ref().map(|cue| cue.to_str().expect("p"));
+    let track = temp.path().join("Game (Disc 2).bin");
+    fs::set_permissions(&track, fs::Permissions::from_mode(0o000)).expect("chmod");
+    if fs::File::open(&track).is_ok() {
+        // Root reads any file, so the compression cannot fail here.
+        fs::set_permissions(&track, fs::Permissions::from_mode(0o644)).expect("chmod");
+        return;
+    }
+    let zip = temp.path().join("Game.zip");
+    let roms = temp.path().join("roms");
+    let results = [&zip, &roms].map(|out| {
+        run_single_json_event(
+            &playlist_args(&inputs, out.to_str().expect("p"), &["--chd"]),
+            1,
+        )
+    });
+    fs::set_permissions(&track, fs::Permissions::from_mode(0o644)).expect("chmod");
+    assert!(
+        !zip.exists() && !roms.exists(),
+        "partial output left behind"
+    );
+    for result in results {
+        assert!(result.to_string().contains("Game (Disc 2).bin"), "{result}");
+    }
 }

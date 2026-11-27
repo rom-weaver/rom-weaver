@@ -7,17 +7,18 @@ const FILE_NAME_BYTE_LIMIT = 255;
 const LONGEST_RENAMED_FILE_SUFFIX = " (Disc 99) (Track 99).bin";
 const textEncoder = new TextEncoder();
 
-/** Why a game name cannot name its playlist and renamed discs, or an empty string when it can. */
-const checkGameName = (name: string) => {
+type GameNameProblem = "characters" | "dot" | "length" | "windows";
+
+/** Why a game name cannot name its playlist and renamed discs; null when it can. */
+const checkGameName = (name: string): GameNameProblem | null => {
   const trimmed = name.trim();
-  if (!trimmed) return "";
-  if (RESERVED_NAME_CHARACTERS.test(trimmed)) return 'A game name cannot contain < > : " / \\ | ? or *.';
-  if (RESERVED_WINDOWS_NAMES.test(trimmed)) return `Windows reserves the name "${trimmed}".`;
-  if (trimmed.endsWith(".")) return "A game name cannot end with a dot.";
-  if (textEncoder.encode(`${trimmed}${LONGEST_RENAMED_FILE_SUFFIX}`).length > FILE_NAME_BYTE_LIMIT) {
-    return "That game name is too long for a file name.";
-  }
-  return "";
+  if (!trimmed) return null;
+  if (RESERVED_NAME_CHARACTERS.test(trimmed)) return "characters";
+  if (RESERVED_WINDOWS_NAMES.test(trimmed)) return "windows";
+  if (trimmed.endsWith(".")) return "dot";
+  if (textEncoder.encode(`${trimmed}${LONGEST_RENAMED_FILE_SUFFIX}`).length > FILE_NAME_BYTE_LIMIT) return "length";
+  return null;
 };
 
 export { checkGameName };
+export type { GameNameProblem };

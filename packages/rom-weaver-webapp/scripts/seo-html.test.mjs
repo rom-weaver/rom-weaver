@@ -203,12 +203,13 @@ test("the sitemap contains each indexable workflow once and excludes beta tools"
     "extract-files",
     "identify-rom",
     "ppf-undo",
+    "create-m3u-playlist",
     "play-rom",
     "trim-rom",
   ]) {
     assert.ok(locations.includes(`https://rom-weaver.com/${slug}`), slug);
   }
-  for (const slug of ["rom-save-editor", "create-m3u-playlist"]) {
+  for (const slug of ["rom-save-editor"]) {
     assert.ok(!locations.includes(`https://rom-weaver.com/${slug}`), slug);
   }
 });
@@ -296,7 +297,6 @@ test("workflow Markdown includes task instructions and limits from the published
 test("beta tool pages get their own title, social titles, and channel badge", () => {
   const shell = `${routeShell.replace("</head>", '<meta name="robots" content="index, follow" />\n</head>')}`;
   for (const [slug, name] of [
-    ["create-m3u-playlist", "Make playlist"],
     ["rom-save-editor", "Save Editor"],
     ["whats-new", "What's new"],
   ]) {

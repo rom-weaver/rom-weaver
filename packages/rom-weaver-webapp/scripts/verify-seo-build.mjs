@@ -279,6 +279,7 @@ for (const endpoint of expectedEndpoints) {
 }
 assertIncludes(llmsTxt, `](${siteOrigin}/apply-rom-patches)`, "llms.txt web app link");
 assertIncludes(llmsTxt, `](${siteOrigin}/trim-rom)`, "llms.txt trim link");
+assertIncludes(llmsTxt, `](${siteOrigin}/create-m3u-playlist)`, "llms.txt playlist link");
 assertIncludes(llmsTxt, `](${siteOrigin}/index.md)`, "llms.txt Markdown link");
 assertIncludes(read("index.md"), `](${siteOrigin}/docs.md)`, "home Markdown documentation link");
 if (openapi.servers?.[0]?.url !== siteOrigin) throw new Error(`OpenAPI server must be ${siteOrigin}`);
@@ -464,6 +465,7 @@ assertIncludes(homeHtml, 'href="/create-rom-patch"', "home Create card");
 assertIncludes(homeHtml, 'href="/apply-cheats"', "home Cheats card");
 assertIncludes(homeHtml, 'href="/trim-rom"', "home Trim link");
 assertIncludes(homeHtml, 'href="/ppf-undo"', "home PPF undo link");
+assertIncludes(homeHtml, 'href="/create-m3u-playlist"', "home Make playlist link");
 assertIncludes(homeHtml, 'href="/docs/features"', "home feature reference link");
 assertIncludes(homeHtml, 'href="/docs/apply-bps-patch"', "home BPS patch guide link");
 assertIncludes(homeHtml, 'href="/docs/fix-checksum-errors"', "home checksum troubleshooting link");
@@ -497,7 +499,6 @@ for (const [label, html] of [
   ["apply", applyHtml],
   ["docs", read("docs.html")],
 ]) {
-  assertExcludes(html, 'href="/create-m3u-playlist"', `${label} hidden beta playlist link`);
   assertExcludes(html, 'href="/rom-save-editor"', `${label} hidden beta save editor link`);
   assertContainerHasNoHeadings(html, "side-nav", label);
 }
@@ -799,7 +800,6 @@ for (const script of bundledScripts) {
 }
 
 for (const [slug, title] of [
-  ["create-m3u-playlist", "Make playlist | rom-weaver"],
   ["rom-save-editor", "Save Editor | rom-weaver"],
   ["whats-new", "What's new | rom-weaver"],
 ]) {
@@ -808,7 +808,7 @@ for (const [slug, title] of [
   assertIncludes(html, `property="og:title" content="${title}`, `${slug} og:title`);
   assertIncludes(html, `name="twitter:title" content="${title}`, `${slug} twitter:title`);
 }
-for (const beta of ["whats-new", "rom-save-editor", "create-m3u-playlist"]) {
+for (const beta of ["whats-new", "rom-save-editor"]) {
   assertIncludes(read(`${beta}/index.html`), 'name="robots" content="noindex, nofollow"', `${beta} noindex`);
   assertIncludes(
     read(`${beta}/index.html`),

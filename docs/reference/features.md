@@ -38,7 +38,7 @@ Cheat support covers writes to the ROM. Codes that need live game memory cannot 
 | Compress and convert | Put a ROM into a smaller container, or change its container. This does not port a game to another console. | [Compress files in the browser](../how-to/convert-roms-browser.md) | [Archives and disc images](../how-to/work-with-archives.md) |
 | Trim | Remove padding from supported files, or restore it. Padding is space around the useful data. | [Trim and restore padding](../how-to/trim-roms-browser.md) | [Trim and restore padding](../how-to/cli-trim.md) |
 | Headers and byte order | Handle supported dump layouts so patches receive the bytes they expect. | [Resolve layout differences](../how-to/fix-checksum-errors.md#cartridge-header-differences) | [Header options](cli.md#header-and-byte-order-flags) |
-| M3U playlist | Write an `.m3u` for a multi-disc game, ordering discs from names such as `Disc 1` and `.disc02`, alone or in a ZIP with the discs. | [Make a playlist](../how-to/make-playlist-browser.md) (beta setting); saving into a folder and renaming discs in Chrome and Edge only | [Playlist](../how-to/cli-playlist.md) |
+| M3U playlist | Write an `.m3u` for a multi-disc game, ordering discs from names such as `Disc 1` and `.disc02`, alone or in a ZIP with the discs, renamed and arranged for a frontend. | [Make a playlist](../how-to/make-playlist-browser.md); saving into a folder and renaming discs in place in Chrome and Edge only | [Playlist](../how-to/cli-playlist.md) |
 | PPF undo | Restore bytes saved inside a PPF3 patch that includes undo data; unpack ROM and patch inputs and compress the restored output. | [Undo PPF](../how-to/undo-ppf-browser.md) | [Tools](cli.md#tools) |
 
 The browser's Extract tool downloads selected files, or several files as one ZIP. The CLI also creates archives from directories.
@@ -65,7 +65,7 @@ Patching support, emulator support, cheat support, and save editing support are 
 | Offline use | The offline copy caches the app, every emulator core, and selected databases. Remote links and unselected databases need a connection. [Offline setup](../how-to/browser-settings.md#prepare-for-offline-use). |
 | Browser preferences | Theme, accent, language, byte units, guided help, output defaults, compression settings, and worker threads. [Settings](../how-to/browser-settings.md). |
 | Guided practice runs | Step-by-step cards for Apply, Create, Weave, Test, and the two cheat workflows, using homebrew practice files. Guided Apply waits for you to add files. [Guided practice runs](guided-runs.md). |
-| Beta tools | Save Editor and Make playlist are behind the browser's beta setting. Trim, PPF Undo, and cheat tools in Apply, Create, and Identify are available without it. |
+| Beta tools | Save Editor is behind the browser's beta setting. Trim, PPF Undo, Make playlist, and cheat tools in Apply, Create, and Identify are available without it. |
 | Scripts and pipelines | The CLI has file selection, dry runs, standard input/output, JSON results, JSON event streams, shell completions, and man pages. [CLI reference](cli.md). |
 | Hosting and integration | Static or Docker hosting, subpaths, URL-loaded ROMs and patches, weaves, and same-origin file integration. [Hosting](../hosting/self-hosting.md), [integration](../hosting/webapp-integration.md). |
 
