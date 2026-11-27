@@ -2,7 +2,10 @@ import { createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, test } from "vitest";
 import { commands } from "vitest/browser";
+import { invokeRomWeaverCompressionCreateWorker } from "../../src/lib/runtime/wasm-compression-commands.ts";
 import { planBrowserPlaylist, writeBrowserPlaylistZip } from "../../src/platform/browser/browser-playlist-api.ts";
+import { browserVfs } from "../../src/platform/browser/workflow-runtime-vfs-cleanup.ts";
+import { registerBrowserVirtualFile } from "../../src/workers/protocol/browser-virtual-files.ts";
 import { PlaylistForm } from "../../src/webapp/components/playlist-form.tsx";
 import { WORKER_OPFS_MOUNTPOINT } from "../../src/workers/shared/worker-storage/storage-layout.ts";
 
@@ -208,6 +211,31 @@ describe("writeBrowserPlaylistZip", () => {
     }
   });
 
+  test("compresses each disc to the CHD that Compress writes for it", async () => {
+    const discs = [1, 2].map((number) => {
+      const name = `Game (Disc ${number})`;
+      return {
+        bin: new File([cdTrack(number)], `${name}.bin`),
+        cue: new File([`FILE "${name}.bin" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n`], `${name}.cue`),
+      };
+    });
+    const output = await writeBrowserPlaylistZip({
+      files: discs.flatMap(({ bin, cue }) => [at(cue.name, [cue]), at(bin.name, [bin])]),
+      name: "Game",
+      zip: { chd: true, layout: "flat", rename: false },
+    });
+    try {
+      const entries = storedZipEntries(await readOutput(output));
+      expect([...entries.keys()]).toEqual(["Game.m3u", "Game (Disc 1).chd", "Game (Disc 2).chd"]);
+      expect(new TextDecoder().decode(entries.get("Game.m3u"))).toBe("Game (Disc 1).chd\nGame (Disc 2).chd\n");
+      for (const [index, disc] of discs.entries()) {
+        expect(entries.get(`Game (Disc ${index + 1}).chd`)).toEqual(await compressLikeCompressPage(disc));
+      }
+    } finally {
+      await output.dispose();
+    }
+  });
+
   test("rejects a cancelled write, and the next write still works", async () => {
     const request = ff7Request({ layout: "flat", rename: true });
     await expect(writeBrowserPlaylistZip({ ...request, signal: AbortSignal.abort() })).rejects.toThrow();
@@ -215,6 +243,64 @@ describe("writeBrowserPlaylistZip", () => {
     await output.dispose();
   });
 });
+
+/** Eight CD sectors of pseudo-random words, which compress to different bytes at each level. */
+const cdTrack = (seed) => {
+  const words = ["disc ", "track ", "sector ", "weave ", "rom ", "patch ", "game ", "data "];
+  let state = seed;
+  let text = "";
+  while (text.length < 8 * SECTOR) {
+    state = (Math.imul(state, 1_103_515_245) + 12_345) & 0x7fff_ffff;
+    text += words[state % words.length];
+  }
+  return new TextEncoder().encode(text.slice(0, 8 * SECTOR));
+};
+
+/** The entries of a ZIP whose files are stored, by name, in central directory order. */
+const storedZipEntries = (bytes) => {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const end = bytes.byteLength - 22;
+  expect(view.getUint32(end, true)).toBe(0x06054b50);
+  const entries = new Map();
+  let at = view.getUint32(end + 16, true);
+  for (let index = 0; index < view.getUint16(end + 10, true); index += 1) {
+    expect(view.getUint16(at + 10, true)).toBe(0);
+    const size = view.getUint32(at + 20, true);
+    const nameLength = view.getUint16(at + 28, true);
+    const local = view.getUint32(at + 42, true);
+    const name = new TextDecoder().decode(bytes.subarray(at + 46, at + 46 + nameLength));
+    const data = local + 30 + view.getUint16(local + 26, true) + view.getUint16(local + 28, true);
+    entries.set(name, bytes.slice(data, data + size));
+    at += 46 + nameLength + view.getUint16(at + 30, true) + view.getUint16(at + 32, true);
+  }
+  return entries;
+};
+
+/** The CHD the Compress page writes for a CUE/BIN disc with its default CD codecs and level. */
+const compressLikeCompressPage = async ({ bin, cue }) => {
+  const root = `${WORKER_OPFS_MOUNTPOINT}/compress-${crypto.randomUUID()}`;
+  const paths = [cue, bin].map((file) => `${root}/${file.name}`);
+  const release = [cue, bin].map((file, index) => registerBrowserVirtualFile({ path: paths[index], source: file }));
+  try {
+    const result = await invokeRomWeaverCompressionCreateWorker({
+      codecs: ["cdlz", "cdzl", "cdfl"],
+      format: "chd",
+      inputPaths: [paths[0]],
+      knownInputPaths: paths,
+      levelProfile: "max",
+      outputFileName: cue.name.replace(/\.cue$/, ".chd"),
+    });
+    try {
+      const bytes = new Uint8Array(result.size);
+      await browserVfs.read(result.filePath, bytes);
+      return bytes;
+    } finally {
+      await result.cleanup();
+    }
+  } finally {
+    for (const done of release) done();
+  }
+};
 
 const mountForm = () => {
   const element = document.createElement("div");

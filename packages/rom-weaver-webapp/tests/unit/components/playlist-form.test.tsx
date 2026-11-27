@@ -90,7 +90,9 @@ describe("PlaylistForm", () => {
 
     fireEvent.click(download);
     await screen.findByText("Downloaded Game.zip");
-    expect(support.writeZip).toHaveBeenCalledWith(expect.objectContaining({ zip: { layout: "flat", rename: false } }));
+    expect(support.writeZip).toHaveBeenCalledWith(
+      expect.objectContaining({ zip: { chd: false, layout: "flat", rename: false } }),
+    );
     expect(output.saveAs).toHaveBeenCalledWith({ fileName: "Game.zip", interactive: true });
   });
 
@@ -230,7 +232,7 @@ describe("PlaylistForm", () => {
     expect(await screen.findByText("Game.m3u/Game (Disc 1).cue")).toBeTruthy();
     await waitFor(() =>
       expect(planBrowserPlaylist).toHaveBeenCalledWith(
-        expect.objectContaining({ name: "Game", zip: { layout: "m3u-folder", rename: true } }),
+        expect.objectContaining({ name: "Game", zip: { chd: false, layout: "m3u-folder", rename: true } }),
       ),
     );
     expect(screen.getByText("← Game CD1.cue")).toBeTruthy();
@@ -243,7 +245,7 @@ describe("PlaylistForm", () => {
       expect.objectContaining({
         discs: ["Game (Disc 1).cue", "Game (Disc 2).cue"],
         name: "Game",
-        zip: { layout: "m3u-folder", rename: true },
+        zip: { chd: false, layout: "m3u-folder", rename: true },
       }),
     );
     expect(output.saveAs).toHaveBeenCalledWith({ fileName: "Game.zip", interactive: true });
@@ -251,6 +253,45 @@ describe("PlaylistForm", () => {
     expect(output.dispose).not.toHaveBeenCalled();
     unmount();
     expect(output.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("compresses the discs to CHD in a ZIP, even where the discs could be renamed in place", async () => {
+    support.canWrite = true;
+    support.writeZip.mockResolvedValue(zipOutput());
+    const folder = folderHandle("Game", { "Game (Disc 1).cue": "one", "Game (Disc 2).cue": "two" });
+    Object.defineProperty(window, "showDirectoryPicker", { configurable: true, value: async () => folder });
+    vi.mocked(planBrowserPlaylist).mockImplementation(async ({ zip }) =>
+      zip?.chd
+        ? {
+            ...PLAN,
+            bundle: [{ path: "Game.m3u" }, { path: "Game (Disc 1).chd", source: "Game (Disc 1).cue" }],
+            entries: ["Game (Disc 1).chd", "Game (Disc 2).chd"],
+          }
+        : PLAN,
+    );
+    try {
+      render(<PlaylistForm onSessionChange={vi.fn()} />);
+      fireEvent.click(screen.getByRole("button", { name: "Open game folder" }));
+      const chd = await screen.findByRole("checkbox", { name: "Compress the discs to CHD" });
+      await screen.findByRole("button", { name: "Save into folder" });
+
+      fireEvent.click(chd);
+      expect(await screen.findByText("Game (Disc 2).chd")).toBeTruthy();
+      expect(screen.getByText("← Game (Disc 1).cue")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Save into folder" })).toBeNull();
+      fireEvent.click(screen.getByRole("checkbox", { name: /Rename the discs/ }));
+      const download = await screen.findByRole("button", { name: "Download Game.zip" });
+      await waitFor(() => expect((download as HTMLButtonElement).disabled).toBe(false));
+      expect(screen.queryByRole("button", { name: "Rename discs and save playlist" })).toBeNull();
+
+      fireEvent.click(download);
+      await screen.findByText("Downloaded Game.zip");
+      expect(support.writeZip).toHaveBeenCalledWith(
+        expect.objectContaining({ zip: { chd: true, layout: "flat", rename: true } }),
+      );
+    } finally {
+      Reflect.deleteProperty(window, "showDirectoryPicker");
+    }
   });
 
   it("frees the earlier ZIP before the next one is written, so storage holds one", async () => {

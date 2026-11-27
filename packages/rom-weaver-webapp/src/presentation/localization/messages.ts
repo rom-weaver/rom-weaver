@@ -2000,6 +2000,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.playlist.layoutDiscFolders": msg({ id: "ui.playlist.layoutDiscFolders", message: "One folder per disc (igir)" }),
   "ui.playlist.layout": msg({ id: "ui.playlist.layout", message: "Layout" }),
+  "ui.playlist.compressChd": msg({ id: "ui.playlist.compressChd", message: "Compress the discs to CHD" }),
   "ui.playlist.folderTooLarge": msg({
     id: "ui.playlist.folderTooLarge",
     message: '"{folder}" holds more than {max} files. Pick the folder of one game.',

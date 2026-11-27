@@ -2240,6 +2240,11 @@ msgstr "Layout"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.playlist.compressChd"
+msgstr "Compress the discs to CHD"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.playlist.folderTooLarge"
 msgstr "\"{folder}\" holds more than {max} files. Pick the folder of one game."
 

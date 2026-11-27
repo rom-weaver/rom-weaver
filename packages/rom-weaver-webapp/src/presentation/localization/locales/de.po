@@ -2240,6 +2240,11 @@ msgstr "Anordnung"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.playlist.compressChd"
+msgstr "Discs zu CHD komprimieren"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.playlist.folderTooLarge"
 msgstr "„{folder}“ enthält mehr als {max} Dateien. Wähle den Ordner eines einzelnen Spiels."
 

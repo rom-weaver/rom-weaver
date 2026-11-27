@@ -1,4 +1,4 @@
-import { Archive, FolderOpen, FolderPen, Save } from "lucide-react";
+import { Archive, Disc, FolderOpen, FolderPen, Save } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import { getErrorMessage } from "../../lib/errors.ts";
@@ -52,7 +52,13 @@ const NAME_PROBLEM_MESSAGES: Record<GameNameProblem, MessageId> = {
 /** How the discs are saved: renamed where they are, as a ZIP, or as a lone playlist. */
 type OutputMode = "in-place" | "zip" | "m3u";
 
-type OutputChoices = { canRename: boolean; layout: PlaylistLayout; plan: BrowserPlaylistPlan | null; rename: boolean };
+type OutputChoices = {
+  canRename: boolean;
+  chd: boolean;
+  layout: PlaylistLayout;
+  plan: BrowserPlaylistPlan | null;
+  rename: boolean;
+};
 
 type PlaylistSource = {
   files: PlaylistSourceFile[];
@@ -78,11 +84,11 @@ const isAllAtTop = (plan: BrowserPlaylistPlan) => plan.discs.every((disc) => !di
 const getGameName = (plan: BrowserPlaylistPlan) => plan.file_name.replace(/\.m3u$/i, "");
 
 // In-place renaming changes the picked folder. It needs a writable folder, every disc at the top,
-// and the playlist beside them. Any other rename or layout goes into a ZIP.
-const getOutputMode = ({ canRename, layout, plan, rename }: OutputChoices): OutputMode => {
-  const fitsInPlace = canRename && layout === "flat" && !!plan && isAllAtTop(plan);
+// and the playlist beside them. Any other rename or layout, or discs compressed to CHD, go into a ZIP.
+const getOutputMode = ({ canRename, chd, layout, plan, rename }: OutputChoices): OutputMode => {
+  const fitsInPlace = canRename && layout === "flat" && !chd && !!plan && isAllAtTop(plan);
   if (rename && fitsInPlace) return "in-place";
-  return rename || layout !== "flat" ? "zip" : "m3u";
+  return rename || chd || layout !== "flat" ? "zip" : "m3u";
 };
 
 /** Every file in a picked folder, with paths from that folder. */
@@ -214,7 +220,7 @@ const planPlaylistSource = async ({ request, cachedSurvey, choices, isCurrent }:
   if (!isCurrent()) return;
   report.onPlan(plan);
   const mode = getOutputMode({ ...choices, plan });
-  const zip = { layout: choices.layout, rename: choices.rename };
+  const zip = { chd: choices.chd, layout: choices.layout, rename: choices.rename };
   const output = await planOutput(request, plan, getPlannedOutput(mode, plan, zip));
   if (isCurrent()) report.onOutput(output);
 };
@@ -350,6 +356,26 @@ const LayoutChoice = ({ layout, locked, onChange }: LayoutChoiceProps) => {
           </option>
         ))}
       </select>
+    </label>
+  );
+};
+
+type ChdChoiceProps = { chd: boolean; locked: boolean; onChange: (chd: boolean) => void };
+
+/** The checkbox to compress the discs in the ZIP to CHD. */
+const ChdChoice = ({ chd, locked, onChange }: ChdChoiceProps) => {
+  const localizer = useUiLocalizer();
+  return (
+    <label className="checkrow">
+      <input
+        checked={chd}
+        disabled={locked}
+        id="playlist-chd"
+        onChange={(event) => onChange(event.currentTarget.checked)}
+        type="checkbox"
+      />
+      <Disc aria-hidden="true" />
+      <span>{localizer.message("ui.playlist.compressChd")}</span>
     </label>
   );
 };
@@ -546,6 +572,7 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
   const [plan, setPlan] = useState<BrowserPlaylistPlan | null>(null);
   const [rename, setRename] = useState(false);
   const [layout, setLayout] = useState<PlaylistLayout>("flat");
+  const [chd, setChd] = useState(false);
   const [outputPlan, setOutputPlan] = useState<BrowserPlaylistPlan | null>(null);
   const [outputReason, setOutputReason] = useState("");
   // Whether the plan behind `outputReason` renamed the discs; the Rename checkbox may have changed since.
@@ -586,7 +613,7 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
   useEffect(() => {
     if (canRename) void import("../../storage/browser/playlist-folder-write.ts");
   }, [canRename]);
-  const mode = getOutputMode({ canRename, layout, plan, rename });
+  const mode = getOutputMode({ canRename, chd, layout, plan, rename });
 
   // Plan again whenever the inputs, the game, or the name change. A newer run wins. New files
   // plan at once; later changes wait for typing to pause.
@@ -613,7 +640,7 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
           await planPlaylistSource(
             {
               cachedSurvey: surveyRef.current,
-              choices: { canRename, layout, rename },
+              choices: { canRename, chd, layout, rename },
               isCurrent: () => planRunRef.current === run,
               request,
             },
@@ -648,7 +675,7 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
       clearTimeout(timer);
       abort.abort();
     };
-  }, [canRename, game, layout, name, nameProblem, rename, source]);
+  }, [canRename, chd, game, layout, name, nameProblem, rename, source]);
 
   const replaceSource = useCallback(
     (next: PlaylistSource | null) => {
@@ -775,7 +802,7 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
             if (!abort.signal.aborted && typeof event.percent === "number") setZipPercent(event.percent);
           },
           signal: abort.signal,
-          zip: { layout, rename },
+          zip: { chd, layout, rename },
         });
         if (!keepZip(output, abort.signal)) return;
         await output.saveAs({ fileName: `${name}.zip`, interactive: true });
@@ -800,13 +827,14 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
     actions: {
       downloadZip: {
         description:
-          "Download a ZIP of the playlist and the discs, renamed and arranged as the page's Rename and Layout choices say.",
+          "Download a ZIP of the playlist and the discs, renamed, arranged, and compressed as the page's Rename, Layout, and CHD choices say.",
         enabled: zipReady,
         execute: () => downloadZip(),
       },
     },
     getState: () => ({
       busy,
+      chd,
       entries: (savesPlaylistAlone ? plan : outputPlan)?.entries ?? plan?.entries ?? [],
       error: error || null,
       fileName: plan?.file_name ?? null,
@@ -894,6 +922,7 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
               renaming={rename}
             />
             <LayoutChoice layout={layout} locked={locked} onChange={setLayout} />
+            <ChdChoice chd={chd} locked={locked} onChange={setChd} />
             <RenameCards renamePlan={mode === "in-place" ? outputPlan : null} />
             <BundleCards zipPlan={mode === "zip" ? outputPlan : null} />
             <FolderSupportNote canWriteFolders={canWriteFolders} folderHint={folderHint} />
