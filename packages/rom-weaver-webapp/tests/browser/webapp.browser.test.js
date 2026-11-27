@@ -1535,6 +1535,56 @@ test("the phone console opens one section from Menu, with the dock at its foot r
   await page.viewport(1280, 900);
 });
 
+// 860 is the widest phone layout and 861 the narrowest desktop one, so both sides of that switch run;
+// the last two are landscape phones, where even the empty storage tab barely fits.
+for (const [width, height] of [
+  [860, 520],
+  [861, 520],
+  [800, 300],
+  [667, 290],
+]) {
+  test(`the OPFS filter, Refresh, Copy and Download controls stay clickable in a ${width}x${height} console`, async () => {
+    await page.viewport(width, height);
+    try {
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#console-storage`);
+      mountWebappRoot();
+      await expect.poll(() => document.querySelector(".log-dlg[open] .console-pane")).toBeTruthy();
+      const advancedSwitch = () =>
+        [...document.querySelectorAll(".log-dlg .console-advanced")].find(
+          (button) => button.getClientRects().length > 0,
+        );
+      await expect.poll(advancedSwitch).toBeTruthy();
+      if (advancedSwitch().getAttribute("aria-checked") !== "true") advancedSwitch().click();
+      await expect.poll(() => document.querySelector("#logpanel-storage .opfs-inspector")).toBeTruthy();
+      // A frame still sliding in has no settled centre to hit.
+      await Promise.all(
+        document
+          .querySelector(".log-dlg")
+          .getAnimations({ subtree: true })
+          .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity)
+          .map((animation) => animation.finished),
+      );
+
+      const dialog = document.querySelector(".log-dlg");
+      const actions = [...dialog.querySelectorAll(".log-actions")].find((row) => row.getClientRects().length > 0);
+      const buttons = {
+        Filter: dialog.querySelector(".log-filter"),
+        Refresh: dialog.querySelector(".log-refresh"),
+        Copy: actions.querySelectorAll("button")[0],
+        Download: actions.querySelectorAll("button")[1],
+      };
+      for (const [name, button] of Object.entries(buttons)) {
+        const rect = button.getBoundingClientRect();
+        const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        expect(button.contains(hit), `${name} is hit by ${hit?.getAttribute("class")}`).toBe(true);
+      }
+    } finally {
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      await page.viewport(1280, 900);
+    }
+  });
+}
+
 test("a phone console swipe closes past a quarter of the width and springs back after a hold", async () => {
   await page.viewport(393, 844);
   mountWebappRoot();
