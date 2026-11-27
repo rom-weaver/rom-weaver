@@ -346,6 +346,20 @@ describe("PlaylistForm", () => {
     expect((screen.getByRole("button", { name: "Download Game.zip" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it("names the ZIP, not the rename, when renamed discs cannot become CHDs", async () => {
+    vi.mocked(planBrowserPlaylist).mockImplementation(async ({ zip }) => {
+      if (zip?.chd) throw new Error("Cannot compress `Game (Disc 2).pbp`");
+      return PLAN;
+    });
+    render(<PlaylistForm onSessionChange={vi.fn()} />);
+    await dropDiscs();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /Rename the discs/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Compress the discs to CHD" }));
+    await screen.findByText("Can't make the ZIP: Cannot compress `Game (Disc 2).pbp`");
+    expect(screen.queryByText(/Can't rename/)).toBeNull();
+  });
+
   it("names the ZIP when it cannot be built with nothing renamed, and holds the download", async () => {
     vi.mocked(planBrowserPlaylist).mockImplementation(async ({ zip }) => {
       if (zip) throw new Error("two files would both be written as `disc.gdi`");

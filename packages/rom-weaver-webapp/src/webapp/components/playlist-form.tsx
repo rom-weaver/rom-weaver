@@ -649,7 +649,8 @@ const PlaylistForm = ({ onSessionChange, pageDrop }: PlaylistFormProps) => {
               onOutput: ({ outputPlan: planned, reason }) => {
                 setOutputPlan(planned);
                 setOutputReason(reason);
-                setReasonFromRename(rename);
+                // With CHD on, the failure may come from compressing, not from renaming.
+                setReasonFromRename(rename && !chd);
               },
               onPlan: (next) => {
                 setPlan(next);
