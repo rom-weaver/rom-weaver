@@ -10,6 +10,7 @@ Build an `.m3u` playlist for a multi-disc game with `rom-weaver playlist`, so an
 - [Copy the game into a frontend's folder](#copy-the-game-into-a-frontends-folder)
 - [Bundle the discs in a ZIP](#bundle-the-discs-in-a-zip)
 - [Rename the discs](#rename-the-discs)
+- [Compress the discs to CHD](#compress-the-discs-to-chd)
 - [Write bare file names](#write-bare-file-names)
 
 <!-- END doctoc -->
@@ -79,6 +80,18 @@ rom-weaver playlist --rename --name 'Final Fantasy VII' \
 ```
 
 The copies are `Final Fantasy VII (Disc 1).cue` and so on, and each copied `.cue` names its renamed track files. Without `--name`, the game name comes from the first disc's name. `--rename` works with a folder or `.zip` output, never on the original files.
+
+## Compress the discs to CHD
+
+`--chd` compresses each disc to CHD as it copies the game, and the playlist lists the `.chd` files:
+
+```bash
+rom-weaver playlist --chd --codec store \
+  -i 'Game (Disc 1).cue' -i 'Game (Disc 2).cue' \
+  -o Game.zip
+```
+
+The ZIP holds `Game.m3u`, `Game (Disc 1).chd`, and `Game (Disc 2).chd`, without the track files. Each `.chd` is the file `rom-weaver compress` writes for that disc with its default options. `--codec store` keeps the ZIP from compressing the CHDs again. A disc that is already a `.chd` is copied as it is. `--chd` works with a folder or `.zip` output.
 
 ## Write bare file names
 

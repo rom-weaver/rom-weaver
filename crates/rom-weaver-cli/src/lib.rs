@@ -235,7 +235,8 @@ beside the first disc, where the game is the disc name without its number.
 A .zip --output holds the playlist and its discs, with the files each .cue,
 .gdi, .ccd, or .mds needs. A folder --output (ending in `/`, or without an
 extension) gets a copy of them instead. --layout arranges both for a frontend,
-and --rename names the discs `<game> (Disc N)`:
+--rename names the discs `<game> (Disc N)`, and --chd compresses each disc to
+CHD:
 
   rom-weaver playlist -i 'FF7 (Disc 1).cue' -i 'FF7 (Disc 2).cue' \\
     -o roms/psx --layout folder
